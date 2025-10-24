@@ -1,1 +1,3 @@
-# CS308_E-Commerce_Team16
+# CS308 E-Trade Website
+
+MERN monorepo.
