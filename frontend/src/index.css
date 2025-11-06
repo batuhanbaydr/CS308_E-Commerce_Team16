@@ -1,68 +1,141 @@
+/* ========== GLOBAL BASE ========== */
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* we stay light mode for now */
+  background-color: #ffffff;
+  color: #444;
 }
 
+/* links */
 a {
   font-weight: 500;
   color: #646cff;
-  text-decoration: inherit;
+  text-decoration: none;
 }
 a:hover {
   color: #535bf2;
 }
 
+/* IMPORTANT: reset the Vite flex-centering on body */
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
   min-height: 100vh;
+  background: #ffffff;
+  color: #444;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* ========== LOGIN PAGE STYLES ========== */
+
+/* page wrapper */
+.login-page {
+  min-height: 100vh;
+  background: #ffffff;
+  position: relative;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
+/* top right "sign in" + menu */
+.login-topbar {
+  position: absolute;
+  top: 28px;
+  right: 32px;
+  display: flex;
+  gap: 20px;
+  align-items: linear;
+  align-items: center;
+}
+.login-topbar-link {
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+.login-menu-icon {
+  width: 22px;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.login-menu-icon span {
+  height: 2px;
+  background: #111;
+  border-radius: 999px;
+}
+
+/* center content */
+.login-wrapper {
+  max-width: 520px;
+  margin: 0 auto;
+  padding-top: 140px; /* pushes card down like your figma */
+  text-align: center;
+}
+
+/* card content */
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.login-title {
+  font-size: 34px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: #6a6a6a;
+  margin: 0;
+}
+.login-subtitle {
+  margin: 0;
+  color: #6f6f6f;
+  font-size: 14px;
+}
+
+/* form */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 8px;
+  align-items: center;
+}
+.login-input {
+  width: 360px;
+  height: 38px;
+  border: 1px solid #e3e3e3;
+  background: #fff;
+  outline: none;
+  padding: 6px 8px;
+  font-size: 14px;
+}
+.login-input:focus {
+  border-color: #b1756a;
+}
+
+.login-button {
+  width: 360px;
+  height: 38px;
+  border: none;
+  background: #3d211c; /* the brown from your design */
+  color: #fff;
   font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+  letter-spacing: 0.12em;
   cursor: pointer;
-  transition: border-color 0.25s;
+  margin-top: 6px;
 }
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+.login-button:hover {
+  background: #301813;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+/* footer link */
+.login-footer-text {
+  font-size: 13px;
+  color: #555;
+  margin-top: 8px;
+}
+.login-footer-text a {
+  color: #555;
+  text-decoration: underline;
 }
