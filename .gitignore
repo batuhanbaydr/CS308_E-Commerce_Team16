@@ -1,0 +1,4 @@
+.env
+.vscode/
+backend/target/
+**/.DS_Store
