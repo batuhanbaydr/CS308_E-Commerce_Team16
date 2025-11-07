@@ -1,4 +1,4 @@
-package edu.sabanciuniv.cs308.Model.DTO;
+package edu.sabanciuniv.cs308.model.dto;
 import lombok.Data;
 
 @Data

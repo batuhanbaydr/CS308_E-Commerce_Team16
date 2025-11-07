@@ -1,4 +1,4 @@
-package edu.sabanciuniv.cs308.Enum;
+package  edu.sabanciuniv.cs308.enumtype;
 
 public enum UserRole {
     CUSTOMER, //

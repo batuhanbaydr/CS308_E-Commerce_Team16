@@ -1,4 +1,4 @@
-package edu.sabanciuniv.cs308.Model.Entity;
+package  edu.sabanciuniv.cs308.model.entity;
 
 import edu.sabanciuniv.cs308.Enum.UserRole;
 import lombok.Data;

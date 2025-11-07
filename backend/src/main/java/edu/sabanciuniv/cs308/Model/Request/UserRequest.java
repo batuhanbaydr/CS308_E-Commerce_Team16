@@ -1,4 +1,4 @@
-package edu.sabanciuniv.cs308.Model.Request;
+package  edu.sabanciuniv.cs308.model.request;
 
 import lombok.Data;
 

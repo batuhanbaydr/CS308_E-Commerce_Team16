@@ -1,4 +1,4 @@
-package com.nilbezer.cs308.Controller;
+package edu.sabanciuniv.cs308.controller;
 
 import com.nilbezer.cs308.Model.Entity.UserEntity;
 import com.nilbezer.cs308.Repository.UserRepository;

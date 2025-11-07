@@ -1,4 +1,4 @@
-package edu.sabanciuniv.cs308.Repository;
+package edu.sabanciuniv.cs308.repository;
 
 import edu.sabanciuniv.cs308.Model.Entity.UserEntity;
 import org.springframework.data.mongodb.repository.MongoRepository;
