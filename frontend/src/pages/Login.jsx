@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginRequest, meRequest } from "../lib/api";
+import searchIcon from "../assets/search.png";
+import bagIcon from "../assets/bag.png";
 
 export default function Login() {
   const [emailAddress, setEmailAddress] = useState("");
@@ -27,69 +29,86 @@ export default function Login() {
     }
   };
 
-  return (
-    <div className="login-page">
-      
-      <header className="login-topbar">
-        <span
-          className="login-topbar-link"
-          style={{ cursor: "pointer" }}
-          onClick={() => navigate("/signup")}
-        >
-          SIGN IN
-        </span>
-        <div className="login-menu-icon">
-          <span />
-          <span />
-          <span />
-        </div>
-      </header>
+return (
+  <div className="login-page">
+    {/* top bar */}
+    <header className="login-topbar">
+      {/* search icon */}
+      <img
+        src={searchIcon}
+        alt="search"
+        style={{ width: 22, height: 22, objectFit: "contain", cursor: "pointer" }}
+      />
+
+      {/* text link */}
+      <span
+        className="login-topbar-link"
+        style={{ cursor: "pointer" }}
+        onClick={() => navigate("/login")}
+      >
+        SIGN IN
+      </span>
 
       
-      <main className="login-wrapper">
-        <div className="login-card">
-          <h1 className="login-title">LOGIN</h1>
-          <p className="login-subtitle">
-            Please enter your e-mail and password:
-          </p>
+      <div className="login-menu-icon">
+        <span />
+        <span />
+        <span />
+      </div>
 
-          {errorMsg && <p className="login-error">{errorMsg}</p>}
+      {/* bag icon */}
+      <img
+        src={bagIcon}
+        alt="bag"
+        style={{ width: 24, height: 24, objectFit: "contain", cursor: "pointer" }}
+      />
+    </header>
 
-          <form onSubmit={handleSubmit} className="login-form">
-            <input
-              className="login-input"
-              type="email"
-              value={emailAddress}
-              onChange={(e) => setEmailAddress(e.target.value)}
-              placeholder="E-mail"
-              required
-            />
-            <input
-              className="login-input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              required
-            />
+    {/* main content */}
+    <main className="login-wrapper">
+      <div className="login-card">
+        <h1 className="login-title">LOGIN</h1>
+        <p className="login-subtitle">
+          Please enter your e-mail and password:
+        </p>
 
-            <button type="submit" className="login-button">
-              SIGN IN
-            </button>
-          </form>
+        {errorMsg && <p className="login-error">{errorMsg}</p>}
 
+        <form onSubmit={handleSubmit} className="login-form">
+          <input
+            className="login-input"
+            type="email"
+            value={emailAddress}
+            onChange={(e) => setEmailAddress(e.target.value)}
+            placeholder="E-mail"
+            required
+          />
+          <input
+            className="login-input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            required
+          />
+
+          <button type="submit" className="login-button">
+            SIGN IN
+          </button>
+        </form>
+
+        <p className="login-footer-text">
+          Don’t have an account? <a href="/signup">Click here to create one.</a>
+        </p>
+
+        {userInfo && (
           <p className="login-footer-text">
-            Don’t have an account?{" "}
-            <a href="/signup">Click here to create one.</a>
+            Logged in as <strong>{userInfo.emailAddress}</strong>
           </p>
+        )}
+      </div>
+    </main>
+  </div>
+);
 
-          {userInfo && (
-            <p className="login-footer-text">
-              Logged in as <strong>{userInfo.emailAddress}</strong>
-            </p>
-          )}
-        </div>
-      </main>
-    </div>
-  );
 }
