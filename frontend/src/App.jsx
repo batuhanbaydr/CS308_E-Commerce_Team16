@@ -3,6 +3,7 @@ import Login from "./pages/Login.jsx";
 import "./index.css"; 
 import SignUp from "./pages/SignUp.jsx";
 import Home from "./pages/Home.jsx";
+import Profile from "./pages/Profile.jsx";
 
 
 
@@ -14,6 +15,7 @@ function App() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="*" element={<Login />} />
         <Route path="/home" element={<Home />} />
+        <Route path="/profile" element={<Profile />} />
 
       </Routes>
     </BrowserRouter>

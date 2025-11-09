@@ -1,4 +1,4 @@
-
+// src/pages/Home.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import searchIcon from "../assets/search.png";
@@ -19,6 +19,11 @@ export default function Home() {
     navigate("/login");
   };
 
+  const goToDetails = () => {
+    setShowProfileMenu(false);
+    navigate("/profile");
+  };
+
   return (
     <div className="login-page">
       {/* top bar */}
@@ -31,19 +36,22 @@ export default function Home() {
         />
 
         {/* CENTER: PROFILE (instead of SIGN IN) */}
-        <div className="profile-wrapper">
+        <div className="details-wrapper">
           <button
             type="button"
-            className="profile-button"
+            className="details-button"
             onClick={() => setShowProfileMenu((p) => !p)}
           >
-            PROFILE
+            DETAILS
           </button>
 
           {showProfileMenu && (
-            <div className="profile-menu">
-              <button className="profile-menu-item" onClick={handleLogout}>
-                Log out
+            <div className="details-menu">
+              <button className="details-menu-item" onClick={goToDetails}>
+                Details
+              </button>
+              <button className="details-menu-item" onClick={handleLogout}>
+                Log-out
               </button>
             </div>
           )}
