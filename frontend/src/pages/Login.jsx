@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginRequest, meRequest } from "../lib/api";
+import searchIcon from "../assets/search.png";
+import bagIcon from "../assets/bag.png";
 
 export default function Login() {
   const [emailAddress, setEmailAddress] = useState("");
@@ -11,85 +13,112 @@ export default function Login() {
   const navigate = useNavigate(); 
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setErrorMsg("");
+  e.preventDefault();
+  setErrorMsg("");
+
+  try {
+    // 1) do the login
+    await loginRequest(emailAddress, password);
+
+    // 2) try to fetch current user, but don't die if it fails
     try {
-      
-      await loginRequest(emailAddress, password);
-      
       const { data } = await meRequest();
       setUserInfo(data);
-    } catch (err) {
-      const msg =
-        err?.response?.data?.message ||
-        "Login failed. Check e-mail or password.";
-      setErrorMsg(msg);
+    } catch (inner) {
+      // optional: console.log("could not load /users/me", inner);
     }
-  };
 
-  return (
-    <div className="login-page">
+    // 3) go to home no matter what
+    navigate("/home");
+  } catch (err) {
+    const msg =
+      err?.response?.data?.message ||
+      "Login failed. Check e-mail or password.";
+    setErrorMsg(msg);
+  }
+};
+
+
+return (
+  <div className="login-page">
+    {/* top bar */}
+    <header className="login-topbar">
+      {/* search icon */}
+      <img
+        src={searchIcon}
+        alt="search"
+        style={{ width: 22, height: 22, objectFit: "contain", cursor: "pointer" }}
+      />
+
+      {/* text link */}
+      <span
+        className="login-topbar-link"
+        style={{ cursor: "pointer" }}
+        onClick={() => navigate("/login")}
+      >
+        SIGN IN
+      </span>
+
       
-      <header className="login-topbar">
-        <span
-          className="login-topbar-link"
-          style={{ cursor: "pointer" }}
-          onClick={() => navigate("/signup")}
-        >
-          SIGN IN
-        </span>
-        <div className="login-menu-icon">
-          <span />
-          <span />
-          <span />
-        </div>
-      </header>
+      <div className="login-menu-icon">
+        <span />
+        <span />
+        <span />
+      </div>
 
-      
-      <main className="login-wrapper">
-        <div className="login-card">
-          <h1 className="login-title">LOGIN</h1>
-          <p className="login-subtitle">
-            Please enter your e-mail and password:
-          </p>
+      {/* bag icon */}
+      <img
+        src={bagIcon}
+        alt="bag"
+        style={{ width: 24, height: 24, objectFit: "contain", cursor: "pointer" }}
+      />
+    </header>
 
-          {errorMsg && <p className="login-error">{errorMsg}</p>}
+    {/* main content */}
+    <main className="login-wrapper">
+      <div className="login-card">
+        <h1 className="login-title">LOGIN</h1>
+        <p className="login-subtitle">
+          Please enter your e-mail and password:
+        </p>
 
-          <form onSubmit={handleSubmit} className="login-form">
-            <input
-              className="login-input"
-              type="email"
-              value={emailAddress}
-              onChange={(e) => setEmailAddress(e.target.value)}
-              placeholder="E-mail"
-              required
-            />
-            <input
-              className="login-input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              required
-            />
+        {errorMsg && <p className="login-error">{errorMsg}</p>}
 
-            <button type="submit" className="login-button">
-              SIGN IN
-            </button>
-          </form>
+        <form onSubmit={handleSubmit} className="login-form">
+          <input
+            className="login-input"
+            type="email"
+            value={emailAddress}
+            onChange={(e) => setEmailAddress(e.target.value)}
+            placeholder="E-mail"
+            required
+          />
+          <input
+            className="login-input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            required
+          />
 
+          <button type="submit" className="login-button">
+            SIGN IN
+          </button>
+        </form>
+
+        <p className="login-footer-text">
+          Don’t have an account? <a href="/signup">Click here to create one.</a>
+        </p>
+
+        {userInfo && (
           <p className="login-footer-text">
-            Don’t have an account?{" "}
-            <a href="/signup">Click here to create one.</a>
+            Logged in as <strong>{userInfo.emailAddress}</strong>
           </p>
+        )}
+      </div>
+    </main>
+  </div>
+);
 
-          {userInfo && (
-            <p className="login-footer-text">
-              Logged in as <strong>{userInfo.emailAddress}</strong>
-            </p>
-          )}
-        </div>
-      </main>
-    </div>
-  );
 }
