@@ -1,9 +1,11 @@
-import { useState } from "react";
+// src/pages/Profile.jsx
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
 import { logoutRequest } from "../lib/api";
 
+// mock / initial data
 const INITIAL_ACCOUNT_DETAILS = {
   email: "bahar@example.com",
   phoneNumber: "+90 555 999 88 77",
@@ -54,66 +56,54 @@ const INITIAL_CARDS = [
   },
 ];
 
-
-
 export default function Profile() {
   const navigate = useNavigate();
+
+  // topbar menu (the 3-line icon)
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  
-  
+
+  // if you later want to show real user, add fetch — for now hardcode “Bahar”
+  const user = { name: "Bahar" };
+
+  // profile states
+  const [accountDetails, setAccountDetails] = useState(INITIAL_ACCOUNT_DETAILS);
+  const [orders] = useState(INITIAL_ORDERS);
+  const [addresses, setAddresses] = useState(INITIAL_ADDRESSES);
+  const [newAddress, setNewAddress] = useState({ label: "", details: "" });
+  const [returns, setReturns] = useState(INITIAL_RETURNS);
+  const [newReturn, setNewReturn] = useState({ orderId: "", reason: "" });
+  const [cards, setCards] = useState(INITIAL_CARDS);
+  const [newCard, setNewCard] = useState({ label: "", holder: "", expiry: "" });
+  const [editingCardId, setEditingCardId] = useState(null);
+  const isEditingCard = editingCardId !== null;
+
   const handleLogout = async () => {
     try {
       await logoutRequest();
     } catch (err) {
-      // even if logout fails, we can still push to login
       console.log("logout error (ignored):", err);
     }
     navigate("/login");
   };
 
   const goToDetails = () => {
+    // we're already on /profile, so just close the menu
     setShowProfileMenu(false);
-    navigate("/profile");
-  };
-  
-
-  const [accountDetails, setAccountDetails] = useState(
-    INITIAL_ACCOUNT_DETAILS
-  );
-  const [orders] = useState(INITIAL_ORDERS);
-  const [addresses, setAddresses] = useState(INITIAL_ADDRESSES);
-  const [newAddress, setNewAddress] = useState({ label: "", details: "" });
-  const [returns, setReturns] = useState(INITIAL_RETURNS);
-  const [newReturn, setNewReturn] = useState({
-    orderId: "",
-    reason: "",
-  });
-  const [cards, setCards] = useState(INITIAL_CARDS);
-  const [newCard, setNewCard] = useState({
-    label: "",
-    holder: "",
-    expiry: "",
-  });
-  const [editingCardId, setEditingCardId] = useState(null);
-
-  const handleDeleteAddress = (id) => {
-    setAddresses((prev) => prev.filter((address) => address.id !== id));
   };
 
-  const handleDeleteReturn = (id) => {
-    setReturns((prev) => prev.filter((item) => item.id !== id));
-  };
-
+  // forms / list handlers
   const handleAccountChange = (event) => {
     const { name, value } = event.target;
-    setAccountDetails((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setAccountDetails((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleAccountSubmit = (event) => {
     event.preventDefault();
+    // later: send to backend
+  };
+
+  const handleDeleteAddress = (id) => {
+    setAddresses((prev) => prev.filter((address) => address.id !== id));
   };
 
   const handleNewAddressSubmit = (event) => {
@@ -129,6 +119,10 @@ export default function Profile() {
       },
     ]);
     setNewAddress({ label: "", details: "" });
+  };
+
+  const handleDeleteReturn = (id) => {
+    setReturns((prev) => prev.filter((item) => item.id !== id));
   };
 
   const handleNewReturnSubmit = (event) => {
@@ -163,39 +157,26 @@ export default function Profile() {
 
   const handleCancelEditCard = () => {
     setEditingCardId(null);
-    setNewCard({
-      label: "",
-      holder: "",
-      expiry: "",
-    });
+    setNewCard({ label: "", holder: "", expiry: "" });
   };
 
   const handleNewCardSubmit = (event) => {
     event.preventDefault();
-    if (!newCard.label.trim() || !newCard.holder.trim() || !newCard.expiry.trim())
-      return;
+    if (!newCard.label.trim() || !newCard.holder.trim() || !newCard.expiry.trim()) return;
 
-    const normalizedCard = {
+    const normalized = {
       label: newCard.label.trim(),
       holder: newCard.holder.trim(),
       expiry: newCard.expiry.trim(),
     };
 
-    if (editingCardId !== null) {
+    if (editingCardId) {
       setCards((prev) =>
-        prev.map((card) =>
-          card.id === editingCardId ? { ...card, ...normalizedCard } : card
-        )
+        prev.map((card) => (card.id === editingCardId ? { ...card, ...normalized } : card))
       );
       setEditingCardId(null);
     } else {
-      setCards((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          ...normalizedCard,
-        },
-      ]);
+      setCards((prev) => [...prev, { id: Date.now(), ...normalized }]);
     }
 
     setNewCard({ label: "", holder: "", expiry: "" });
@@ -203,78 +184,61 @@ export default function Profile() {
 
   const handleDeleteCard = (id) => {
     setCards((prev) => prev.filter((card) => card.id !== id));
-    if (editingCardId === id) {
-      handleCancelEditCard();
-    }
+    if (editingCardId === id) handleCancelEditCard();
   };
-
-  const isEditingCard = editingCardId !== null;
 
   return (
     <div className="login-page">
       {/* top bar */}
+      {/* top bar */}
       <span
         className="login-title"
         onClick={() => navigate("/home")}
-       
       >
         TIDL
       </span>
+
       <header className="login-topbar">
-        {/* LEFT: search icon */}
-        <img
-          src={searchIcon}
-          alt="search"
-          style={{ width: 22, height: 22, objectFit: "contain", cursor: "pointer" }}
-        />
+        <img src={searchIcon} alt="search" style={{ width: 22, height: 22 }} />
 
-        {/* CENTER: PROFILE (instead of SIGN IN) */}
-        <div className="details-wrapper">
-          <button
-            type="button"
-            className="details-button"
-            onClick={() => setShowProfileMenu((p) => !p)}
-          >
-            DETAILS
-          </button>
+        <span className="login-topbar-link" style={{ cursor: "default" }}>
+          {user ? `HEY! ${user.name}` : "HEY!"}
+        </span>
 
-          {showProfileMenu && (
-            <div className="details-menu">
-              <button className="details-menu-item" onClick={goToDetails}>
-                Details
-              </button>
-              <button className="details-menu-item" onClick={handleLogout}>
-                Log-out
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* little menu icon, same as login */}
-        <div className="login-menu-icon">
+        <div
+          className="login-menu-icon"
+          onClick={() => setShowProfileMenu((p) => !p)}
+          style={{ cursor: "pointer" }}
+        >
           <span />
           <span />
           <span />
         </div>
 
-        {/* RIGHT: bag icon */}
-        <img
-          src={bagIcon}
-          alt="bag"
-          style={{ width: 24, height: 24, objectFit: "contain", cursor: "pointer" }}
-        />
+        {showProfileMenu && (
+          <div className="details-menu">
+            <button className="details-menu-item" onClick={goToDetails}>
+              Details
+            </button>
+            <button className="details-menu-item" onClick={handleLogout}>
+              Log-out
+            </button>
+          </div>
+        )}
+
+        <img src={bagIcon} alt="bag" style={{ width: 24, height: 24 }} />
       </header>
 
-
+      {/* profile content */}
       <main className="profile-wrapper">
         <section className="profile-hero">
-          <h1 className="profile-heading">Hi Bahar!</h1>
+          <h1 className="profile-heading">Hi {user ? user.name : "there"}!</h1>
           <p className="profile-subheading">
-            Manage your orders, account information, and saved preferences all in
-            one place.
+            Manage your orders, account information, and saved preferences all in one place.
           </p>
         </section>
 
+        {/* Orders */}
         <section className="profile-card">
           <header className="profile-card-header">
             <h2>Orders</h2>
@@ -301,6 +265,7 @@ export default function Profile() {
           </div>
         </section>
 
+        {/* Account details */}
         <section className="profile-card">
           <header className="profile-card-header">
             <h2>Account Details</h2>
@@ -344,6 +309,7 @@ export default function Profile() {
           </div>
         </section>
 
+        {/* Addresses */}
         <section className="profile-card profile-card-grid">
           <div>
             <header className="profile-card-header">
@@ -356,9 +322,7 @@ export default function Profile() {
                     <div className="profile-list-item-header">
                       <strong>{address.label}</strong>
                     </div>
-                    <p className="profile-list-item-description">
-                      {address.details}
-                    </p>
+                    <p className="profile-list-item-description">{address.details}</p>
                     <div className="profile-list-item-actions">
                       <button className="profile-link-button" type="button">
                         Edit Address
@@ -369,6 +333,7 @@ export default function Profile() {
                         aria-label="Delete address"
                         onClick={() => handleDeleteAddress(address.id)}
                       >
+                        {/* trash icon */}
                         <svg
                           width="18"
                           height="18"
@@ -398,6 +363,8 @@ export default function Profile() {
               </ul>
             </div>
           </div>
+
+          {/* add new address */}
           <div>
             <header className="profile-card-header">
               <h3>Add New Address</h3>
@@ -411,10 +378,7 @@ export default function Profile() {
                     type="text"
                     value={newAddress.label}
                     onChange={(event) =>
-                      setNewAddress((prev) => ({
-                        ...prev,
-                        label: event.target.value,
-                      }))
+                      setNewAddress((prev) => ({ ...prev, label: event.target.value }))
                     }
                     placeholder="Home, Work..."
                     required
@@ -426,10 +390,7 @@ export default function Profile() {
                     rows={3}
                     value={newAddress.details}
                     onChange={(event) =>
-                      setNewAddress((prev) => ({
-                        ...prev,
-                        details: event.target.value,
-                      }))
+                      setNewAddress((prev) => ({ ...prev, details: event.target.value }))
                     }
                     placeholder="Street, City, ZIP"
                     required
@@ -443,6 +404,7 @@ export default function Profile() {
           </div>
         </section>
 
+        {/* Returns */}
         <section className="profile-card profile-card-grid">
           <div>
             <header className="profile-card-header">
@@ -471,6 +433,7 @@ export default function Profile() {
                         aria-label="Delete return request"
                         onClick={() => handleDeleteReturn(item.id)}
                       >
+                        {/* trash icon */}
                         <svg
                           width="18"
                           height="18"
@@ -500,6 +463,8 @@ export default function Profile() {
               </ul>
             </div>
           </div>
+
+          {/* new return */}
           <div>
             <header className="profile-card-header">
               <h3>New Return Request</h3>
@@ -513,10 +478,7 @@ export default function Profile() {
                     type="text"
                     value={newReturn.orderId}
                     onChange={(event) =>
-                      setNewReturn((prev) => ({
-                        ...prev,
-                        orderId: event.target.value,
-                      }))
+                      setNewReturn((prev) => ({ ...prev, orderId: event.target.value }))
                     }
                     placeholder="ORD-XXXX"
                     required
@@ -528,10 +490,7 @@ export default function Profile() {
                     rows={3}
                     value={newReturn.reason}
                     onChange={(event) =>
-                      setNewReturn((prev) => ({
-                        ...prev,
-                        reason: event.target.value,
-                      }))
+                      setNewReturn((prev) => ({ ...prev, reason: event.target.value }))
                     }
                     placeholder="Describe the issue"
                     required
@@ -545,6 +504,7 @@ export default function Profile() {
           </div>
         </section>
 
+        {/* Payment methods */}
         <section className="profile-card profile-card-grid">
           <div>
             <header className="profile-card-header">
@@ -575,6 +535,7 @@ export default function Profile() {
                         aria-label="Delete card"
                         onClick={() => handleDeleteCard(card.id)}
                       >
+                        {/* trash icon */}
                         <svg
                           width="18"
                           height="18"
@@ -604,6 +565,8 @@ export default function Profile() {
               </ul>
             </div>
           </div>
+
+          {/* add / edit card */}
           <div>
             <header className="profile-card-header">
               <h3>{isEditingCard ? "Edit Card" : "Add New Card"}</h3>
@@ -621,10 +584,7 @@ export default function Profile() {
                     type="text"
                     value={newCard.label}
                     onChange={(event) =>
-                      setNewCard((prev) => ({
-                        ...prev,
-                        label: event.target.value,
-                      }))
+                      setNewCard((prev) => ({ ...prev, label: event.target.value }))
                     }
                     placeholder="Visa •• 1234"
                     required
@@ -636,10 +596,7 @@ export default function Profile() {
                     type="text"
                     value={newCard.holder}
                     onChange={(event) =>
-                      setNewCard((prev) => ({
-                        ...prev,
-                        holder: event.target.value,
-                      }))
+                      setNewCard((prev) => ({ ...prev, holder: event.target.value }))
                     }
                     placeholder="Name on card"
                     required
@@ -651,10 +608,7 @@ export default function Profile() {
                     type="text"
                     value={newCard.expiry}
                     onChange={(event) =>
-                      setNewCard((prev) => ({
-                        ...prev,
-                        expiry: event.target.value,
-                      }))
+                      setNewCard((prev) => ({ ...prev, expiry: event.target.value }))
                     }
                     placeholder="MM / YY"
                     required
@@ -679,6 +633,7 @@ export default function Profile() {
           </div>
         </section>
 
+        {/* bottom logout */}
         <section className="profile-card profile-logout-card">
           <button
             className="profile-button secondary logout-button"
