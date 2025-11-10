@@ -1,22 +1,29 @@
 package edu.sabanciuniv.cs308.backend.controller;
 
-import edu.sabanciuniv.cs308.backend.entity.UserEntity;
-import edu.sabanciuniv.cs308.backend.enums.UserRole;
-import edu.sabanciuniv.cs308.backend.repository.UserRepository;
-import edu.sabanciuniv.cs308.backend.request.LoginRequest;
-import edu.sabanciuniv.cs308.backend.request.SignupRequest;
+import java.util.Map;
+import java.util.Optional;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
+import edu.sabanciuniv.cs308.backend.entity.UserEntity;
+import edu.sabanciuniv.cs308.backend.enums.UserRole;
+import edu.sabanciuniv.cs308.backend.repository.UserRepository;
+import edu.sabanciuniv.cs308.backend.request.LoginRequest;
+import edu.sabanciuniv.cs308.backend.request.SignupRequest;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.Map;
-import java.util.Optional;
+import jakarta.servlet.http.HttpSession;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -63,6 +70,7 @@ public class AuthController {
                                    HttpServletRequest httpRequest) {
         System.out.println(">>> LOGIN attempt for: " + req.getEmailAddress());
         try {
+            // authenticate user
             Authentication auth = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             req.getEmailAddress(),
@@ -70,14 +78,21 @@ public class AuthController {
                     )
             );
 
-            // put auth into security context
-            SecurityContextHolder.getContext().setAuthentication(auth);
+            // create a fresh security context and put the auth in it
+            SecurityContext context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(auth);
+            SecurityContextHolder.setContext(context);
 
-            // this makes sure JSESSIONID is created and sent to the frontend
-            httpRequest.getSession(true);
+            // create/get HTTP session and store the security context in it
+            HttpSession session = httpRequest.getSession(true);
+            session.setAttribute(
+                    HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                    context
+            );
 
             System.out.println(">>> LOGIN success for: " + req.getEmailAddress());
             return ResponseEntity.ok(Map.of("message", "Login successful"));
+
         } catch (BadCredentialsException e) {
             System.out.println(">>> LOGIN failed (bad credentials) for: " + req.getEmailAddress());
             return ResponseEntity.status(401).body(Map.of("message", "Invalid email or password"));
@@ -89,6 +104,7 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout() {
+        // you can also invalidate session here if you want
         return ResponseEntity.ok(Map.of("message", "Logged out"));
     }
 }

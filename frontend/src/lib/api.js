@@ -22,7 +22,7 @@ export function meRequest() {
   return api.get("/users/me");
 }
 
-// 👇 new
+
 export function logoutRequest() {
   return api.post("/auth/logout");
 }

@@ -13,30 +13,30 @@ export default function Login() {
   const navigate = useNavigate(); 
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setErrorMsg("");
+    e.preventDefault();
+    setErrorMsg("");
 
-  try {
-    // 1) do the login
-    await loginRequest(emailAddress, password);
-
-    // 2) try to fetch current user, but don't die if it fails
     try {
-      const { data } = await meRequest();
-      setUserInfo(data);
-    } catch (inner) {
-      // optional: console.log("could not load /users/me", inner);
-    }
+      await loginRequest(emailAddress, password);
 
-    // 3) go to home no matter what
-    navigate("/home");
-  } catch (err) {
-    const msg =
-      err?.response?.data?.message ||
-      "Login failed. Check e-mail or password.";
-    setErrorMsg(msg);
-  }
-};
+      let meData = null;
+      try {
+        const { data } = await meRequest();
+        setUserInfo(data);
+        meData = data;
+      } catch (inner) {
+        console.log("could not load /users/me", inner);
+      }
+
+      navigate("/home", { state: { user: meData } });
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        "Login failed. Check e-mail or password.";
+      setErrorMsg(msg);
+    }
+  };
+
 
 
 return (

@@ -1,85 +1,88 @@
-// src/pages/Home.jsx
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { meRequest, logoutRequest } from "../lib/api";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
-import { logoutRequest } from "../lib/api";
 
 export default function Home() {
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [user, setUser] = useState(null);
+  const [showMenu, setShowMenu] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    // 1) if login sent the user, use it
+    if (location.state?.user) {
+      setUser(location.state.user);
+      return;
+    }
+
+    // 2) otherwise fetch from backend
+    async function fetchUser() {
+      try {
+        const { data } = await meRequest();
+        setUser(data);
+      } catch (err) {
+        console.error("Not logged in:", err);
+        navigate("/login");
+      }
+    }
+    fetchUser();
+  }, [location.state, navigate]);
+
+  const goToDetails = () => {
+    navigate("/profile");
+  };
+
 
   const handleLogout = async () => {
     try {
       await logoutRequest();
-    } catch (err) {
-      // even if logout fails, we can still push to login
-      console.log("logout error (ignored):", err);
+    } catch (e) {
+      // ignore
     }
     navigate("/login");
   };
 
-  const goToDetails = () => {
-    setShowProfileMenu(false);
-    navigate("/profile");
-  };
-
   return (
     <div className="login-page">
-      {/* top bar */}
       <header className="login-topbar">
-        {/* LEFT: search icon */}
-        <img
-          src={searchIcon}
-          alt="search"
-          style={{ width: 22, height: 22, objectFit: "contain", cursor: "pointer" }}
-        />
+        <img src={searchIcon} alt="search" style={{ width: 22, height: 22 }} />
 
-        {/* CENTER: PROFILE (instead of SIGN IN) */}
-        <div className="details-wrapper">
-          <button
-            type="button"
-            className="details-button"
-            onClick={() => setShowProfileMenu((p) => !p)}
-          >
-            DETAILS
-          </button>
+        <span className="login-topbar-link" style={{ cursor: "default" }}>
+          {user ? `HEY! ${user.name}` : "HEY!"}
+        </span>
 
-          {showProfileMenu && (
-            <div className="details-menu">
-              <button className="details-menu-item" onClick={goToDetails}>
-                Details
-              </button>
-              <button className="details-menu-item" onClick={handleLogout}>
-                Log-out
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* little menu icon, same as login */}
-        <div className="login-menu-icon">
+        <div
+          className="login-menu-icon"
+          onClick={() => setShowMenu((p) => !p)}
+          style={{ cursor: "pointer" }}
+        >
           <span />
           <span />
           <span />
         </div>
 
-        {/* RIGHT: bag icon */}
-        <img
-          src={bagIcon}
-          alt="bag"
-          style={{ width: 24, height: 24, objectFit: "contain", cursor: "pointer" }}
-        />
+        {showMenu && (
+          <div className="details-menu">
+            <button className="details-menu-item" onClick={goToDetails}>
+              Details
+            </button>
+            <button className="details-menu-item" onClick={handleLogout}>
+              Log-out
+            </button>
+          </div>
+        )}
+
+        <img src={bagIcon} alt="bag" style={{ width: 24, height: 24 }} />
       </header>
 
-      {/* main content */}
       <main className="login-wrapper">
-        <div className="login-card">
-          <h1 className="login-title">Welcome!</h1>
-          <p className="login-subtitle">You are now logged in. This is your home page.</p>
-        </div>
+        <h1 className="login-title">Welcome!</h1>
+        <p className="login-subtitle">
+          {user ? `Nice to see you, ${user.name}!` : "Loading your account..."}
+        </p>
       </main>
     </div>
   );
-
 }
