@@ -192,7 +192,7 @@ export default function Profile() {
       {/* top bar */}
       {/* top bar */}
       <span
-        className="login-title"
+        className="home-brand"
         onClick={() => navigate("/home")}
       >
         TIDL
