@@ -6,7 +6,9 @@ import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
 import RequireAuth from "./auth/RequireAuth";
-// … other imports
+import Sweatshirts from "./pages/category/sweatshirts";
+import Shirts from "./pages/category/shirts";
+import Pants from "./pages/category/pants";
 
 export default function App() {
   return (
@@ -21,9 +23,9 @@ export default function App() {
         <Route path="/signup" element={<SignUp />} />
 
         {/* Public browsing */}
-        <Route path="/category/sweatshirts" element={<div>TODO: Sweatshirts</div>} />
-        <Route path="/category/shirts" element={<div>TODO: Shirts</div>} />
-        <Route path="/category/pants" element={<div>TODO: Pants</div>} />
+        <Route path="/category/sweatshirts" element={<Sweatshirts />} />
+        <Route path="/category/shirts" element={<Shirts />} />
+        <Route path="/category/pants" element={<Pants />} />
         <Route path="/shop-the-look" element={<div>TODO: Shop The Look</div>} />
         <Route path="/search" element={<div>TODO: Search</div>} />
         <Route path="/cart" element={<div>TODO: Cart (guest ok)</div>} />
