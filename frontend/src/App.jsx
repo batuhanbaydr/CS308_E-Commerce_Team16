@@ -9,6 +9,7 @@ import RequireAuth from "./auth/RequireAuth";
 import Sweatshirts from "./pages/category/sweatshirts";
 import Shirts from "./pages/category/shirts";
 import Pants from "./pages/category/pants";
+import ProductDetailMock from "./pages/ProductDetailMock";
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/shop-the-look" element={<div>TODO: Shop The Look</div>} />
         <Route path="/search" element={<div>TODO: Search</div>} />
         <Route path="/cart" element={<div>TODO: Cart (guest ok)</div>} />
+        <Route path="/product/mock" element={<ProductDetailMock />} />
 
         {/* Private pages */}
         <Route

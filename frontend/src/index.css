@@ -1336,3 +1336,301 @@ body {
     text-align: center;
   }
 }
+
+/* === PRODUCT DETAIL PAGE (MOCK & REAL) === */
+
+.product-page {
+  max-width: 1200px;
+  margin: 120px auto 100px;   /* top margin so it's not under the fixed header */
+  padding: 0 40px;
+  text-align: left;
+}
+
+/* top section: gallery + info */
+.product-main {
+  display: flex;
+  gap: 60px;
+  align-items: flex-start;
+}
+
+/* left side: big image + thumbs on the RIGHT */
+.product-gallery {
+  display: flex;
+  gap: 20px;
+  /* make both columns share the same vertical span */
+  align-items: stretch;
+}
+
+/* MAIN IMAGE "CANVAS" */
+.product-main-image-wrapper {
+  width: 460px;
+  height: 648px;
+  overflow: hidden;
+  border: 1px solid #eeeeee;
+}
+
+.product-main-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;  /* no clipping at top */
+  display: block;
+}
+
+.product-thumbs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* important: line up with the big image */
+  margin-top: 0;
+  height: 620px;              /* same as .product-main-image-wrapper height */
+  justify-content: space-between;  /* first and last thumb touch the edges */
+}
+
+.product-thumb-button {
+  padding: 0;
+  border: 1px solid #dddddd;
+  background: #ffffff;
+  cursor: pointer;
+  width: 96px;
+  height: 120px;
+}
+
+.product-thumb-button img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.product-thumb-button.active {
+  border-color: #111111;
+}
+
+/* right side: info column — SCOPED so we don't break category cards */
+.product-page .product-info {
+  flex: 1;
+  max-width: 460px;
+  text-align: left;
+}
+
+.product-page .product-title {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+
+.product-page .product-sku {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #777777;
+  margin-bottom: 24px;
+}
+
+/* price style for detail page (leave category price as is) */
+.product-page .product-price {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 24px;
+  color: #3d211c;
+}
+
+/* option blocks */
+.product-option-group {
+  margin-bottom: 20px;
+}
+
+.product-option-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: #777777;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.product-color-swatch {
+  display: inline-block;
+  padding: 6px 16px;
+  border: 1px solid #111111;
+  font-size: 12px;
+}
+
+/* SIZE pills – matching your category pills vibe */
+.product-size-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.product-size-pill {
+  min-width: 42px;
+  padding: 8px 16px;
+  border: 1px solid #3d211c;
+  background: #ffffff;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.product-size-pill.active {
+  background: #3d211c;
+  color: #ffffff;
+  border-color: #3d211c;
+}
+
+/* QUANTITY box – similar structure to category quantity controls */
+.product-qty-row {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #3d211c;
+}
+
+.product-qty-btn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: #ffffff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: #3d211c;
+}
+
+.product-qty-btn:first-child {
+  border-right: 1px solid #3d211c;
+}
+
+.product-qty-btn:last-child {
+  border-left: 1px solid #3d211c;
+}
+
+.product-qty-value {
+  width: 40px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #3d211c;
+}
+
+/* ADD TO CART — full-width, no rounded corners, same color system */
+.product-add-to-cart {
+  margin-top: 24px;
+  width: 100%;
+  max-width: 460px;
+  padding: 14px 24px;
+  border: none;
+  background: #3d211c;
+  color: #ffffff;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.product-add-to-cart:hover {
+  background: #301813;
+}
+
+/* description text */
+.product-description {
+  margin-top: 32px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #444;
+}
+
+.product-description p {
+  margin: 0 0 8px;
+}
+
+/* "YOU MAY ALSO LIKE…" */
+.product-related {
+  margin-top: 80px;
+}
+
+.product-related-title {
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.product-related-grid {
+  display: flex;
+  gap: 32px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  -webkit-overflow-scrolling: touch; /* smoother on trackpads/phones */
+}
+
+.product-related-card {
+  text-align: left;
+  min-width: 260px;
+  max-width: 260px;
+  flex: 0 0 260px;
+}
+
+.product-related-image-wrapper {
+  width: 100%;
+  height: 360px;        /* was 260px */
+  border: 1px solid #eeeeee;
+  overflow: hidden;
+}
+.product-related-image-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.product-related-info {
+  margin-top: 8px;
+}
+
+.product-related-name {
+  font-size: 14px;
+  font-weight: 600;          /* bold */
+  margin: 10px 0 4px;
+}
+
+.product-related-price {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+  color: #3d211c;
+}
+
+/* basic responsive tweak for smaller screens */
+@media (max-width: 900px) {
+  .product-main {
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .product-main-image-wrapper {
+    width: 100%;
+    height: auto;
+    max-height: none;
+  }
+
+  .product-main-image {
+    height: auto;
+  }
+
+  .product-thumbs {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .product-related-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
