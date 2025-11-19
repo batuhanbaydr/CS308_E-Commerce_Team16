@@ -93,4 +93,18 @@ export function deletePaymentMethod(pmId) {
   return api.delete(`/users/me/payment-methods/${pmId}`);
 }
 
+// Product endpoints
+export function listProducts(category) {
+  const params = {};
+  if (category) {
+    params.category = category;      // ?category=Sweatshirt etc.
+  }
+  return api.get("/products", { params });
+}
+
+export function fetchProduct(productId) {
+  return api.get(`/products/${productId}`);
+}
+
 export default api;
+

@@ -193,6 +193,7 @@ body {
 
 
 
+
 /* BURAYA PROFILE ISMIYLE FARKLI COMPONENTLAR GELDIĞI ICIN BOZULUYOR EKLERKEN KONTROL EDEREK ET */
 
 .profile-page {
@@ -646,6 +647,12 @@ body {
 }
 .details-menu-item:hover { background: #f6f6f6; }
 
+.product-size-pill--oos {
+  opacity: 0.4;
+  text-decoration: line-through;
+  cursor: not-allowed;
+}
+
 /* hero */
 .hero {
   position: relative;
@@ -931,6 +938,35 @@ body {
 .category-pill:hover {
   background: #3d211c;
   color: #ffffff;
+}
+
+/* When a filter is selected, keep it highlighted */
+.category-pill--active {
+  background: #3d211c;
+  color: #ffffff;
+  border-color: #3d211c;
+}
+
+/* Optional: keep it dark even when hovered */
+.category-pill--active:hover {
+  background: #301813;   /* slightly darker on hover if you like */
+  color: #ffffff;
+}
+
+.category-filter-option--active {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.size-selector-button--oos {
+  opacity: 0.4;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+.size-selector-button--oos:hover {
+  background: transparent;
+  color: #333333;
 }
 
 .price-filter-container {
@@ -1344,6 +1380,40 @@ body {
   margin: 120px auto 100px;   /* top margin so it's not under the fixed header */
   padding: 0 40px;
   text-align: left;
+}
+
+.product-related {
+  margin-top: 4rem;
+}
+
+.product-related-scroll {
+  display: flex;
+  gap: 1.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.75rem;
+}
+
+.product-related-card {
+  min-width: 220px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.product-related-image-wrap img {
+  width: 100%;
+  display: block;
+}
+
+.product-related-name {
+  font-weight: 600;
+  color: #000000; 
+  margin-top: 0.5rem;
+}
+
+.product-related-price {
+  margin-top: 0.25rem;
 }
 
 /* top section: gallery + info */

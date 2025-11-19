@@ -25,6 +25,9 @@ public class ProductEntity {
     // Ürün varyantları (örnek: renk, beden)
     private List<Variant> variants;
 
+    private String fabric;   // "95% cotton, 5% elastane"
+    private String madeIn;   // "Turkey"
+
     @Data
     public static class Variant {
         private String sku;        // Benzersiz stok kodu, örn: "ELB-BEYAZ-M"

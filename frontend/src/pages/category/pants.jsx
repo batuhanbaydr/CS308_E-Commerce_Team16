@@ -1,104 +1,207 @@
+// src/pages/category/pants.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { meRequest, logoutRequest } from "../../lib/api";
+import { meRequest, logoutRequest, listProducts } from "../../lib/api";
 import searchIcon from "../../assets/search.png";
 import bagIcon from "../../assets/bag.png";
-import strPant from "../../assets/str_pant.jpg";
-import jogger from "../../assets/jogger.jpg";
-import beltedPant from "../../assets/beltedpnt.jpg";
-import navyPant from "../../assets/navypant.jpg";
-import brownPant from "../../assets/brownpant.jpg";
-import woolPant from "../../assets/woolpnt.jpg";
-
-const PRODUCTS = [
-  { id: "pnt-01", name: "MINIMALIST STRAIGHT-LEG PANTS", price: "$90.00", image: strPant,   color: "grey",  size: ["S","M","L"] },
-  { id: "pnt-02", name: "SPORTLITE JOGGERS",              price: "$70.00", image: jogger,   color: "beige", size: ["S","M","L","XL"] },
-  { id: "pnt-03", name: "SLEEK MOTION TROUSERS",          price: "$65.00", image: beltedPant,color: "black", size: ["S","M","L"] },
-  { id: "pnt-04", name: "NIGHTFALL STREET PANTS",         price: "$60.00", image: navyPant, color: "navy",  size: ["M","L","XL"] },
-  { id: "pnt-05", name: "CONTOUR FIT PANTS",              price: "$62.50", image: brownPant,color: "brown", size: ["S","M","L","XL"] },
-  { id: "pnt-06", name: "CLOUDSOFT LOUNGE PANTS",         price: "$50.00", image: woolPant, color: "cream", size: ["M","L","XL"] },
-];
 
 const COLORS = [
-  { id: "color-grey",  label: "GREY",  value: "grey" },
-  { id: "color-beige", label: "BEIGE", value: "beige" },
-  { id: "color-black", label: "BLACK", value: "black" },
-  { id: "color-navy",  label: "NAVY",  value: "navy" },
-  { id: "color-brown", label: "BROWN", value: "brown" },
-  { id: "color-cream", label: "CREAM", value: "cream" },
+  { id: "color-cream", label: "BLACK", value: "black" },
+  { id: "color-brown", label: "BLUE", value: "blue" },
 ];
 
 const SIZES = ["XS", "S", "M", "L", "XL"];
 
 export default function Pants() {
   const navigate = useNavigate();
+
   const [user, setUser] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
+
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [productError, setProductError] = useState("");
+
   const [favorites, setFavorites] = useState(() => new Set());
   const [selectedSizes, setSelectedSizes] = useState(() => new Map());
   const [cartItems, setCartItems] = useState(() => new Map());
-  const [priceRange, setPriceRange] = useState({ min: 50, max: 90 });
 
-  // Çoklu filtreler
   const [colorFilters, setColorFilters] = useState(() => new Set());
   const [sizeFilters, setSizeFilters] = useState(() => new Set());
 
   const [notification, setNotification] = useState(null);
   const toastTimeoutRef = useRef(null);
 
+  const [hoveredProductId, setHoveredProductId] = useState(null);
+
+  const [sortOption, setSortOption] = useState(null);  // 'priceAsc' | 'priceDesc' | null
+
+  const [priceBounds, setPriceBounds] = useState({ min: 0, max: 100 }); // NEW
+  const [priceRange, setPriceRange] = useState({ min: 0, max: 100 });
+
+  // load current user
   useEffect(() => {
     (async () => {
-      try { const { data } = await meRequest(); setUser(data); }
-      catch { setUser(null); }
+      try {
+        const { data } = await meRequest();
+        setUser(data);
+      } catch {
+        setUser(null);
+      }
     })();
-    return () => { if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current); };
+
+    return () => {
+      if (toastTimeoutRef.current) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
   }, []);
 
-  const handleLogout = async () => { try { await logoutRequest(); } catch {} setUser(null); navigate("/home"); };
-  const go = (path) => () => navigate(path);
+  // load products from backend
+  useEffect(() => {
+    setLoadingProducts(true);
+    setProductError("");
 
-  const filteredProducts = useMemo(() => {
-    return PRODUCTS.filter((p) => {
-      const price = parseFloat(p.price.replace("$",""));
-      const priceOk = price >= priceRange.min && price <= priceRange.max;
-      const colorOk = colorFilters.size === 0 || colorFilters.has(String(p.color).toLowerCase());
-      const sizeOk  = sizeFilters.size === 0  || p.size.some((s) => sizeFilters.has(s));
-      return priceOk && colorOk && sizeOk;
-    });
-  }, [priceRange, colorFilters, sizeFilters]);
+    listProducts("Pant")
+      .then((res) => {
+        const data = res.data || [];
+        setProducts(data);
 
-  const scheduleMessageClear = () => {
-    if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = window.setTimeout(() => { setNotification(null); toastTimeoutRef.current = null; }, 2400);
+        // set a nicer default price range based on data
+        if (data.length > 0) {
+          const prices = data.map((p) =>
+            Number(
+              p.basePrice ??
+                (p.variants && p.variants[0] && p.variants[0].price) ??
+                0
+            )
+          );
+          const min = Math.min(...prices);
+          const max = Math.max(...prices);
+          setPriceBounds({ min, max });     // NEW
+          setPriceRange({ min, max });
+        }
+      })
+      .catch((err) => {
+        console.error("Error loading products", err);
+        setProductError("Could not load products.");
+      })
+      .finally(() => setLoadingProducts(false));
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await logoutRequest();
+    } catch {}
+    setUser(null);
+    navigate("/home");
   };
 
+  const go = (path) => () => navigate(path);
+
+  // filter using backend data
+const filteredProducts = useMemo(() => {
+  if (!products) return [];
+
+  // Attach helper fields for filter + sort
+  const withMeta = products.map((p) => {
+    const price = Number(
+      p.basePrice ??
+        (p.variants && p.variants[0] && p.variants[0].price) ??
+        0
+    );
+
+    const color =
+      (p.variants && p.variants[0] && p.variants[0].color) || "";
+
+    // build sizeStock: size -> total stock
+    const sizeStock = {};
+    (p.variants || []).forEach((v) => {
+      const sizeKey = v.size && v.size.trim();
+      if (!sizeKey) return;
+      const stock =
+        typeof v.stock === "number" ? v.stock : Number(v.stock || 0);
+      sizeStock[sizeKey] = (sizeStock[sizeKey] || 0) + stock;
+    });
+
+    const allSizes = Object.keys(sizeStock);
+    const sizesInStock = allSizes.filter((s) => sizeStock[s] > 0);
+
+    return {
+      ...p,
+      _price: price,
+      _color: color,
+      _sizesAll: allSizes,      // all sizes (even 0 stock)
+      _sizesInStock: sizesInStock, // only sizes with stock > 0
+      _sizeStock: sizeStock,
+    };
+  });
+
+  // FILTERS
+  let list = withMeta.filter((p) => {
+    const priceOk =
+      p._price >= priceRange.min && p._price <= priceRange.max;
+
+    const colorOk =
+      colorFilters.size === 0 ||
+      colorFilters.has(String(p._color).toLowerCase());
+
+    const sizeOk =
+      sizeFilters.size === 0 ||
+      p._sizesInStock.some((s) => sizeFilters.has(s));
+
+    return priceOk && colorOk && sizeOk;
+  });
+
+  // SORT
+  if (sortOption === "priceAsc") {
+    list = [...list].sort((a, b) => a._price - b._price);
+  } else if (sortOption === "priceDesc") {
+    list = [...list].sort((a, b) => b._price - a._price);
+  }
+
+  return list;
+}, [products, priceRange, colorFilters, sizeFilters, sortOption]);
+
+  // toast helpers
+  const scheduleMessageClear = () => {
+    if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setNotification(null);
+      toastTimeoutRef.current = null;
+    }, 2400);
+  };
+
+  // favorites
   const toggleFavorite = (id) => {
     setFavorites((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) { next.delete(id); setNotification("Removed from favorites."); }
-      else { next.add(id); setNotification("Added to favorites."); }
+      if (next.has(id)) {
+        next.delete(id);
+        setNotification("Removed from favorites.");
+      } else {
+        next.add(id);
+        setNotification("Added to favorites.");
+      }
       scheduleMessageClear();
       return next;
     });
   };
 
+  // size + cart helpers
   const handleSizeSelect = (productId, size) => {
     setSelectedSizes((prev) => {
       const next = new Map(prev);
       const currentSize = next.get(productId);
-      if (currentSize === size) next.delete(productId); else next.set(productId, size);
+      if (currentSize === size) next.delete(productId);
+      else next.set(productId, size);
       return next;
     });
   };
 
   const getCartKey = (productId, size) => `${productId}-${size}`;
-  const getCartQuantity = (productId, size) => cartItems.get(getCartKey(productId, size)) || 0;
-
-  const getTotalCartQuantity = (productId) => {
-    const product = PRODUCTS.find((p) => p.id === productId);
-    if (!product) return 0;
-    return product.size.reduce((total, size) => total + getCartQuantity(productId, size), 0);
-  };
+  const getCartQuantity = (productId, size) =>
+    cartItems.get(getCartKey(productId, size)) || 0;
 
   const updateCartQuantity = (productId, size, delta) => {
     setCartItems((prev) => {
@@ -106,61 +209,129 @@ export default function Pants() {
       const key = getCartKey(productId, size);
       const current = next.get(key) || 0;
       const q = Math.max(0, current + delta);
-      if (q === 0) next.delete(key); else next.set(key, q);
+      if (q === 0) next.delete(key);
+      else next.set(key, q);
       return next;
     });
   };
 
   const handleAddToCart = (productId, name, availableSizes) => {
     const selectedSize = selectedSizes.get(productId);
-    if (!selectedSize) { setNotification("Please select a size."); scheduleMessageClear(); return; }
-    if (!availableSizes.includes(selectedSize)) { setNotification("Selected size is not available for this product."); scheduleMessageClear(); return; }
+    if (!selectedSize) {
+      setNotification("Please select a size.");
+      scheduleMessageClear();
+      return;
+    }
+    if (!availableSizes.includes(selectedSize)) {
+      setNotification("Selected size is not available for this product.");
+      scheduleMessageClear();
+      return;
+    }
     updateCartQuantity(productId, selectedSize, 1);
     setNotification(`${name} (Size: ${selectedSize}) added to cart.`);
     scheduleMessageClear();
-    setSelectedSizes((prev) => { const next = new Map(prev); next.delete(productId); return next; });
+    setSelectedSizes((prev) => {
+      const next = new Map(prev);
+      next.delete(productId);
+      return next;
+    });
   };
 
   return (
     <div className="category-page">
       <header className="category-topbar">
-        <button className="category-brand" onClick={() => navigate("/home")}>TIDL</button>
+        <button className="category-brand" onClick={() => navigate("/home")}>
+          TIDL
+        </button>
         <nav className="category-nav">
-          <button onClick={() => navigate("/category/sweatshirts")} className="category-nav-item">SWEATSHIRTS</button>
-          <button onClick={() => navigate("/category/shirts")} className="category-nav-item">SHIRTS</button>
-          <button onClick={() => navigate("/category/pants")} className="category-nav-item category-nav-item--active">PANTS</button>
-          <button onClick={() => navigate("/shop-the-look")} className="category-nav-item">SHOP THE LOOK</button>
+          <button
+            onClick={() => navigate("/category/sweatshirts")}
+            className="category-nav-item"
+          >
+            SWEATSHIRTS
+          </button>
+          <button
+            onClick={() => navigate("/category/shirts")}
+            className="category-nav-item"
+          >
+            SHIRTS
+          </button>
+          <button
+            onClick={() => navigate("/category/pants")}
+            className="category-nav-item category-nav-item--active"
+          >
+            PANTS
+          </button>
+          <button
+            onClick={() => navigate("/shop-the-look")}
+            className="category-nav-item"
+          >
+            SHOP THE LOOK
+          </button>
         </nav>
         <div className="category-actions">
-          <img src={searchIcon} alt="Search" className="category-icon" onClick={() => navigate("/search")} />
+          <img
+            src={searchIcon}
+            alt="Search"
+            className="category-icon"
+            onClick={() => navigate("/search")}
+          />
           {user ? (
-            <span className="login-topbar-link" style={{ cursor:"default", marginRight:"0.5rem" }}>{`HEY! ${user.name}`}</span>
+            <span
+              className="login-topbar-link"
+              style={{ cursor: "default", marginRight: "0.5rem" }}
+            >
+              {`HEY! ${user.name}`}
+            </span>
           ) : (
-            <span className="home-signin" onClick={() => navigate("/login")} style={{ marginRight:"0.5rem", cursor:"pointer" }}>SIGN IN</span>
+            <span
+              className="home-signin"
+              onClick={() => navigate("/login")}
+              style={{ marginRight: "0.5rem", cursor: "pointer" }}
+            >
+              SIGN IN
+            </span>
           )}
           {user && (
-            <div className="home-menu" onClick={() => setShowMenu((p) => !p)} style={{ marginRight:"0.5rem" }}>
-              <span /><span /><span />
+            <div
+              className="home-menu"
+              onClick={() => setShowMenu((p) => !p)}
+              style={{ marginRight: "0.5rem" }}
+            >
+              <span />
+              <span />
+              <span />
               {showMenu && (
                 <div className="details-menu">
-                  <button className="details-menu-item" onClick={go("/profile")}>Details</button>
-                  <button className="details-menu-item" onClick={handleLogout}>Log-out</button>
+                  <button className="details-menu-item" onClick={go("/profile")}>
+                    Details
+                  </button>
+                  <button className="details-menu-item" onClick={handleLogout}>
+                    Log-out
+                  </button>
                 </div>
               )}
             </div>
           )}
-          <img src={bagIcon} alt="Cart" className="category-icon" onClick={() => navigate("/cart")} />
+          <img
+            src={bagIcon}
+            alt="Cart"
+            className="category-icon"
+            onClick={() => navigate("/cart")}
+          />
         </div>
       </header>
 
       <main className="category-layout">
+        {/* SIDEBAR */}
         <aside className="category-sidebar">
           <button
             className="category-clear"
             onClick={() => {
               setColorFilters(new Set());
               setSizeFilters(new Set());
-              setPriceRange({ min: 50, max: 90 });
+              setPriceRange({ ...priceBounds });
+              setSortOption(null);
             }}
           >
             CLEAR FILTERS
@@ -168,9 +339,38 @@ export default function Pants() {
 
           <section className="category-filter">
             <h3 className="category-filter-title">SORT</h3>
-            <button className="category-filter-option">Price: Low to High</button>
-            <button className="category-filter-option">Price: High to Low</button>
-            <button className="category-filter-option">New Arrivals</button>
+
+            {/* Low → High */}
+            <button
+              className={`category-filter-option${
+                sortOption === "priceAsc" ? " category-filter-option--active" : ""
+              }`}
+              onClick={() =>
+                setSortOption((prev) => (prev === "priceAsc" ? null : "priceAsc"))
+              }
+            >
+              Price: Low to High
+            </button>
+
+            {/* High → Low */}
+            <button
+              className={`category-filter-option${
+                sortOption === "priceDesc" ? " category-filter-option--active" : ""
+              }`}
+              onClick={() =>
+                setSortOption((prev) => (prev === "priceDesc" ? null : "priceDesc"))
+              }
+            >
+              Price: High to Low
+            </button>
+
+            {/* Reset sort (optional “New Arrivals”) */}
+            <button
+              className="category-filter-option"
+              onClick={() => setSortOption(null)}
+            >
+              New Arrivals
+            </button>
           </section>
 
           <section className="category-filter">
@@ -181,11 +381,14 @@ export default function Pants() {
                 return (
                   <button
                     key={c.id}
-                    className={`category-pill${active ? " category-pill--active" : ""}`}
+                    className={`category-pill${
+                      active ? " category-pill--active" : ""
+                    }`}
                     onClick={() => {
                       setColorFilters((prev) => {
                         const next = new Set(prev);
-                        if (next.has(c.value)) next.delete(c.value); else next.add(c.value);
+                        if (next.has(c.value)) next.delete(c.value);
+                        else next.add(c.value);
                         return next;
                       });
                     }}
@@ -206,11 +409,14 @@ export default function Pants() {
                 return (
                   <button
                     key={s}
-                    className={`category-pill${active ? " category-pill--active" : ""}`}
+                    className={`category-pill${
+                      active ? " category-pill--active" : ""
+                    }`}
                     onClick={() => {
                       setSizeFilters((prev) => {
                         const next = new Set(prev);
-                        if (next.has(s)) next.delete(s); else next.add(s);
+                        if (next.has(s)) next.delete(s);
+                        else next.add(s);
                         return next;
                       });
                     }}
@@ -229,22 +435,28 @@ export default function Pants() {
               <div className="price-slider-wrapper">
                 <input
                   type="range"
-                  min="50"
-                  max="90"
+                  min={priceBounds.min}          
+                  max={priceBounds.max}          
                   value={priceRange.min}
                   onChange={(e) => {
-                    const newMin = Math.min(Number(e.target.value), priceRange.max - 1);
+                    const newMin = Math.min(
+                      Number(e.target.value),
+                      priceRange.max - 1
+                    );
                     setPriceRange((p) => ({ ...p, min: newMin }));
                   }}
                   className="price-slider price-slider--min"
                 />
                 <input
                   type="range"
-                  min="50"
-                  max="90"
+                  min={priceBounds.min}          
+                  max={priceBounds.max}          
                   value={priceRange.max}
                   onChange={(e) => {
-                    const newMax = Math.max(Number(e.target.value), priceRange.min + 1);
+                    const newMax = Math.max(
+                      Number(e.target.value),
+                      priceRange.min + 1
+                    );
                     setPriceRange((p) => ({ ...p, max: newMax }));
                   }}
                   className="price-slider price-slider--max"
@@ -257,76 +469,162 @@ export default function Pants() {
           </section>
         </aside>
 
+        {/* PRODUCT GRID */}
         <section className="category-products">
-          {filteredProducts.map((product) => {
-            const isFavorite = favorites.has(product.id);
-            return (
-              <article key={product.id} className="product-card">
-                <div className="product-media">
-                  <img src={product.image} alt={product.name} loading="lazy" />
-                  <button
-                    className={`favorite-button${isFavorite ? " favorite-button--active" : ""}`}
-                    onClick={() => toggleFavorite(product.id)}
-                    aria-label="Add to favorites"
+          {loadingProducts && <p>Loading products…</p>}
+          {!loadingProducts && productError && <p>{productError}</p>}
+
+          {!loadingProducts &&
+            !productError &&
+            filteredProducts.map((product) => {
+              const isFavorite = favorites.has(product.id);
+              const allSizes =
+              product._sizesAll ||
+              Array.from(
+                new Set(
+                  (product.variants || [])
+                    .map((v) => v.size && v.size.trim())
+                    .filter(Boolean)
+                )
+              );
+
+            const sizeStock = product._sizeStock || {};
+              const priceNumber =
+                product._price ??
+                Number(
+                  product.basePrice ??
+                    (product.variants &&
+                      product.variants[0] &&
+                      product.variants[0].price) ??
+                    0
+                );
+              const displayPrice = `$${priceNumber.toFixed(2)}`;
+
+              // determine main + secondary images
+              const primaryImage =
+                product.mainImageUrl || (product.imageUrls || [])[0] || "";
+              const secondaryImage =
+                product.imageUrls && product.imageUrls.length > 1
+                  ? product.imageUrls[1]
+                  : primaryImage;
+
+              const isHovered = hoveredProductId === product.id;
+              const displayImage = isHovered ? secondaryImage : primaryImage;
+
+              const colorText =
+                (product.variants &&
+                  product.variants[0] &&
+                  product.variants[0].color) ||
+                "-";
+
+              const goDetail = () => navigate(`/product/${product.id}`);
+
+              return (
+                <article key={product.id} className="product-card">
+                  <div
+                    className="product-media"
+                    onMouseEnter={() => setHoveredProductId(product.id)}
+                    onMouseLeave={() => setHoveredProductId(null)}
                   >
-                    {isFavorite ? "♥" : "♡"}
-                  </button>
-                </div>
-                <div className="product-info">
-                  <h3 className="product-name">{product.name}</h3>
-                  <p className="product-meta">
-                    <span>{product.color.toUpperCase()}</span>
-                  </p>
-                  <p className="product-price">{product.price}</p>
-                  <div className="product-size-selector">
-                    <p className="size-selector-label">SIZE</p>
-                    <div className="size-selector-buttons">
-                      {product.size.map((size) => {
-                        const isSelected = selectedSizes.get(product.id) === size;
-                        const cartQuantity = getCartQuantity(product.id, size);
-                        const isInCart = cartQuantity > 0;
-                        return (
-                          <button
-                            key={size}
-                            className={`size-selector-button${isSelected ? " size-selector-button--selected" : ""}${isInCart ? " size-selector-button--in-cart" : ""}`}
-                            onClick={() => handleSizeSelect(product.id, size)}
-                            aria-label={`Select size ${size}`}
-                          >
-                            {size}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <img
+                      src={displayImage}
+                      alt={product.name}
+                      loading="lazy"
+                      onClick={goDetail}
+                      style={{ cursor: "pointer" }}
+                    />
+                    <button
+                      className={`favorite-button${
+                        isFavorite ? " favorite-button--active" : ""
+                      }`}
+                      onClick={() => toggleFavorite(product.id)}
+                      aria-label="Add to favorites"
+                    >
+                      {isFavorite ? "♥" : "♡"}
+                    </button>
                   </div>
-                  <button
-                    className="product-add-to-basket"
-                    onClick={() => {
-                      handleAddToCart(product.id, product.name, product.size);
-                    }}
-                    style={{
-                      marginTop: "0.5rem",
-                      width: "50%",
-                      padding: "0.375rem 0.5rem",
-                      backgroundColor: "#3d211c",
-                      color: "white",
-                      border: "1px solid #3d211c",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "0.375rem",
-                      fontSize: "0.75rem",
-                      fontWeight: "500"
-                    }}
-                  >
-                    Add to basket
-                    <img src={bagIcon} alt="cart" style={{ width: "14px", height: "14px", filter: "brightness(0) invert(1)" }} />
-                  </button>
-                </div>
-              </article>
-            );
-          })}
+
+                  <div className="product-info">
+                    <h3
+                      className="product-name"
+                      onClick={goDetail}
+                      style={{ cursor: "pointer" }}
+                    >
+                      {product.name}
+                    </h3>
+                    <p className="product-meta">
+                      <span>COLOR: {String(colorText).toUpperCase()}</span>
+                    </p>
+                    <p className="product-price">{displayPrice}</p>
+
+                    <div className="product-size-selector">
+                      <p className="size-selector-label">SIZE</p>
+                      <div className="size-selector-buttons">
+                        {allSizes.map((size) => {
+                          const stockForSize = sizeStock[size] ?? 0;
+                          const isOutOfStock = stockForSize <= 0;
+
+                          const isSelected = selectedSizes.get(product.id) === size;
+                          const cartQuantity = getCartQuantity(product.id, size);
+                          const isInCart = cartQuantity > 0;
+
+                          return (
+                            <button
+                              key={size}
+                              className={
+                                "size-selector-button" +
+                                (isSelected ? " size-selector-button--selected" : "") +
+                                (isInCart ? " size-selector-button--in-cart" : "") +
+                                (isOutOfStock ? " size-selector-button--oos" : "")
+                              }
+                              onClick={() => !isOutOfStock && handleSizeSelect(product.id, size)}
+                              aria-label={`Select size ${size}`}
+                              disabled={isOutOfStock}
+                            >
+                              {size}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <button
+                      className="product-add-to-basket"
+                      onClick={() =>
+                        handleAddToCart(product.id, product.name, allSizes)
+                      }
+                      style={{
+                        marginTop: "0.5rem",
+                        width: "50%",
+                        padding: "0.375rem 0.5rem",
+                        backgroundColor: "#3d211c",
+                        color: "white",
+                        border: "1px solid #3d211c",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "0.375rem",
+                        fontSize: "0.75rem",
+                        fontWeight: "500",
+                      }}
+                    >
+                      Add to basket
+                      <img
+                        src={bagIcon}
+                        alt="cart"
+                        style={{
+                          width: "14px",
+                          height: "14px",
+                          filter: "brightness(0) invert(1)",
+                        }}
+                      />
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
         </section>
       </main>
 
