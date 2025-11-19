@@ -17,7 +17,7 @@ public class OrderEntity {
     @Indexed
     private String userId;              // UserEntity.id (email değil!)
     private Instant createdAt;
-    private String status;              // PLACED, SHIPPED, DELIVERED, CANCELLED
+    private String status;              // CART, PLACED, SHIPPED, DELIVERED, CANCELLED
 
     private List<OrderItem> items;
     private Money totals;
