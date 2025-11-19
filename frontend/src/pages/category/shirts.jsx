@@ -1,86 +1,61 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { meRequest, logoutRequest } from "../../lib/api";
 import searchIcon from "../../assets/search.png";
 import bagIcon from "../../assets/bag.png";
-import strPant from "../../assets/str_pant.jpg";
-import jogger from "../../assets/jogger.jpg";
-import beltedPant from "../../assets/beltedpnt.jpg";
-import navyPant from "../../assets/navypant.jpg";
-import brownPant from "../../assets/brownpant.jpg";
-import woolPant from "../../assets/woolpnt.jpg";
+
+import shirtX from "../../assets/shirtx.jpg";
+import shirt2 from "../../assets/shirt2.jpg";
+import shirt3 from "../../assets/shirt3.jpg";
+import shirt4 from "../../assets/shirt4.jpg";
+import shirt5 from "../../assets/shirt5.jpg";
+import shirt6 from "../../assets/shirt6.jpg";
 
 const PRODUCTS = [
-  {
-    id: "pnt-01",
-    name: "MINIMALIST STRAIGHT-LEG PANTS",
-    price: "$90.00",
-    image: strPant,
-    color: "grey",
-    size: ["S", "M", "L"],
-  },
-  {
-    id: "pnt-02",
-    name: "SPORTLITE JOGGERS",
-    price: "$70.00",
-    image: jogger,
-    color: "beige",
-    size: ["S", "M", "L", "XL"],
-  },
-  {
-    id: "pnt-03",
-    name: "SLEEK MOTION TROUSERS",
-    price: "$65.00",
-    image: beltedPant,
-    color: "black",
-    size: ["S", "M", "L"],
-  },
-  {
-    id: "pnt-04",
-    name: "NIGHTFALL STREET PANTS",
-    price: "$60.00",
-    image: navyPant,
-    color: "navy",
-    size: ["M", "L", "XL"],
-  },
-  {
-    id: "pnt-05",
-    name: "CONTOUR FIT PANTS",
-    price: "$62.50",
-    image: brownPant,
-    color: "brown",
-    size: ["S", "M", "L", "XL"],
-  },
-  {
-    id: "pnt-06",
-    name: "CLOUDSOFT LOUNGE PANTS",
-    price: "$50.00",
-    image: woolPant,
-    color: "cream",
-    size: ["M", "L", "XL"],
-  },
+  { id: "shirt-01", name: "Skyfall Parachute Shirt",   price: "$50.00", image: shirtX, color: "red-white",   size: ["XXS","S","M","L"] },
+  { id: "shirt-02", name: "Nova Street Utility Shirt", price: "$45.00", image: shirt2, color: "grey",        size: ["S","L"] },
+  { id: "shirt-03", name: "EasyFlow Relaxed Shirt",    price: "$30.00", image: shirt3, color: "white",       size: ["M","XL"] },
+  { id: "shirt-04", name: "Sable Silk Touch Shirt",    price: "$48.00", image: shirt4, color: "burgundy",    size: ["S","M","L"] },
+  { id: "shirt-05", name: "IronFade Structured Shirt", price: "$38.00", image: shirt5, color: "brown-white", size: ["XS","S","M"] },
+  { id: "shirt-06", name: "Nightwave Zip-Up Shirt",    price: "$46.00", image: shirt6, color: "white",       size: ["S","M","XL"] },
 ];
 
 const COLORS = [
-  { id: "color-grey", label: "GREY" },
-  { id: "color-beige", label: "BEIGE" },
-  { id: "color-black", label: "BLACK" },
-  { id: "color-navy", label: "NAVY" },
-  { id: "color-brown", label: "BROWN" },
-  { id: "color-cream", label: "CREAM" },
+  { id: "color-red-white",   label: "RED-WHITE",   value: "red-white" },
+  { id: "color-grey",        label: "GREY",        value: "grey" },
+  { id: "color-white",       label: "WHITE",       value: "white" },
+  { id: "color-burgundy",    label: "BURGUNDY",    value: "burgundy" },
+  { id: "color-brown-white", label: "BROWN-WHITE", value: "brown-white" },
 ];
 
-const SIZES = ["XS", "S", "M", "L", "XL"];
+const SIZES = ["XXS", "XS", "S", "M", "L", "XL"];
 
 export default function Shirts() {
   const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+  const [showMenu, setShowMenu] = useState(false);
   const [favorites, setFavorites] = useState(() => new Set());
   const [selectedSizes, setSelectedSizes] = useState(() => new Map());
   const [cartItems, setCartItems] = useState(() => new Map());
-  const [priceRange, setPriceRange] = useState({ min: 50, max: 90 });
+  const [priceRange, setPriceRange] = useState({ min: 30, max: 50 });
+
+  // multi-select filters
+  const [colorFilters, setColorFilters] = useState(() => new Set()); // Set<string>
+  const [sizeFilters, setSizeFilters] = useState(() => new Set());   // Set<string>
+
   const [notification, setNotification] = useState(null);
   const toastTimeoutRef = useRef(null);
 
   useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await meRequest();
+        setUser(data);
+      } catch {
+        setUser(null);
+      }
+    })();
+
     return () => {
       if (toastTimeoutRef.current) {
         window.clearTimeout(toastTimeoutRef.current);
@@ -88,12 +63,30 @@ export default function Shirts() {
     };
   }, []);
 
+  const handleLogout = async () => {
+    try { await logoutRequest(); } catch {}
+    setUser(null);
+    navigate("/home");
+  };
+
+  const go = (path) => () => navigate(path);
+
   const filteredProducts = useMemo(() => {
-    return PRODUCTS.filter((product) => {
-      const price = parseFloat(product.price.replace("$", ""));
-      return price >= priceRange.min && price <= priceRange.max;
+    return PRODUCTS.filter((p) => {
+      const price = parseFloat(p.price.replace("$", ""));
+      const priceOk = price >= priceRange.min && price <= priceRange.max;
+
+      const colorOk =
+        colorFilters.size === 0 ||
+        colorFilters.has(String(p.color).toLowerCase());
+
+      const sizeOk =
+        sizeFilters.size === 0 ||
+        p.size.some((s) => sizeFilters.has(s));
+
+      return priceOk && colorOk && sizeOk;
     });
-  }, [priceRange]);
+  }, [priceRange, colorFilters, sizeFilters]);
 
   const scheduleMessageClear = () => {
     if (toastTimeoutRef.current) {
@@ -134,18 +127,9 @@ export default function Shirts() {
   };
 
   const getCartKey = (productId, size) => `${productId}-${size}`;
-
   const getCartQuantity = (productId, size) => {
     const key = getCartKey(productId, size);
     return cartItems.get(key) || 0;
-  };
-
-  const getTotalCartQuantity = (productId) => {
-    const product = PRODUCTS.find((p) => p.id === productId);
-    if (!product) return 0;
-    return product.size.reduce((total, size) => {
-      return total + getCartQuantity(productId, size);
-    }, 0);
   };
 
   const updateCartQuantity = (productId, size, delta) => {
@@ -221,6 +205,27 @@ export default function Shirts() {
             className="category-icon"
             onClick={() => navigate("/search")}
           />
+
+          {user ? (
+            <span className="login-topbar-link" style={{ cursor: "default", marginRight: "0.5rem" }}>
+              {`HEY! ${user.name}`}
+            </span>
+          ) : (
+            <span className="home-signin" onClick={() => navigate("/login")} style={{ marginRight: "0.5rem", cursor: "pointer" }}>SIGN IN</span>
+          )}
+
+          {user && (
+            <div className="home-menu" onClick={() => setShowMenu((p) => !p)} style={{ marginRight: "0.5rem" }}>
+              <span /><span /><span />
+              {showMenu && (
+                <div className="details-menu">
+                  <button className="details-menu-item" onClick={go("/profile")}>Details</button>
+                  <button className="details-menu-item" onClick={handleLogout}>Log-out</button>
+                </div>
+              )}
+            </div>
+          )}
+
           <img
             src={bagIcon}
             alt="Cart"
@@ -232,7 +237,16 @@ export default function Shirts() {
 
       <main className="category-layout">
         <aside className="category-sidebar">
-          <button className="category-clear">CLEAR FILTERS</button>
+          <button
+            className="category-clear"
+            onClick={() => {
+              setColorFilters(new Set());
+              setSizeFilters(new Set());
+              setPriceRange({ min: 30, max: 50 });
+            }}
+          >
+            CLEAR FILTERS
+          </button>
 
           <section className="category-filter">
             <h3 className="category-filter-title">SORT</h3>
@@ -244,22 +258,51 @@ export default function Shirts() {
           <section className="category-filter">
             <h3 className="category-filter-title">COLOR</h3>
             <div className="category-filter-pills">
-              {COLORS.map((color) => (
-                <button key={color.id} className="category-pill">
-                  {color.label}
-                </button>
-              ))}
+              {COLORS.map((c) => {
+                const value = c.value;
+                const active = colorFilters.has(value);
+                return (
+                  <button
+                    key={c.id}
+                    className={`category-pill${active ? " category-pill--active" : ""}`}
+                    onClick={() => {
+                      setColorFilters((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(value)) next.delete(value); else next.add(value);
+                        return next;
+                      });
+                    }}
+                    aria-pressed={active}
+                  >
+                    {c.label}
+                  </button>
+                );
+              })}
             </div>
           </section>
 
           <section className="category-filter">
             <h3 className="category-filter-title">SIZE</h3>
             <div className="category-filter-pills">
-              {SIZES.map((size) => (
-                <button key={size} className="category-pill">
-                  {size}
-                </button>
-              ))}
+              {SIZES.map((s) => {
+                const active = sizeFilters.has(s);
+                return (
+                  <button
+                    key={s}
+                    className={`category-pill${active ? " category-pill--active" : ""}`}
+                    onClick={() => {
+                      setSizeFilters((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(s)) next.delete(s); else next.add(s);
+                        return next;
+                      });
+                    }}
+                    aria-pressed={active}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
             </div>
           </section>
 
@@ -269,8 +312,8 @@ export default function Shirts() {
               <div className="price-slider-wrapper">
                 <input
                   type="range"
-                  min="50"
-                  max="90"
+                  min="30"
+                  max="50"
                   value={priceRange.min}
                   onChange={(e) => {
                     const newMin = Math.min(Number(e.target.value), priceRange.max - 1);
@@ -280,8 +323,8 @@ export default function Shirts() {
                 />
                 <input
                   type="range"
-                  min="50"
-                  max="90"
+                  min="30"
+                  max="50"
                   value={priceRange.max}
                   onChange={(e) => {
                     const newMax = Math.max(Number(e.target.value), priceRange.min + 1);
@@ -315,7 +358,7 @@ export default function Shirts() {
                 <div className="product-info">
                   <h3 className="product-name">{product.name}</h3>
                   <p className="product-meta">
-                    <span>{product.color.toUpperCase()}</span>
+                    <span>COLOR: {String(product.color).toUpperCase()}</span>
                   </p>
                   <p className="product-price">{product.price}</p>
                   <div className="product-size-selector">
@@ -325,7 +368,6 @@ export default function Shirts() {
                         const isSelected = selectedSizes.get(product.id) === size;
                         const cartQuantity = getCartQuantity(product.id, size);
                         const isInCart = cartQuantity > 0;
-                        
                         return (
                           <button
                             key={size}
@@ -339,40 +381,31 @@ export default function Shirts() {
                       })}
                     </div>
                   </div>
-                  <div className="product-add-wrapper">
-                    <button
-                      className="product-add-icon"
-                      onClick={() => {
-                        const selectedSize = selectedSizes.get(product.id);
-                        if (selectedSize) {
-                          const currentQty = getCartQuantity(product.id, selectedSize);
-                          if (currentQty > 0) {
-                            updateCartQuantity(product.id, selectedSize, -1);
-                          }
-                        }
-                      }}
-                      aria-label="Decrease quantity"
-                    >
-                      −
-                    </button>
-                    <div className="product-add-quantity">
-                      {getTotalCartQuantity(product.id) || 0}
-                    </div>
-                    <button
-                      className="product-add-icon product-add-cart-icon"
-                      onClick={() => {
-                        const selectedSize = selectedSizes.get(product.id);
-                        if (selectedSize) {
-                          updateCartQuantity(product.id, selectedSize, 1);
-                        } else {
-                          handleAddToCart(product.id, product.name, product.size);
-                        }
-                      }}
-                      aria-label="Add to cart"
-                    >
-                      <img src={bagIcon} alt="cart" className="cart-icon-img" />
-                    </button>
-                  </div>
+                  <button
+                    className="product-add-to-basket"
+                    onClick={() => {
+                      handleAddToCart(product.id, product.name, product.size);
+                    }}
+                    style={{
+                      marginTop: "0.5rem",
+                      width: "50%",
+                      padding: "0.375rem 0.5rem",
+                      backgroundColor: "#3d211c",
+                      color: "white",
+                      border: "1px solid #3d211c",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.375rem",
+                      fontSize: "0.75rem",
+                      fontWeight: "500"
+                    }}
+                  >
+                    Add to basket
+                    <img src={bagIcon} alt="cart" style={{ width: "14px", height: "14px", filter: "brightness(0) invert(1)" }} />
+                  </button>
                 </div>
               </article>
             );

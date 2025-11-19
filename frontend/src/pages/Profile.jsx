@@ -1,33 +1,37 @@
 // src/pages/Profile.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
-import { logoutRequest } from "../lib/api";
+import { 
+  logoutRequest, 
+  meRequest, 
+  getAccountDetails, 
+  updateAccount, 
+  changePassword,
+  getOrders,
+  getReturns,
+  createReturn,
+  updateProfile
+} from "../lib/api";
 
-// mock / initial data
-const INITIAL_ACCOUNT_DETAILS = {
-  email: "bahar@example.com",
-  phoneNumber: "+90 555 999 88 77",
-  password: "••••••••",
+// Helper function to format date
+const formatDate = (dateString) => {
+  if (!dateString) return "";
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+  } catch {
+    return dateString;
+  }
 };
 
-const INITIAL_ADDRESSES = [
-  { id: 1, label: "Primary", details: "Caddebostan Mah. Gulistan Sk. Hanımeli Apt. No:12 Kadıköy/Istanbul" },
-];
-
-const INITIAL_ORDERS = [
-  { id: "ORD-1045", date: "Oct 12, 2025", status: "Delivered", total: "₺1.250,00", items: ["Wool Coat x1", "Leather Boots x1"] },
-  { id: "ORD-1039", date: "Sep 28, 2025", status: "Processing Return", total: "₺740,00", items: ["Suede Jacket x1"] },
-];
-
-const INITIAL_RETURNS = [
-  { id: "RET-202", orderId: "ORD-1011", date: "Aug 02, 2025", status: "Approved", reason: "Size too small" },
-];
-
-const INITIAL_CARDS = [
-  { id: 1, label: "Mastercard •• 1123", holder: "Bahar Turkmen", expiry: "04 / 27" },
-];
+// Helper function to format currency
+const formatCurrency = (amount) => {
+  if (!amount) return "₺0,00";
+  const num = typeof amount === "string" ? parseFloat(amount) : amount;
+  return `₺${num.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -36,78 +40,314 @@ export default function Profile() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const go = (path) => () => navigate(path);
 
-  // if you later want to show real user, add fetch — for now hardcode “Bahar”
-  const user = { name: "Bahar" };
+  // User and account states
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // profile states
-  const [accountDetails, setAccountDetails] = useState(INITIAL_ACCOUNT_DETAILS);
-  const [orders] = useState(INITIAL_ORDERS);
-  const [addresses, setAddresses] = useState(INITIAL_ADDRESSES);
+  const [accountDetails, setAccountDetails] = useState({ email: "", phoneNumber: "", password: "••••••••" });
+  const [orders, setOrders] = useState([]);
+  const [addresses, setAddresses] = useState([]);
   const [newAddress, setNewAddress] = useState({ label: "", details: "" });
-  const [returns, setReturns] = useState(INITIAL_RETURNS);
+  const [editingAddressId, setEditingAddressId] = useState(null);
+  const [returns, setReturns] = useState([]);
   const [newReturn, setNewReturn] = useState({ orderId: "", reason: "" });
-  const [cards, setCards] = useState(INITIAL_CARDS);
+  const [cards, setCards] = useState([]);
   const [newCard, setNewCard] = useState({ label: "", holder: "", expiry: "" });
   const [editingCardId, setEditingCardId] = useState(null);
+  const [passwordChange, setPasswordChange] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const isEditingCard = editingCardId !== null;
+
+  // Fetch user data on mount
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch user info
+        const userRes = await meRequest();
+        const userData = userRes.data;
+        setUser({ id: userData.id, name: userData.name || "User", email: userData.emailAddress });
+
+        // Fetch account details
+        const accountRes = await getAccountDetails();
+        const accountData = accountRes.data;
+        setAccountDetails({
+          email: accountData.emailAddress || "",
+          phoneNumber: accountData.phoneNumber || "",
+          password: "••••••••",
+        });
+
+        // Fetch orders
+        const ordersRes = await getOrders(0, 100);
+        const ordersData = ordersRes.data.content || [];
+        setOrders(ordersData.map(order => ({
+          id: order.id,
+          date: formatDate(order.createdAt),
+          status: order.status || "UNKNOWN",
+          total: formatCurrency(order.grandTotal),
+          items: [], // Will be populated if needed from detail endpoint
+        })));
+
+        // Fetch returns
+        const returnsRes = await getReturns(0, 100);
+        const returnsData = returnsRes.data.content || [];
+        setReturns(returnsData.map(ret => ({
+          id: ret.id,
+          orderId: ret.orderId,
+          date: formatDate(ret.createdAt),
+          status: ret.status || "REQUESTED",
+          reason: ret.reason || "",
+        })));
+
+        // Parse home address if available
+        if (accountData.homeAddress) {
+          setAddresses([{ id: 1, label: "Home", details: accountData.homeAddress }]);
+        }
+
+        // Load payment methods from localStorage (using user ID as key)
+        const userId = userData.id;
+        if (userId) {
+          try {
+            const savedCards = localStorage.getItem(`paymentMethods_${userId}`);
+            if (savedCards) {
+              setCards(JSON.parse(savedCards));
+            }
+          } catch (err) {
+            console.error("Error loading payment methods from localStorage:", err);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching user data:", err);
+        setError("Failed to load profile data. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   const handleLogout = async () => {
     try { await logoutRequest(); } catch (err) { console.log("logout error (ignored):", err); }
     navigate("/login");
   };
 
-  const goToDetails = () => setShowProfileMenu(false);
-
-  // forms / list handlers (unchanged)
+  // forms / list handlers
   const handleAccountChange = (event) => {
     const { name, value } = event.target;
     setAccountDetails((prev) => ({ ...prev, [name]: value }));
   };
-  const handleAccountSubmit = (event) => { event.preventDefault(); };
-  const handleDeleteAddress = (id) => setAddresses((prev) => prev.filter((a) => a.id !== id));
-  const handleNewAddressSubmit = (event) => {
+
+  const handleAccountSubmit = async (event) => {
     event.preventDefault();
-    if (!newAddress.label.trim() || !newAddress.details.trim()) return;
-    setAddresses((prev) => [...prev, { id: Date.now(), label: newAddress.label.trim(), details: newAddress.details.trim() }]);
+    try {
+      await updateAccount(accountDetails.email, accountDetails.phoneNumber);
+      alert("Account updated successfully!");
+    } catch (err) {
+      console.error("Error updating account:", err);
+      alert(err.response?.data?.message || "Failed to update account. Please try again.");
+    }
+  };
+
+  const handlePasswordChange = async (event) => {
+    event.preventDefault();
+    if (passwordChange.newPassword !== passwordChange.confirmPassword) {
+      alert("New passwords do not match!");
+      return;
+    }
+    if (passwordChange.newPassword.length < 6) {
+      alert("New password must be at least 6 characters!");
+      return;
+    }
+    try {
+      await changePassword(passwordChange.currentPassword, passwordChange.newPassword);
+      alert("Password changed successfully!");
+      setPasswordChange({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (err) {
+      console.error("Error changing password:", err);
+      alert(err.response?.data?.message || "Failed to change password. Please try again.");
+    }
+  };
+  const handleEditAddress = (address) => {
+    setEditingAddressId(address.id);
+    setNewAddress({ label: address.label, details: address.details });
+  };
+
+  const handleCancelEditAddress = () => {
+    setEditingAddressId(null);
     setNewAddress({ label: "", details: "" });
   };
-  const handleDeleteReturn = (id) => setReturns((prev) => prev.filter((r) => r.id !== id));
-  const handleNewReturnSubmit = (event) => {
+
+  const handleDeleteAddress = async (id) => {
+    const address = addresses.find(a => a.id === id);
+    if (!address) return;
+    
+    // If it's the home address, clear it
+    if (address.label === "Home") {
+      try {
+        const userRes = await meRequest();
+        const userData = userRes.data;
+        await updateProfile(userData.name, "", userData.emailAddress);
+        setAddresses([]);
+        alert("Address deleted successfully!");
+      } catch (err) {
+        console.error("Error deleting address:", err);
+        alert("Failed to delete address. Please try again.");
+      }
+    } else {
+      setAddresses((prev) => prev.filter((a) => a.id !== id));
+    }
+  };
+
+  const handleNewAddressSubmit = async (event) => {
     event.preventDefault();
-    if (!newReturn.orderId.trim() || !newReturn.reason.trim()) return;
-    setReturns((prev) => [
-      ...prev,
-      {
-        id: `RET-${Date.now().toString().slice(-3)}`,
-        orderId: newReturn.orderId.trim(),
-        date: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }),
-        status: "Pending Review",
-        reason: newReturn.reason.trim(),
-      },
-    ]);
-    setNewReturn({ orderId: "", reason: "" });
+    if (!newAddress.label.trim() || !newAddress.details.trim()) {
+      alert("Please fill in all fields!");
+      return;
+    }
+
+    try {
+      const userRes = await meRequest();
+      const userData = userRes.data;
+      
+      if (editingAddressId) {
+        // Update existing address
+        if (newAddress.label === "Home") {
+          // Update homeAddress in backend
+          await updateProfile(userData.name, newAddress.details.trim(), userData.emailAddress);
+          setAddresses((prev) => 
+            prev.map((a) => 
+              a.id === editingAddressId 
+                ? { ...a, label: newAddress.label.trim(), details: newAddress.details.trim() }
+                : a
+            )
+          );
+        } else {
+          // For other addresses, just update locally (since backend only supports homeAddress)
+          setAddresses((prev) => 
+            prev.map((a) => 
+              a.id === editingAddressId 
+                ? { ...a, label: newAddress.label.trim(), details: newAddress.details.trim() }
+                : a
+            )
+          );
+        }
+        alert("Address updated successfully!");
+      } else {
+        // Add new address
+        if (newAddress.label === "Home") {
+          // Update homeAddress in backend
+          await updateProfile(userData.name, newAddress.details.trim(), userData.emailAddress);
+          setAddresses([{ id: 1, label: "Home", details: newAddress.details.trim() }]);
+        } else {
+          // For other addresses, add locally
+          setAddresses((prev) => [...prev, { id: Date.now(), label: newAddress.label.trim(), details: newAddress.details.trim() }]);
+        }
+        alert("Address saved successfully!");
+      }
+      
+      setNewAddress({ label: "", details: "" });
+      setEditingAddressId(null);
+    } catch (err) {
+      console.error("Error saving address:", err);
+      alert(err.response?.data?.message || "Failed to save address. Please try again.");
+    }
+  };
+  const handleNewReturnSubmit = async (event) => {
+    event.preventDefault();
+    if (!newReturn.orderId.trim() || !newReturn.reason.trim()) {
+      alert("Please fill in all fields!");
+      return;
+    }
+    try {
+      // For now, we'll send empty orderItemIds array - backend may require specific item IDs
+      const response = await createReturn(newReturn.orderId.trim(), [], newReturn.reason.trim());
+      console.log("Return request response:", response);
+      alert("Return request submitted successfully!");
+      
+      // Refresh returns list
+      const returnsRes = await getReturns(0, 100);
+      const returnsData = returnsRes.data.content || [];
+      setReturns(returnsData.map(ret => ({
+        id: ret.id,
+        orderId: ret.orderId,
+        date: formatDate(ret.createdAt),
+        status: ret.status || "REQUESTED",
+        reason: ret.reason || "",
+      })));
+      
+      setNewReturn({ orderId: "", reason: "" });
+    } catch (err) {
+      console.error("Error creating return:", err);
+      console.error("Error response:", err.response);
+      const errorMessage = err.response?.data?.message || err.message || "Failed to submit return request. Please try again.";
+      alert(errorMessage);
+    }
   };
   const handleEditCard = (card) => {
     setEditingCardId(card.id);
     setNewCard({ label: card.label, holder: card.holder, expiry: card.expiry });
   };
   const handleCancelEditCard = () => { setEditingCardId(null); setNewCard({ label: "", holder: "", expiry: "" }); };
+  
+  // Save cards to localStorage whenever cards change
+  const saveCardsToLocalStorage = (cardsToSave) => {
+    if (user && user.id) {
+      try {
+        localStorage.setItem(`paymentMethods_${user.id}`, JSON.stringify(cardsToSave));
+      } catch (err) {
+        console.error("Error saving payment methods to localStorage:", err);
+      }
+    }
+  };
+
   const handleNewCardSubmit = (event) => {
     event.preventDefault();
-    if (!newCard.label.trim() || !newCard.holder.trim() || !newCard.expiry.trim()) return;
+    if (!newCard.label.trim() || !newCard.holder.trim() || !newCard.expiry.trim()) {
+      alert("Please fill in all fields!");
+      return;
+    }
     const normalized = { label: newCard.label.trim(), holder: newCard.holder.trim(), expiry: newCard.expiry.trim() };
+    let updatedCards;
     if (editingCardId) {
-      setCards((prev) => prev.map((c) => (c.id === editingCardId ? { ...c, ...normalized } : c)));
+      updatedCards = cards.map((c) => (c.id === editingCardId ? { ...c, ...normalized } : c));
+      setCards(updatedCards);
       setEditingCardId(null);
     } else {
-      setCards((prev) => [...prev, { id: Date.now(), ...normalized }]);
+      updatedCards = [...cards, { id: Date.now(), ...normalized }];
+      setCards(updatedCards);
     }
+    saveCardsToLocalStorage(updatedCards);
     setNewCard({ label: "", holder: "", expiry: "" });
+    alert("Card saved successfully!");
   };
+  
   const handleDeleteCard = (id) => {
-    setCards((prev) => prev.filter((c) => c.id !== id));
+    const updatedCards = cards.filter((c) => c.id !== id);
+    setCards(updatedCards);
+    saveCardsToLocalStorage(updatedCards);
     if (editingCardId === id) handleCancelEditCard();
+    alert("Card deleted successfully!");
   };
+
+  if (loading) {
+    return (
+      <div className="home-page">
+        <div style={{ padding: "2rem", textAlign: "center" }}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="home-page">
+        <div style={{ padding: "2rem", textAlign: "center", color: "red" }}>{error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="home-page">
@@ -140,7 +380,7 @@ export default function Profile() {
               <span /><span /><span />
               {showProfileMenu && (
                 <div className="details-menu">
-                  <button className="details-menu-item" onClick={goToDetails}>Details</button>
+                  <button className="details-menu-item" onClick={() => { setShowProfileMenu(false); navigate("/profile"); }}>Details</button>
                   <button className="details-menu-item" onClick={handleLogout}>Log-out</button>
                 </div>
               )}
@@ -154,7 +394,7 @@ export default function Profile() {
       {/* profile content */}
       <main className="profile-wrapper">
         <section className="profile-hero">
-          <h1 className="profile-heading">Hi {user ? user.name : "there"}!</h1>
+          <h1 className="profile-heading">Hi, {user ? user.name : "there"}!</h1>
           <p className="profile-subheading">
             Manage your orders, account information, and saved preferences all in one place.
           </p>
@@ -167,21 +407,27 @@ export default function Profile() {
             <p>Orders with details</p>
           </header>
           <div className="profile-card-body">
-            <ul className="profile-list">
-              {orders.map((order) => (
-                <li key={order.id} className="profile-list-item">
-                  <div className="profile-list-item-header">
-                    <span className="profile-pill">{order.status}</span>
-                    <strong>{order.id}</strong>
-                  </div>
-                  <div className="profile-list-item-meta">
-                    <span>{order.date}</span>
-                    <span>{order.total}</span>
-                  </div>
-                  <p className="profile-list-item-description">{order.items.join(", ")}</p>
-                </li>
-              ))}
-            </ul>
+            {orders.length === 0 ? (
+              <p style={{ color: "#666" }}>No orders found.</p>
+            ) : (
+              <ul className="profile-list">
+                {orders.map((order) => (
+                  <li key={order.id} className="profile-list-item">
+                    <div className="profile-list-item-header">
+                      <span className="profile-pill">{order.status}</span>
+                      <strong>{order.id}</strong>
+                    </div>
+                    <div className="profile-list-item-meta">
+                      <span>{order.date}</span>
+                      <span>{order.total}</span>
+                    </div>
+                    {order.items && order.items.length > 0 && (
+                      <p className="profile-list-item-description">{order.items.join(", ")}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </section>
 
@@ -200,11 +446,46 @@ export default function Profile() {
                 <span>Phone Number</span>
                 <input type="tel" name="phoneNumber" value={accountDetails.phoneNumber} onChange={handleAccountChange} required />
               </label>
-              <label className="profile-field">
-                <span>Password</span>
-                <input type="password" name="password" value={accountDetails.password} onChange={handleAccountChange} required />
-              </label>
               <button type="submit" className="profile-button">Save Changes</button>
+            </form>
+          </div>
+        </section>
+
+        {/* Change Password */}
+        <section className="profile-card">
+          <header className="profile-card-header">
+            <h2>Change Password</h2>
+          </header>
+          <div className="profile-card-body">
+            <form className="profile-form" onSubmit={handlePasswordChange}>
+              <label className="profile-field">
+                <span>Current Password</span>
+                <input 
+                  type="password" 
+                  value={passwordChange.currentPassword} 
+                  onChange={(e) => setPasswordChange(prev => ({ ...prev, currentPassword: e.target.value }))} 
+                  required 
+                />
+              </label>
+              <label className="profile-field">
+                <span>New Password</span>
+                <input 
+                  type="password" 
+                  value={passwordChange.newPassword} 
+                  onChange={(e) => setPasswordChange(prev => ({ ...prev, newPassword: e.target.value }))} 
+                  required 
+                />
+              </label>
+              <label className="profile-field">
+                <span>Confirm New Password</span>
+                <input 
+                  type="password" 
+                  value={passwordChange.confirmPassword} 
+                  onChange={(e) => setPasswordChange(prev => ({ ...prev, confirmPassword: e.target.value }))} 
+                  required 
+                />
+              </label>
+              <button type="submit" className="profile-button">Change Password</button>
             </form>
           </div>
         </section>
@@ -220,7 +501,7 @@ export default function Profile() {
                     <div className="profile-list-item-header"><strong>{address.label}</strong></div>
                     <p className="profile-list-item-description">{address.details}</p>
                     <div className="profile-list-item-actions">
-                      <button className="profile-link-button" type="button">Edit Address</button>
+                      <button className="profile-link-button" type="button" onClick={() => handleEditAddress(address)}>Edit Address</button>
                       <button type="button" className="profile-icon-button" aria-label="Delete address" onClick={() => handleDeleteAddress(address.id)}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M5 7h14M9 7v10m6-10v10M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -234,23 +515,48 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* add new address */}
+          {/* add new address / edit address */}
           <div>
             <header className="profile-card-header">
-              <h3>Add New Address</h3>
-              <p>Store another delivery location</p>
+              <h3>{editingAddressId ? "Edit Address" : "Add New Address"}</h3>
+              <p>{editingAddressId ? "Update the selected address" : "Store another delivery location"}</p>
             </header>
             <div className="profile-card-body">
               <form className="profile-form" onSubmit={handleNewAddressSubmit}>
                 <label className="profile-field">
                   <span>Label</span>
-                  <input type="text" value={newAddress.label} onChange={(e) => setNewAddress((p) => ({ ...p, label: e.target.value }))} placeholder="Home, Work..." required />
+                  <input 
+                    type="text" 
+                    value={newAddress.label} 
+                    onChange={(e) => setNewAddress((p) => ({ ...p, label: e.target.value }))} 
+                    placeholder="Home, Work..." 
+                    required 
+                  />
                 </label>
                 <label className="profile-field">
                   <span>Address</span>
-                  <textarea rows={3} value={newAddress.details} onChange={(e) => setNewAddress((p) => ({ ...p, details: e.target.value }))} placeholder="Street, City, ZIP" required />
+                  <textarea 
+                    rows={3} 
+                    value={newAddress.details} 
+                    onChange={(e) => setNewAddress((p) => ({ ...p, details: e.target.value }))} 
+                    placeholder="Street, City, ZIP" 
+                    required 
+                  />
                 </label>
-                <button type="submit" className="profile-button">Save Address</button>
+                <div className="profile-form-actions">
+                  <button type="submit" className="profile-button">
+                    {editingAddressId ? "Update Address" : "Save Address"}
+                  </button>
+                  {editingAddressId && (
+                    <button 
+                      type="button" 
+                      className="profile-link-button secondary" 
+                      onClick={handleCancelEditAddress}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </form>
             </div>
           </div>
@@ -264,29 +570,25 @@ export default function Profile() {
               <p>Track previous requests</p>
             </header>
             <div className="profile-card-body">
-              <ul className="profile-list">
-                {returns.map((item) => (
-                  <li key={item.id} className="profile-list-item">
-                    <div className="profile-list-item-header">
-                      <strong>{item.orderId}</strong>
-                      <span className="profile-pill muted">{item.status}</span>
-                    </div>
-                    <div className="profile-list-item-meta">
-                      <span>{item.id}</span>
-                      <span>{item.date}</span>
-                    </div>
-                    <p className="profile-list-item-description">Reason: {item.reason}</p>
-                    <div className="profile-list-item-actions">
-                      <button type="button" className="profile-icon-button" aria-label="Delete return request" onClick={() => handleDeleteReturn(item.id)}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M5 7h14M9 7v10m6-10v10M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M8 7h8l-.7 11a1 1 0 0 1-1 .9h-4.6a1 1 0 0 1-1-.9L8 7Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              {returns.length === 0 ? (
+                <p style={{ color: "#666" }}>No return requests found.</p>
+              ) : (
+                <ul className="profile-list">
+                  {returns.map((item) => (
+                    <li key={item.id} className="profile-list-item">
+                      <div className="profile-list-item-header">
+                        <strong>{item.orderId}</strong>
+                        <span className="profile-pill muted">{item.status}</span>
+                      </div>
+                      <div className="profile-list-item-meta">
+                        <span>{item.id}</span>
+                        <span>{item.date}</span>
+                      </div>
+                      <p className="profile-list-item-description">Reason: {item.reason}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
 
@@ -294,19 +596,53 @@ export default function Profile() {
           <div>
             <header className="profile-card-header">
               <h3>New Return Request</h3>
-              <p>Submit a new request</p>
             </header>
             <div className="profile-card-body">
               <form className="profile-form" onSubmit={handleNewReturnSubmit}>
                 <label className="profile-field">
                   <span>Order Number</span>
-                  <input type="text" value={newReturn.orderId} onChange={(e) => setNewReturn((p) => ({ ...p, orderId: e.target.value }))} placeholder="ORD-XXXX" required />
+                  {orders.length > 0 ? (
+                    <select
+                      value={newReturn.orderId}
+                      onChange={(e) => setNewReturn((p) => ({ ...p, orderId: e.target.value }))}
+                      required
+                      style={{ width: "100%", padding: "0.5rem", fontSize: "1rem", border: "1px solid #ccc", borderRadius: "4px" }}
+                    >
+                      <option value="">Select an order...</option>
+                      {orders.map((order) => (
+                        <option key={order.id} value={order.id}>
+                          {order.id} - {order.date} - {order.total}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input 
+                      type="text" 
+                      value={newReturn.orderId} 
+                      onChange={(e) => setNewReturn((p) => ({ ...p, orderId: e.target.value }))} 
+                      placeholder="Enter order ID (e.g., ORD-XXXX)" 
+                      required 
+                    />
+                  )}
+                  {orders.length === 0 && (
+                    <p style={{ fontSize: "0.875rem", color: "#666", marginTop: "0.25rem" }}>
+                      No orders available. Please make an order first.
+                    </p>
+                  )}
                 </label>
                 <label className="profile-field">
                   <span>Reason</span>
-                  <textarea rows={3} value={newReturn.reason} onChange={(e) => setNewReturn((p) => ({ ...p, reason: e.target.value }))} placeholder="Describe the issue" required />
+                  <textarea 
+                    rows={3} 
+                    value={newReturn.reason} 
+                    onChange={(e) => setNewReturn((p) => ({ ...p, reason: e.target.value }))} 
+                    placeholder="Describe the issue" 
+                    required 
+                  />
                 </label>
-                <button type="submit" className="profile-button">Submit Request</button>
+                <button type="submit" className="profile-button" disabled={orders.length === 0}>
+                  Submit Request
+                </button>
               </form>
             </div>
           </div>
@@ -344,7 +680,6 @@ export default function Profile() {
           <div>
             <header className="profile-card-header">
               <h3>{isEditingCard ? "Edit Card" : "Add New Card"}</h3>
-              <p>{isEditingCard ? "Update the selected payment method." : "Securely store a new payment method"}</p>
             </header>
             <div className="profile-card-body">
               <form className="profile-form" onSubmit={handleNewCardSubmit}>
