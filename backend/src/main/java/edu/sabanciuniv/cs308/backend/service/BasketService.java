@@ -11,7 +11,8 @@ import edu.sabanciuniv.cs308.backend.request.AddToBasketRequest;
 import edu.sabanciuniv.cs308.backend.request.UpdateBasketItemRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -84,55 +85,90 @@ public class BasketService {
     }
 
     public BasketDTO addItem(String userId, String cartId, AddToBasketRequest request) {
+
         // Sepeti bul veya oluştur
         OrderEntity cart = getOrCreateCart(userId, cartId);
 
+        // Ürünü bul
         ProductEntity product = productRepository.findById(request.getProductId())
-                .orElseThrow(() -> new RuntimeException("Product not found: " + request.getProductId()));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Product not found: " + request.getProductId()
+                ));
 
+        // SKU varyantını bul
         ProductEntity.Variant variant = product.getVariants().stream()
                 .filter(v -> v.getSku().equals(request.getSku()))
                 .findFirst()
-                .orElseThrow(() -> new RuntimeException("Variant not found: " + request.getSku()));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Variant not found: " + request.getSku()
+                ));
 
+        // STOK KONTROLÜ: ürün stokta yoksa sepete eklenemez
+        if (variant.getStock() <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Product is out of stock"
+            );
+        }
+
+        // Sepette aynı SKU + ProductId var mı?
         if (cart.getItems() == null) {
             cart.setItems(new ArrayList<>());
         }
 
-        // Aynı productId + sku varsa quantity artır
         OrderItem item = cart.getItems().stream()
                 .filter(i -> i.getProductId().equals(product.getId())
                         && i.getSku().equals(variant.getSku()))
                 .findFirst()
                 .orElse(null);
 
+        // Yeni eklenecek miktar
+        int requestedQty = request.getQuantity();
+
         if (item == null) {
+            // Yeni item eklerken stok aşımı kontrolü
+            if (requestedQty > variant.getStock()) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Not enough stock. Available: " + variant.getStock()
+                );
+            }
+
+            // Yeni item oluşur
             item = new OrderItem();
             item.setProductId(product.getId());
             item.setSku(variant.getSku());
 
             String name = product.getName();
-            if (variant.getColor() != null) {
-                name += " - " + variant.getColor();
-            }
-            if (variant.getSize() != null) {
-                name += " (" + variant.getSize() + ")";
-            }
-            item.setName(name);
+            if (variant.getColor() != null) name += " - " + variant.getColor();
+            if (variant.getSize() != null) name += " (" + variant.getSize() + ")";
 
-            BigDecimal unitPrice = variant.getPrice() != null
-                    ? variant.getPrice()
-                    : product.getBasePrice();
-            item.setUnitPrice(unitPrice);
-            item.setQuantity(0);
+            item.setName(name);
+            item.setUnitPrice(
+                    variant.getPrice() != null ? variant.getPrice() : product.getBasePrice()
+            );
+            item.setQuantity(requestedQty);
+            item.setLineTotal(item.getUnitPrice().multiply(BigDecimal.valueOf(requestedQty)));
 
             cart.getItems().add(item);
+        } else {
+            // Mevcutta var → quantity artırmadan önce stok sınırı kontrolü
+            int newQty = item.getQuantity() + requestedQty;
+
+            if (newQty > variant.getStock()) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Stock limit exceeded. Available: " + variant.getStock()
+                );
+            }
+
+            item.setQuantity(newQty);
+            item.setLineTotal(item.getUnitPrice().multiply(BigDecimal.valueOf(newQty)));
         }
 
-        int newQuantity = item.getQuantity() + request.getQuantity();
-        item.setQuantity(newQuantity);
-        item.setLineTotal(item.getUnitPrice().multiply(BigDecimal.valueOf(newQuantity)));
-
+        // Kaydet ve DTO döndür
         orderRepository.save(cart);
         return mapToBasketDTO(cart);
     }
@@ -150,7 +186,10 @@ public class BasketService {
         }
 
         if (cart == null || cart.getItems() == null) {
-            throw new RuntimeException("Basket not found");
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Basket not found"
+            );
         }
 
         List<OrderItem> items = cart.getItems();
@@ -158,7 +197,10 @@ public class BasketService {
                 .filter(i -> i.getProductId().equals(request.getProductId())
                         && i.getSku().equals(request.getSku()))
                 .findFirst()
-                .orElseThrow(() -> new RuntimeException("Basket item not found"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Basket item not found"
+                ));
 
         if (request.getQuantity() <= 0) {
             items.remove(target);
