@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
+import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 import { 
   logoutRequest, 
   meRequest, 
@@ -57,6 +58,7 @@ export default function Profile() {
   const [newCard, setNewCard] = useState({ label: "", holder: "", expiry: "" });
   const [editingCardId, setEditingCardId] = useState(null);
   const [passwordChange, setPasswordChange] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const { openCart } = useCartDrawer();
   const isEditingCard = editingCardId !== null;
 
   // Fetch user data on mount
@@ -350,46 +352,94 @@ export default function Profile() {
   }
 
   return (
-    <div className="home-page">
-      {/* Top bar identical to Home */}
-      <header className="home-topbar">
-        <div className="home-left">
-          <span className="home-brand" onClick={go("/home")}>TIDL</span>
-        </div>
+      <div className="category-page">
+    <header className="category-topbar">
+      <button className="category-brand" onClick={() => navigate("/home")}>
+        TIDL
+      </button>
+      <nav className="category-nav">
+        <button
+          onClick={() => navigate("/category/sweatshirts")}
+          className="category-nav-item category-nav-item--active"
+        >
+          SWEATSHIRTS
+        </button>
+        <button
+          onClick={() => navigate("/category/shirts")}
+          className="category-nav-item"
+        >
+          SHIRTS
+        </button>
+        <button
+          onClick={() => navigate("/category/pants")}
+          className="category-nav-item"
+        >
+          PANTS
+        </button>
+        <button
+          onClick={() => navigate("/shop-the-look")}
+          className="category-nav-item"
+        >
+          SHOP THE LOOK
+        </button>
+      </nav>
 
-        <nav className="home-nav">
-          <button className="home-nav-item" onClick={go("/category/sweatshirts")}>SWEATSHIRTS</button>
-          <button className="home-nav-item" onClick={go("/category/shirts")}>SHIRTS</button>
-          <button className="home-nav-item" onClick={go("/category/pants")}>PANTS</button>
-          <button className="home-nav-item" onClick={go("/shop-the-look")}>SHOP THE LOOK</button>
-        </nav>
+      <div className="category-actions">
+        <img
+          src={searchIcon}
+          alt="Search"
+          className="category-icon"
+          onClick={() => navigate("/search")}
+        />
+        {user ? (
+          <span
+            className="login-topbar-link"
+            style={{ cursor: "default", marginRight: "0.5rem" }}
+          >
+            {`HEY! ${user.name}`}
+          </span>
+        ) : (
+          <span
+            className="home-signin"
+            onClick={() => navigate("/login")}
+            style={{ marginRight: "0.5rem", cursor: "pointer" }}
+          >
+            SIGN IN
+          </span>
+        )}
 
-        <div className="home-right">
-          <img src={searchIcon} alt="search" className="home-icon" onClick={go("/search")} />
+        {user && (
+          <div
+            className="home-menu"
+            onClick={() => setShowProfileMenu((p) => !p)}   
+            style={{ marginRight: "0.5rem" }}
+          >
+            <span />
+            <span />
+            <span />
+            {showProfileMenu && (                         
+              <div className="details-menu">
+                <button className="details-menu-item" onClick={go("/profile")}>
+                  Details
+                </button>
+                <button className="details-menu-item" onClick={handleLogout}>
+                  Log-out
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
-          {user ? (
-            <span className="login-topbar-link" style={{ cursor: "default" }}>
-              {`HEY! ${user.name}`}
-            </span>
-          ) : (
-            <span className="home-signin" onClick={go("/login")}>SIGN IN</span>
-          )}
+        <img
+          src={bagIcon}
+          alt="Cart"
+          className="category-icon"
+          onClick={openCart} 
+        />
+      </div>
+    </header>
 
-          {user && (
-            <div className="home-menu" onClick={() => setShowProfileMenu((p) => !p)}>
-              <span /><span /><span />
-              {showProfileMenu && (
-                <div className="details-menu">
-                  <button className="details-menu-item" onClick={() => { setShowProfileMenu(false); navigate("/profile"); }}>Details</button>
-                  <button className="details-menu-item" onClick={handleLogout}>Log-out</button>
-                </div>
-              )}
-            </div>
-          )}
 
-          <img src={bagIcon} alt="bag" className="home-icon" onClick={go("/cart")} />
-        </div>
-      </header>
 
       {/* profile content */}
       <main className="profile-wrapper">

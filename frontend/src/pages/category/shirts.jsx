@@ -1,19 +1,32 @@
 // src/pages/category/shirts.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { meRequest, logoutRequest, listProducts } from "../../lib/api";
+import {
+  meRequest,
+  logoutRequest,
+  listProducts,
+  addToBasket,
+} from "../../lib/api";
+
 import searchIcon from "../../assets/search.png";
 import bagIcon from "../../assets/bag.png";
+import { useCartDrawer } from "../../context/CartDrawerContext.jsx"; 
+
+function normalize(x) {
+  return String(x || "").trim().toLowerCase();
+}
 
 const COLORS = [
   { id: "color-cream", label: "WHITE", value: "white" },
-  { id: "color-navy",  label: "BLACK",  value: "black" },
+  { id: "color-navy", label: "BLACK", value: "black" },
 ];
 
 const SIZES = ["XS", "S", "M", "L", "XL"];
 
 export default function Shirts() {
   const navigate = useNavigate();
+  const CART_KEY = "tidl_cart_id";
+  const { openCart } = useCartDrawer();
 
   const [user, setUser] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -34,7 +47,7 @@ export default function Shirts() {
 
   const [hoveredProductId, setHoveredProductId] = useState(null);
 
-  const [sortOption, setSortOption] = useState(null);  // 'priceAsc' | 'priceDesc' | null
+  const [sortOption, setSortOption] = useState(null); // 'priceAsc' | 'priceDesc' | null
 
   const [priceBounds, setPriceBounds] = useState({ min: 0, max: 100 }); // NEW
   const [priceRange, setPriceRange] = useState({ min: 0, max: 100 });
@@ -78,7 +91,7 @@ export default function Shirts() {
           );
           const min = Math.min(...prices);
           const max = Math.max(...prices);
-          setPriceBounds({ min, max });     // NEW
+          setPriceBounds({ min, max }); // NEW
           setPriceRange({ min, max });
         }
       })
@@ -100,68 +113,74 @@ export default function Shirts() {
   const go = (path) => () => navigate(path);
 
   // filter using backend data
-const filteredProducts = useMemo(() => {
-  if (!products) return [];
+  const filteredProducts = useMemo(() => {
+    if (!products) return [];
 
-  // Attach helper fields for filter + sort
-  const withMeta = products.map((p) => {
-    const price = Number(
-      p.basePrice ??
-        (p.variants && p.variants[0] && p.variants[0].price) ??
-        0
-    );
+    // Attach helper fields for filter + sort
+    const withMeta = products.map((p) => {
+      const price = Number(
+        p.basePrice ??
+          (p.variants && p.variants[0] && p.variants[0].price) ??
+          0
+      );
 
-    const color =
-      (p.variants && p.variants[0] && p.variants[0].color) || "";
+      const color =
+        (p.variants && p.variants[0] && p.variants[0].color) || "";
 
-    // build sizeStock: size -> total stock
-    const sizeStock = {};
-    (p.variants || []).forEach((v) => {
-      const sizeKey = v.size && v.size.trim();
-      if (!sizeKey) return;
-      const stock =
-        typeof v.stock === "number" ? v.stock : Number(v.stock || 0);
-      sizeStock[sizeKey] = (sizeStock[sizeKey] || 0) + stock;
+      // build sizeStock: size -> total stock
+      const sizeStock = {};
+      const sizeToSku = {};
+      (p.variants || []).forEach((v) => {
+        const sizeKey = v.size && v.size.trim();
+        if (!sizeKey) return;
+        const stock =
+          typeof v.stock === "number" ? v.stock : Number(v.stock || 0);
+        sizeStock[sizeKey] = (sizeStock[sizeKey] || 0) + stock;
+
+        if (v.sku) {
+          sizeToSku[sizeKey] = v.sku;
+        }
+      });
+
+      const allSizes = Object.keys(sizeStock);
+      const sizesInStock = allSizes.filter((s) => sizeStock[s] > 0);
+
+      return {
+        ...p,
+        _price: price,
+        _color: color,
+        _sizesAll: allSizes, // all sizes (even 0 stock)
+        _sizesInStock: sizesInStock, // only sizes with stock > 0
+        _sizeStock: sizeStock,
+        _sizeToSku: sizeToSku, // 👉 size -> sku (needed for addToBasket)
+      };
     });
 
-    const allSizes = Object.keys(sizeStock);
-    const sizesInStock = allSizes.filter((s) => sizeStock[s] > 0);
+    // FILTERS
+    let list = withMeta.filter((p) => {
+      const priceOk =
+        p._price >= priceRange.min && p._price <= priceRange.max;
 
-    return {
-      ...p,
-      _price: price,
-      _color: color,
-      _sizesAll: allSizes,      // all sizes (even 0 stock)
-      _sizesInStock: sizesInStock, // only sizes with stock > 0
-      _sizeStock: sizeStock,
-    };
-  });
+      const colorOk =
+        colorFilters.size === 0 ||
+        colorFilters.has(String(p._color).toLowerCase());
 
-  // FILTERS
-  let list = withMeta.filter((p) => {
-    const priceOk =
-      p._price >= priceRange.min && p._price <= priceRange.max;
+      const sizeOk =
+        sizeFilters.size === 0 ||
+        p._sizesInStock.some((s) => sizeFilters.has(s));
 
-    const colorOk =
-      colorFilters.size === 0 ||
-      colorFilters.has(String(p._color).toLowerCase());
+      return priceOk && colorOk && sizeOk;
+    });
 
-    const sizeOk =
-      sizeFilters.size === 0 ||
-      p._sizesInStock.some((s) => sizeFilters.has(s));
+    // SORT
+    if (sortOption === "priceAsc") {
+      list = [...list].sort((a, b) => a._price - b._price);
+    } else if (sortOption === "priceDesc") {
+      list = [...list].sort((a, b) => b._price - a._price);
+    }
 
-    return priceOk && colorOk && sizeOk;
-  });
-
-  // SORT
-  if (sortOption === "priceAsc") {
-    list = [...list].sort((a, b) => a._price - b._price);
-  } else if (sortOption === "priceDesc") {
-    list = [...list].sort((a, b) => b._price - a._price);
-  }
-
-  return list;
-}, [products, priceRange, colorFilters, sizeFilters, sortOption]);
+    return list;
+  }, [products, priceRange, colorFilters, sizeFilters, sortOption]);
 
   // toast helpers
   const scheduleMessageClear = () => {
@@ -215,26 +234,65 @@ const filteredProducts = useMemo(() => {
     });
   };
 
-  const handleAddToCart = (productId, name, availableSizes) => {
-    const selectedSize = selectedSizes.get(productId);
+
+  const handleAddToCart = async (product) => {
+    // must be logged in
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    const selectedSize = selectedSizes.get(product.id);
     if (!selectedSize) {
       setNotification("Please select a size.");
       scheduleMessageClear();
       return;
     }
-    if (!availableSizes.includes(selectedSize)) {
-      setNotification("Selected size is not available for this product.");
+
+    const sku = product._sizeToSku?.[selectedSize];
+    if (!sku) {
+      setNotification("SKU missing for selected size.");
       scheduleMessageClear();
       return;
     }
-    updateCartQuantity(productId, selectedSize, 1);
-    setNotification(`${name} (Size: ${selectedSize}) added to cart.`);
-    scheduleMessageClear();
-    setSelectedSizes((prev) => {
-      const next = new Map(prev);
-      next.delete(productId);
-      return next;
-    });
+
+    const existingCartId =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem(CART_KEY) || undefined
+        : undefined;
+
+    try {
+      const { data } = await addToBasket({
+        userId: user.id,
+        cartId: existingCartId,
+        productId: product.id,
+        sku,
+        quantity: 1,
+      });
+
+      if (data.orderId && typeof window !== "undefined") {
+        window.localStorage.setItem(CART_KEY, data.orderId);
+      }
+
+      // optional local UI mark
+      updateCartQuantity(product.id, selectedSize, 1);
+
+      setNotification(
+        `${product.name} (Size: ${selectedSize}) added to basket.`
+      );
+      scheduleMessageClear();
+
+      // clear selected size for this product (optional)
+      setSelectedSizes((prev) => {
+        const next = new Map(prev);
+        next.delete(product.id);
+        return next;
+      });
+    } catch (err) {
+      console.error("addToBasket error", err);
+      setNotification("Could not add item to basket.");
+      scheduleMessageClear();
+    }
   };
 
   return (
@@ -317,7 +375,7 @@ const filteredProducts = useMemo(() => {
             src={bagIcon}
             alt="Cart"
             className="category-icon"
-            onClick={() => navigate("/cart")}
+            onClick={openCart} 
           />
         </div>
       </header>
@@ -343,7 +401,9 @@ const filteredProducts = useMemo(() => {
             {/* Low → High */}
             <button
               className={`category-filter-option${
-                sortOption === "priceAsc" ? " category-filter-option--active" : ""
+                sortOption === "priceAsc"
+                  ? " category-filter-option--active"
+                  : ""
               }`}
               onClick={() =>
                 setSortOption((prev) => (prev === "priceAsc" ? null : "priceAsc"))
@@ -355,10 +415,14 @@ const filteredProducts = useMemo(() => {
             {/* High → Low */}
             <button
               className={`category-filter-option${
-                sortOption === "priceDesc" ? " category-filter-option--active" : ""
+                sortOption === "priceDesc"
+                  ? " category-filter-option--active"
+                  : ""
               }`}
               onClick={() =>
-                setSortOption((prev) => (prev === "priceDesc" ? null : "priceDesc"))
+                setSortOption((prev) =>
+                  prev === "priceDesc" ? null : "priceDesc"
+                )
               }
             >
               Price: High to Low
@@ -435,8 +499,8 @@ const filteredProducts = useMemo(() => {
               <div className="price-slider-wrapper">
                 <input
                   type="range"
-                  min={priceBounds.min}          
-                  max={priceBounds.max}          
+                  min={priceBounds.min}
+                  max={priceBounds.max}
                   value={priceRange.min}
                   onChange={(e) => {
                     const newMin = Math.min(
@@ -449,8 +513,8 @@ const filteredProducts = useMemo(() => {
                 />
                 <input
                   type="range"
-                  min={priceBounds.min}          
-                  max={priceBounds.max}          
+                  min={priceBounds.min}
+                  max={priceBounds.max}
                   value={priceRange.max}
                   onChange={(e) => {
                     const newMax = Math.max(
@@ -479,16 +543,16 @@ const filteredProducts = useMemo(() => {
             filteredProducts.map((product) => {
               const isFavorite = favorites.has(product.id);
               const allSizes =
-              product._sizesAll ||
-              Array.from(
-                new Set(
-                  (product.variants || [])
-                    .map((v) => v.size && v.size.trim())
-                    .filter(Boolean)
-                )
-              );
+                product._sizesAll ||
+                Array.from(
+                  new Set(
+                    (product.variants || [])
+                      .map((v) => v.size && v.size.trim())
+                      .filter(Boolean)
+                  )
+                );
 
-            const sizeStock = product._sizeStock || {};
+              const sizeStock = product._sizeStock || {};
               const priceNumber =
                 product._price ??
                 Number(
@@ -564,8 +628,12 @@ const filteredProducts = useMemo(() => {
                           const stockForSize = sizeStock[size] ?? 0;
                           const isOutOfStock = stockForSize <= 0;
 
-                          const isSelected = selectedSizes.get(product.id) === size;
-                          const cartQuantity = getCartQuantity(product.id, size);
+                          const isSelected =
+                            selectedSizes.get(product.id) === size;
+                          const cartQuantity = getCartQuantity(
+                            product.id,
+                            size
+                          );
                           const isInCart = cartQuantity > 0;
 
                           return (
@@ -573,11 +641,20 @@ const filteredProducts = useMemo(() => {
                               key={size}
                               className={
                                 "size-selector-button" +
-                                (isSelected ? " size-selector-button--selected" : "") +
-                                (isInCart ? " size-selector-button--in-cart" : "") +
-                                (isOutOfStock ? " size-selector-button--oos" : "")
+                                (isSelected
+                                  ? " size-selector-button--selected"
+                                  : "") +
+                                (isInCart
+                                  ? " size-selector-button--in-cart"
+                                  : "") +
+                                (isOutOfStock
+                                  ? " size-selector-button--oos"
+                                  : "")
                               }
-                              onClick={() => !isOutOfStock && handleSizeSelect(product.id, size)}
+                              onClick={() =>
+                                !isOutOfStock &&
+                                handleSizeSelect(product.id, size)
+                              }
                               aria-label={`Select size ${size}`}
                               disabled={isOutOfStock}
                             >
@@ -590,9 +667,7 @@ const filteredProducts = useMemo(() => {
 
                     <button
                       className="product-add-to-basket"
-                      onClick={() =>
-                        handleAddToCart(product.id, product.name, allSizes)
-                      }
+                      onClick={() => handleAddToCart(product)}
                       style={{
                         marginTop: "0.5rem",
                         width: "50%",

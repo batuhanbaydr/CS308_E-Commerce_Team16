@@ -3,11 +3,22 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
-import { fetchProduct, listProducts } from "../lib/api";
+import {
+  fetchProduct,
+  listProducts,
+  meRequest,
+  addToBasket,
+} from "../lib/api";
+import { useCartDrawer } from "../context/CartDrawerContext.jsx";
+
+const CART_STORAGE_KEY = "tidl_cart_id";
 
 export default function ProductDetail() {
   const navigate = useNavigate();
   const { productId } = useParams();
+  const { openCart } = useCartDrawer();
+
+  const [user, setUser] = useState(null);
 
   const [product, setProduct] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -16,10 +27,17 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
-const [related, setRelated] = useState([]);
-const [relatedError, setRelatedError] = useState("");
+  const [related, setRelated] = useState([]);
+  const [relatedError, setRelatedError] = useState("");
 
   const go = (path) => () => navigate(path);
+
+  // ---------- load logged-in user ----------
+  useEffect(() => {
+    meRequest()
+      .then((res) => setUser(res.data))
+      .catch(() => setUser(null));
+  }, []);
 
   // ===== derive UI-friendly fields from ProductEntity =====
   const galleryImages =
@@ -32,13 +50,12 @@ const [relatedError, setRelatedError] = useState("");
       ? galleryImages[Math.min(selectedIndex, galleryImages.length - 1)]
       : "";
 
-    // use precomputed stock + sizes from the enriched product
-    const sizeStock = (product && product._sizeStock) || {};
+  const sizeStock = (product && product._sizeStock) || {};
 
-    const uiSizes =
-        product && Array.isArray(product._sizesAll) && product._sizesAll.length > 0
-        ? product._sizesAll              // XS, S, M, L, XL...
-        : product?.sizes || [];          // fallback if no variants
+  const uiSizes =
+    product && Array.isArray(product._sizesAll) && product._sizesAll.length > 0
+      ? product._sizesAll
+      : product?.sizes || [];
 
   const uiColor =
     product?.variants?.[0]?.color || product?.color || "";
@@ -51,8 +68,7 @@ const [relatedError, setRelatedError] = useState("");
       ? product.variants[0].price
       : product?.basePrice;
 
-  const uiPrice =
-    rawPrice != null ? Number(rawPrice) : null;
+  const uiPrice = rawPrice != null ? Number(rawPrice) : null;
 
   const formattedPrice =
     uiPrice != null
@@ -63,37 +79,44 @@ const [relatedError, setRelatedError] = useState("");
         }).format(uiPrice)
       : "";
 
-    // ===== fetch product from backend =====
-    useEffect(() => {
+  // ===== fetch product from backend =====
+  useEffect(() => {
     let active = true;
     setLoading(true);
     setErrorMsg("");
 
     fetchProduct(productId)
-        .then((res) => {
+      .then((res) => {
         if (!active) return;
         const p = res.data;
 
-        // build sizeStock + helper size lists from variants
+        // build sizeStock + helper size lists + size -> sku map
         const sizeStockLocal = {};
-        (p.variants || []).forEach((v) => {
-            const sizeKey = v.size && v.size.trim();
-            if (!sizeKey) return;
+        const sizeToSku = {};
 
-            const stockVal =
+        (p.variants || []).forEach((v) => {
+          const sizeKey = v.size && v.size.trim();
+          if (!sizeKey) return;
+
+          const stockVal =
             typeof v.stock === "number" ? v.stock : Number(v.stock || 0);
-            sizeStockLocal[sizeKey] = (sizeStockLocal[sizeKey] || 0) + stockVal;
+          sizeStockLocal[sizeKey] = (sizeStockLocal[sizeKey] || 0) + stockVal;
+
+          // first sku we see for that size
+          if (!sizeToSku[sizeKey] && v.sku) {
+            sizeToSku[sizeKey] = v.sku;
+          }
         });
 
-        const allSizes = Object.keys(sizeStockLocal);               // XS, S, M, L, XL...
+        const allSizes = Object.keys(sizeStockLocal);
         const inStockSizes = allSizes.filter((s) => sizeStockLocal[s] > 0);
 
-        // attach helper fields so UI can use them later
         const enriched = {
-            ...p,
-            _sizeStock: sizeStockLocal,   // e.g. { XS: 10, S: 0, M: 3, XL: 1 }
-            _sizesAll: allSizes,         // all sizes (even 0 stock)
-            _sizesInStock: inStockSizes, // only sizes with stock > 0
+          ...p,
+          _sizeStock: sizeStockLocal,
+          _sizesAll: allSizes,
+          _sizesInStock: inStockSizes,
+          _sizeToSku: sizeToSku,
         };
 
         console.log("ENRICHED PRODUCT", enriched);
@@ -101,81 +124,115 @@ const [relatedError, setRelatedError] = useState("");
         console.log("sizeStock", enriched._sizeStock);
 
         setProduct(enriched);
-        // default selection: first in-stock size, or first size if everything is 0
         setSelectedSize(inStockSizes[0] || allSizes[0] || null);
         setSelectedIndex(0);
         setLoading(false);
-        })
-        .catch((err) => {
+      })
+      .catch((err) => {
         if (!active) return;
         console.error("fetchProduct error", err);
         setErrorMsg(
-            err?.response?.data?.message || "Could not load product details."
+          err?.response?.data?.message || "Could not load product details."
         );
         setLoading(false);
-        });
+      });
 
     return () => {
-        active = false;
+      active = false;
     };
-    }, [productId]);
+  }, [productId]);
 
+  // auto-rotate gallery every 5s
   useEffect(() => {
-  // if there is 0 or 1 image, no need to rotate
-  if (!galleryImages || galleryImages.length <= 1) return;
+    if (!galleryImages || galleryImages.length <= 1) return;
 
-  // change image every 5 seconds
-  const intervalId = setInterval(() => {
-    setSelectedIndex((prev) => {
-      const total = galleryImages.length;
-      return (prev + 1) % total; // 0 → 1 → 2 → ... → 0
-    });
-  }, 5000); // 5000 ms = 5 seconds
+    const intervalId = setInterval(() => {
+      setSelectedIndex((prev) => {
+        const total = galleryImages.length;
+        return (prev + 1) % total;
+      });
+    }, 5000);
 
-  // cleanup when component unmounts or gallery changes
-  return () => clearInterval(intervalId);
-    }, [galleryImages.length]); // run whenever number of images changes
+    return () => clearInterval(intervalId);
+  }, [galleryImages.length]);
 
-    // ===== fetch related products (same category, excluding current) =====
-    useEffect(() => {
-    if (!product || !product.category) return; // wait until product is loaded
+  // ===== fetch related products =====
+  useEffect(() => {
+    if (!product || !product.category) return;
 
     let active = true;
     setRelated([]);
     setRelatedError("");
 
     listProducts(product.category)
-        .then((res) => {
+      .then((res) => {
         if (!active) return;
         const all = res.data || [];
-
-        // exclude the current product and limit to a few items
         const candidates = all.filter((p) => p.id !== product.id).slice(0, 8);
-
         setRelated(candidates);
-        })
-        .catch((err) => {
+      })
+      .catch((err) => {
         if (!active) return;
         console.error("related products error", err);
         setRelatedError("Could not load related products.");
-        });
+      });
 
     return () => {
-        active = false;
+      active = false;
     };
-    }, [product]);
+  }, [product]);
 
   const decQty = () => setQuantity((q) => (q > 1 ? q - 1 : 1));
   const incQty = () => setQuantity((q) => q + 1);
 
-  const handleAddToCart = () => {
+  // ---------- REAL ADD TO CART ----------
+  const handleAddToCart = async () => {
     if (!product) return;
-    console.log("ADD TO CART (real)", {
-      productId: product.id,
-      size: selectedSize,
-      quantity,
-    });
-    alert("Added to cart (real product page, basket API TBD).");
+
+    if (!user) {
+      // require sign-in before adding
+      navigate("/login");
+      return;
+    }
+
+    if (!selectedSize) {
+      alert("Please select a size.");
+      return;
+    }
+
+    const skuMap = product._sizeToSku || {};
+    const skuForSize = skuMap[selectedSize] || uiSku;
+
+    if (!skuForSize) {
+      alert("Selected size is not available.");
+      return;
+    }
+
+    const cartId =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem(CART_STORAGE_KEY) || undefined
+        : undefined;
+
+    try {
+      const { data } = await addToBasket({
+        userId: user.id,
+        cartId,
+        productId: product.id,
+        sku: skuForSize,
+        quantity,
+      });
+
+      // store/refresh cartId for later calls (Cart page, more adds, etc.)
+      if (data.orderId && typeof window !== "undefined") {
+        window.localStorage.setItem(CART_STORAGE_KEY, data.orderId);
+      }
+
+      alert("Added to basket.");
+      // optional: navigate("/cart");
+    } catch (err) {
+      console.error("addToBasket error", err);
+      alert("Could not add to basket. Please try again.");
+    }
   };
 
   return (
@@ -217,15 +274,13 @@ const [relatedError, setRelatedError] = useState("");
             src={bagIcon}
             alt="bag"
             className="home-icon"
-            onClick={go("/cart")}
+            onClick={openCart} 
           />
         </div>
       </header>
 
       <main className="product-page">
-        {loading && (
-          <div className="product-loading">Loading product…</div>
-        )}
+        {loading && <div className="product-loading">Loading product…</div>}
 
         {!loading && errorMsg && (
           <div className="product-error">{errorMsg}</div>
@@ -265,48 +320,48 @@ const [relatedError, setRelatedError] = useState("");
               {/* Right: info */}
               <div className="product-info">
                 <h1 className="product-title">{product.name}</h1>
-                {uiSku && (
-                  <p className="product-sku">SKU: {uiSku}</p>
-                )}
+                {uiSku && <p className="product-sku">SKU: {uiSku}</p>}
 
                 <p className="product-price">{formattedPrice}</p>
 
                 {uiColor && (
                   <div className="product-option-group">
                     <span className="product-option-label">COLOR</span>
-                    <div className="product-color-swatch">
-                      {uiColor}
-                    </div>
+                    <div className="product-color-swatch">{uiColor}</div>
                   </div>
                 )}
 
                 {uiSizes && uiSizes.length > 0 && (
-                <div className="product-option-group">
+                  <div className="product-option-group">
                     <span className="product-option-label">SIZE</span>
                     <div className="product-size-row">
-                    {uiSizes.map((size) => {
+                      {uiSizes.map((size) => {
                         const stockForSize =
-                        (product && product._sizeStock && product._sizeStock[size]) ?? 0;
+                          (product &&
+                            product._sizeStock &&
+                            product._sizeStock[size]) ?? 0;
                         const isOutOfStock = stockForSize <= 0;
 
                         return (
-                        <button
+                          <button
                             key={size}
                             type="button"
                             className={
-                            "product-size-pill" +
-                            (size === selectedSize ? " active" : "") +
-                            (isOutOfStock ? " product-size-pill--oos" : "")
+                              "product-size-pill" +
+                              (size === selectedSize ? " active" : "") +
+                              (isOutOfStock ? " product-size-pill--oos" : "")
                             }
-                            onClick={() => !isOutOfStock && setSelectedSize(size)}
+                            onClick={() =>
+                              !isOutOfStock && setSelectedSize(size)
+                            }
                             disabled={isOutOfStock}
-                        >
+                          >
                             {size}
-                        </button>
+                          </button>
                         );
-                    })}
+                      })}
                     </div>
-                </div>
+                  </div>
                 )}
 
                 <div className="product-option-group">
@@ -356,50 +411,58 @@ const [relatedError, setRelatedError] = useState("");
 
             {/* YOU MAY ALSO LIKE... */}
             <section className="product-related">
-            <h2 className="product-related-title">YOU MAY ALSO LIKE…</h2>
-            {relatedError && (
+              <h2 className="product-related-title">YOU MAY ALSO LIKE…</h2>
+              {relatedError && (
                 <p className="product-related-subtitle">{relatedError}</p>
-            )}
+              )}
 
-            {!relatedError && related.length === 0 && (
+              {!relatedError && related.length === 0 && (
                 <p className="product-related-subtitle">
-                More items will appear here soon.
+                  More items will appear here soon.
                 </p>
-            )}
+              )}
 
-            {related.length > 0 && (
+              {related.length > 0 && (
                 <div className="product-related-scroll">
-                {related.map((p) => {
+                  {related.map((p) => {
                     const priceNumber = Number(
-                    p.basePrice ??
-                        (p.variants && p.variants[0] && p.variants[0].price) ??
+                      p.basePrice ??
+                        (p.variants &&
+                          p.variants[0] &&
+                          p.variants[0].price) ??
                         0
                     );
                     const displayPrice = `$${priceNumber.toFixed(2)}`;
                     const img =
-                    p.mainImageUrl || (p.imageUrls && p.imageUrls[0]) || "";
+                      p.mainImageUrl || (p.imageUrls && p.imageUrls[0]) || "";
 
                     return (
-                    <button
+                      <button
                         key={p.id}
                         type="button"
                         className="product-related-card"
                         onClick={() => navigate(`/product/${p.id}`)}
-                    >
+                      >
                         {img && (
-                        <div className="product-related-image-wrap">
-                            <img src={img} alt={p.name} className="product-related-image" />
-                        </div>
+                          <div className="product-related-image-wrap">
+                            <img
+                              src={img}
+                              alt={p.name}
+                              className="product-related-image"
+                            />
+                          </div>
                         )}
                         <div className="product-related-info">
-                        <div className="product-related-name">{p.name}</div>
-                        <div className="product-related-price">{displayPrice}</div>
+                          <div className="product-related-name">{p.name}</div>
+                          <div className="product-related-price">
+                            {displayPrice}
+                          </div>
                         </div>
-                    </button>
+                      </button>
                     );
-                })}
+                  })}
                 </div>
-            )}
+              )}
             </section>
           </>
         )}
