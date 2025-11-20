@@ -9,12 +9,15 @@ const api = axios.create({
   },
 });
 
+// ---------------- AUTH ----------------
+
 export function loginRequest(emailAddress, password) {
-  // IMPORTANT: backend expects emailAddress
+  // backend expects { emailAddress, password }
   return api.post("/auth/login", { emailAddress, password });
 }
 
 export function signupRequest(data) {
+  // { name, emailAddress, password, homeAddress }
   return api.post("/auth/signup", data);
 }
 
@@ -30,7 +33,8 @@ export function logoutRequest() {
   return api.post("/auth/logout");
 }
 
-// Account endpoints
+// ---------------- ACCOUNT ----------------
+
 export function getAccountDetails() {
   return api.get("/account");
 }
@@ -40,10 +44,14 @@ export function updateAccount(emailAddress, phoneNumber) {
 }
 
 export function changePassword(currentPassword, newPassword) {
-  return api.post("/account/change-password", { currentPassword, newPassword });
+  return api.post("/account/change-password", {
+    currentPassword,
+    newPassword,
+  });
 }
 
-// Orders endpoints
+// ---------------- ORDERS ----------------
+
 export function getOrders(page = 0, size = 10) {
   return api.get("/orders", { params: { me: true, page, size } });
 }
@@ -52,7 +60,8 @@ export function getOrderDetail(orderId) {
   return api.get(`/orders/${orderId}`);
 }
 
-// Returns endpoints
+// ---------------- RETURNS ----------------
+
 export function getReturns(page = 0, size = 10) {
   return api.get("/returns", { params: { me: true, page, size } });
 }
@@ -61,12 +70,22 @@ export function createReturn(orderId, orderItemIds, reason) {
   return api.post("/returns", { orderId, orderItemIds, reason });
 }
 
-// Payment Methods endpoints
+// ---------------- PAYMENT METHODS ----------------
+
 export function getPaymentMethods() {
   return api.get("/users/me/payment-methods");
 }
 
-export function addPaymentMethod(brand, last4, expMonth, expYear, holderName, nickname, isDefault = false, token = "") {
+export function addPaymentMethod(
+  brand,
+  last4,
+  expMonth,
+  expYear,
+  holderName,
+  nickname,
+  isDefault = false,
+  token = ""
+) {
   return api.post("/users/me/payment-methods", {
     brand,
     last4,
@@ -75,17 +94,24 @@ export function addPaymentMethod(brand, last4, expMonth, expYear, holderName, ni
     holderName,
     nickname,
     isDefault,
-    token
+    token,
   });
 }
 
-export function updatePaymentMethod(pmId, holderName, expMonth, expYear, nickname, isDefault) {
+export function updatePaymentMethod(
+  pmId,
+  holderName,
+  expMonth,
+  expYear,
+  nickname,
+  isDefault
+) {
   return api.put(`/users/me/payment-methods/${pmId}`, {
     holderName,
     expMonth,
     expYear,
     nickname,
-    isDefault
+    isDefault,
   });
 }
 
@@ -93,11 +119,12 @@ export function deletePaymentMethod(pmId) {
   return api.delete(`/users/me/payment-methods/${pmId}`);
 }
 
-// Product endpoints
+// ---------------- PRODUCTS ----------------
+
 export function listProducts(category) {
   const params = {};
   if (category) {
-    params.category = category;      // ?category=Sweatshirt etc.
+    params.category = category; // ?category=SWEATSHIRTS, etc.
   }
   return api.get("/products", { params });
 }
@@ -106,5 +133,67 @@ export function fetchProduct(productId) {
   return api.get(`/products/${productId}`);
 }
 
-export default api;
+// ===================================================
+//                     BASKET
+// ===================================================
 
+// small helper so we always send userId/cartId in the same way
+function buildBasketParams(userId, cartId) {
+  const params = {};
+  if (userId) params.userId = userId;
+  if (cartId) params.cartId = cartId;
+  return params;
+}
+
+/**
+ * GET /api/basket?userId=...&cartId=...
+ * usage from Cart.jsx:
+ *   getBasket({ userId: user.id, cartId })
+ */
+export function getBasket({ userId, cartId } = {}) {
+  return api.get("/basket", {
+    params: buildBasketParams(userId, cartId),
+  });
+}
+
+/**
+ * POST /api/basket/items
+ * body: { productId, sku, quantity }
+ * usage:
+ *   addToBasket({ userId, cartId, productId, sku, quantity })
+ */
+export function addToBasket({ userId, cartId, productId, sku, quantity }) {
+  const body = { productId, sku, quantity };
+  const params = buildBasketParams(userId, cartId);
+  return api.post("/basket/items", body, { params });
+}
+
+/**
+ * PUT /api/basket/items
+ * body: { productId, sku, quantity }
+ * usage:
+ *   updateBasketItem({ userId, cartId, productId, sku, quantity })
+ */
+export function updateBasketItem({
+  userId,
+  cartId,
+  productId,
+  sku,
+  quantity,
+}) {
+  const body = { productId, sku, quantity };
+  const params = buildBasketParams(userId, cartId);
+  return api.put("/basket/items", body, { params });
+}
+
+/**
+ * DELETE /api/basket/items/{productId}/{sku}
+ * usage:
+ *   removeBasketItem({ userId, cartId, productId, sku })
+ */
+export function removeBasketItem({ userId, cartId, productId, sku }) {
+  const params = buildBasketParams(userId, cartId);
+  return api.delete(`/basket/items/${productId}/${sku}`, { params });
+}
+
+export default api;

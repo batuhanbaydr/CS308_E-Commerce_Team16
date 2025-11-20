@@ -11,6 +11,8 @@ import Shirts from "./pages/category/shirts";
 import Pants from "./pages/category/pants";
 import ProductDetailMock from "./pages/ProductDetailMock";
 import ProductDetail from "./pages/ProductDetail";
+import Cart from "./pages/cart";
+import './index.css';
 
 export default function App() {
   return (
@@ -30,7 +32,7 @@ export default function App() {
         <Route path="/category/pants" element={<Pants />} />
         <Route path="/shop-the-look" element={<div>TODO: Shop The Look</div>} />
         <Route path="/search" element={<div>TODO: Search</div>} />
-        <Route path="/cart" element={<div>TODO: Cart (guest ok)</div>} />
+        <Route path="/cart" element={<Cart />} />
         <Route path="/product/mock" element={<ProductDetailMock />} />
         <Route path="/product/:productId" element={<ProductDetail />} />
 
