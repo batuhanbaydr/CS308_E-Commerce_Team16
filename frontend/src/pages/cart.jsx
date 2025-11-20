@@ -171,7 +171,6 @@ export default function Cart({ onClose }) {
     // BUT since this component doesn't know the router in drawer-mode,
     // we just close and let a "Checkout" button somewhere else handle routing.
     safeOnClose();
-    // you can later change this to call a callback that also navigates
   };
 
   const handleClose = () => {
@@ -229,12 +228,17 @@ export default function Cart({ onClose }) {
                       const key = `${item.productId}-${item.sku}`;
                       const busy = savingKey === key;
 
+                      // 👇 NEW: use backend fields
+                      const imageSrc =
+                        item.mainImageUrl ||
+                        (item.imageUrls && item.imageUrls[0]) ||
+                        null;
+
                       return (
                         <div className="cart-drawer-item" key={key}>
-                          {/* If you have imageUrl, show it here */}
-                          {item.imageUrl && (
+                          {imageSrc && (
                             <img
-                              src={item.imageUrl}
+                              src={imageSrc}
                               alt={item.name}
                               className="cart-drawer-item-image"
                             />
@@ -247,7 +251,8 @@ export default function Cart({ onClose }) {
                                   {item.name}
                                 </div>
                                 <div className="cart-drawer-item-meta">
-                                  {item.variantLabel || `SKU: ${item.sku}`}
+                                  {/* if you later add size/color labels, show them here */}
+                                  {`SKU: ${item.sku}`}
                                 </div>
                               </div>
                               <button
@@ -258,44 +263,52 @@ export default function Cart({ onClose }) {
                               >
                                 🗑
                               </button>
-                                 <div className="cart-drawer-item-bottom">
-                                <div className="cart-qty-control">
-                                    <button
-                                    className="cart-qty-btn"
-                                    onClick={() => handleQtyChange(item, item.quantity - 1)}
-                                    disabled={busy || item.quantity <= 1}
-                                    type="button"
-                                    >
-                                    –
-                                    </button>
-                                    <span className="cart-qty-value">{item.quantity}</span>
-                                    <button
-                                    className="cart-qty-btn"
-                                    onClick={() => handleQtyChange(item, item.quantity + 1)}
-                                    disabled={busy}
-                                    type="button"
-                                    >
-                                    +
-                                    </button>
-                                </div>
+                            </div>
 
-                                
-                                <div className="cart-drawer-prices">
-                                    <span className="cart-line-total">
-                                    {formatMoney(item.lineTotal)}
-                                    </span>
+                            <div className="cart-drawer-item-bottom">
+                              <div className="cart-qty-control">
+                                <button
+                                  className="cart-qty-btn"
+                                  onClick={() =>
+                                    handleQtyChange(
+                                      item,
+                                      item.quantity - 1
+                                    )
+                                  }
+                                  disabled={busy || item.quantity <= 1}
+                                  type="button"
+                                >
+                                  –
+                                </button>
+                                <span className="cart-qty-value">
+                                  {item.quantity}
+                                </span>
+                                <button
+                                  className="cart-qty-btn"
+                                  onClick={() =>
+                                    handleQtyChange(
+                                      item,
+                                      item.quantity + 1
+                                    )
+                                  }
+                                  disabled={busy}
+                                  type="button"
+                                >
+                                  +
+                                </button>
+                              </div>
 
-                                    {item.quantity > 1 && (
-                                    <span className="cart-unit-caption">
-                                        {formatMoney(item.unitPrice)} each
-                                    </span>
-                                    )}
-                                </div>
-                                </div>
+                              <div className="cart-drawer-prices">
+                                <span className="cart-line-total">
+                                  {formatMoney(item.lineTotal)}
+                                </span>
 
-
-                            
-                              
+                                {item.quantity > 1 && (
+                                  <span className="cart-unit-caption">
+                                    {formatMoney(item.unitPrice)} each
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
