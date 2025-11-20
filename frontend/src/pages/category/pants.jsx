@@ -7,6 +7,7 @@ import {
   listProducts,
   addToBasket,
 } from "../../lib/api";
+import { useCartDrawer } from "../../context/CartDrawerContext.jsx"; 
 import searchIcon from "../../assets/search.png";
 import bagIcon from "../../assets/bag.png";
 
@@ -20,6 +21,7 @@ const CART_KEY = "tidl_cart_id";
 
 export default function Pants() {
   const navigate = useNavigate();
+  const { openCart } = useCartDrawer();
 
   const [user, setUser] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -226,7 +228,7 @@ export default function Pants() {
     });
   };
 
-  // ✅ REAL add-to-basket using backend
+
   const handleAddToCart = async (product) => {
     // must be logged in
     if (!user) {
@@ -367,7 +369,7 @@ export default function Pants() {
             src={bagIcon}
             alt="Cart"
             className="category-icon"
-            onClick={() => navigate("/cart")}
+            onClick={openCart} 
           />
         </div>
       </header>

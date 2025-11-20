@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { meRequest, logoutRequest, listProducts, addToBasket } from "../../lib/api";
 import searchIcon from "../../assets/search.png";
 import bagIcon from "../../assets/bag.png";
+import { useCartDrawer } from "../../context/CartDrawerContext.jsx"; 
 
 const COLORS = [
   { id: "color-cream", label: "CREAM", value: "cream" },
@@ -16,9 +17,11 @@ const COLORS = [
 
 const SIZES = ["XS", "S", "M", "L", "XL"];
 
+
 export default function Sweatshirts() {
   const navigate = useNavigate();
   const CART_KEY = "tidl_cart_id";
+  const { openCart } = useCartDrawer();
 
   const [user, setUser] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -226,7 +229,6 @@ export default function Sweatshirts() {
     });
   };
 
-  // ✅ REAL add-to-basket using backend (same style as Shirts)
   const handleAddToCart = async (product) => {
     // must be logged in
     if (!user) {
@@ -367,7 +369,7 @@ export default function Sweatshirts() {
             src={bagIcon}
             alt="Cart"
             className="category-icon"
-            onClick={() => navigate("/cart")}
+            onClick={openCart} 
           />
         </div>
       </header>

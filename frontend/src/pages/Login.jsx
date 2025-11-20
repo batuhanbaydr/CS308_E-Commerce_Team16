@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { loginRequest, meRequest } from "../lib/api";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
+import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 
 export default function Login() {
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [userInfo, setUserInfo] = useState(null);
+  const { openCart } = useCartDrawer();
 
   // 🔧 ADDED (to fix crash in topbar):
   const [user, setUser] = useState(null);
@@ -128,7 +130,7 @@ export default function Login() {
             src={bagIcon}
             alt="Cart"
             className="category-icon"
-            onClick={() => navigate("/cart")}
+            onClick={openCart} 
           />
         </div>
       </header>

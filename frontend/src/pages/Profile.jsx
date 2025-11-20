@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
+import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 import { 
   logoutRequest, 
   meRequest, 
@@ -57,6 +58,7 @@ export default function Profile() {
   const [newCard, setNewCard] = useState({ label: "", holder: "", expiry: "" });
   const [editingCardId, setEditingCardId] = useState(null);
   const [passwordChange, setPasswordChange] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const { openCart } = useCartDrawer();
   const isEditingCard = editingCardId !== null;
 
   // Fetch user data on mount
@@ -432,7 +434,7 @@ export default function Profile() {
           src={bagIcon}
           alt="Cart"
           className="category-icon"
-          onClick={() => navigate("/cart")}
+          onClick={openCart} 
         />
       </div>
     </header>

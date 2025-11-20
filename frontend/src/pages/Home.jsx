@@ -8,6 +8,7 @@ import sweatshirt2 from "../assets/sweatshirt2.jpg";
 import sweatpants1 from "../assets/sweatpants1.jpg";
 import shirt1 from "../assets/shirt1.jpg";
 import sweatshirt3 from "../assets/sweatshirt3.jpg";
+import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 
 
 export default function Home() {
@@ -15,6 +16,7 @@ export default function Home() {
   const [showMenu, setShowMenu] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { openCart } = useCartDrawer();
 
   useEffect(() => {
     // If Login routed here with user in state, trust it
@@ -119,7 +121,7 @@ export default function Home() {
             src={bagIcon}
             alt="Cart"
             className="category-icon"
-            onClick={() => navigate("/cart")}
+            onClick={openCart} 
           />
         </div>
       </header>

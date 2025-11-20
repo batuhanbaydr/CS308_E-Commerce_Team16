@@ -9,12 +9,14 @@ import {
   meRequest,
   addToBasket,
 } from "../lib/api";
+import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 
 const CART_STORAGE_KEY = "tidl_cart_id";
 
 export default function ProductDetail() {
   const navigate = useNavigate();
   const { productId } = useParams();
+  const { openCart } = useCartDrawer();
 
   const [user, setUser] = useState(null);
 
@@ -272,7 +274,7 @@ export default function ProductDetail() {
             src={bagIcon}
             alt="bag"
             className="home-icon"
-            onClick={go("/cart")}
+            onClick={openCart} 
           />
         </div>
       </header>

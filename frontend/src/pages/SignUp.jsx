@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { signupRequest } from "../lib/api";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
+import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 
 export default function SignUp() {
   const [form, setForm] = useState({
@@ -19,6 +20,7 @@ export default function SignUp() {
 
   // 🔧 Added for the unified top bar (no signup logic changes):
   const [user, setUser] = useState(null);          // for greeting if you later wire /me
+  const { openCart } = useCartDrawer();
   const [showMenu, setShowMenu] = useState(false); // dropdown toggle
   const go = (path) => () => navigate(path);
   const handleLogout = () => {
@@ -34,6 +36,7 @@ export default function SignUp() {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
+    
 
     if (form.password !== form.confirmPassword) {
       setErrorMsg("Passwords do not match.");
@@ -137,7 +140,7 @@ export default function SignUp() {
             src={bagIcon}
             alt="Cart"
             className="category-icon"
-            onClick={() => navigate("/cart")}
+            onClick={openCart} 
           />
         </div>
       </header>
