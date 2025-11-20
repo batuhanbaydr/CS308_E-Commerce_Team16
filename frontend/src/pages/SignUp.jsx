@@ -58,51 +58,66 @@ export default function SignUp() {
   };
 
   return (
-    <div className="home-page">
-      {/* Top bar identical to Home */}
-      <header className="home-topbar">
-        <div className="home-left">
-          <span className="home-brand" onClick={go("/home")}>
-            TIDL
-          </span>
-        </div>
-
-        <nav className="home-nav">
-          <button className="home-nav-item" onClick={go("/category/sweatshirts")}>
+    <div className="category-page">
+      <header className="category-topbar">
+        <button className="category-brand" onClick={() => navigate("/home")}>
+          TIDL
+        </button>
+        <nav className="category-nav">
+          <button
+            onClick={() => navigate("/category/sweatshirts")}
+            className="category-nav-item category-nav-item--active"
+          >
             SWEATSHIRTS
           </button>
-          <button className="home-nav-item" onClick={go("/category/shirts")}>
+          <button
+            onClick={() => navigate("/category/shirts")}
+            className="category-nav-item"
+          >
             SHIRTS
           </button>
-          <button className="home-nav-item" onClick={go("/category/pants")}>
+          <button
+            onClick={() => navigate("/category/pants")}
+            className="category-nav-item"
+          >
             PANTS
           </button>
-          <button className="home-nav-item" onClick={go("/shop-the-look")}>
+          <button
+            onClick={() => navigate("/shop-the-look")}
+            className="category-nav-item"
+          >
             SHOP THE LOOK
           </button>
         </nav>
-
-        <div className="home-right">
+        <div className="category-actions">
           <img
             src={searchIcon}
-            alt="search"
-            className="home-icon"
-            onClick={go("/search")}
+            alt="Search"
+            className="category-icon"
+            onClick={() => navigate("/search")}
           />
-
-          {/* show greeting if logged in, otherwise SIGN IN */}
           {user ? (
-            <span className="login-topbar-link" style={{ cursor: "default" }}>
+            <span
+              className="login-topbar-link"
+              style={{ cursor: "default", marginRight: "0.5rem" }}
+            >
               {`HEY! ${user.name}`}
             </span>
           ) : (
-            <span className="home-signin" onClick={go("/login")}>
+            <span
+              className="home-signin"
+              onClick={() => navigate("/login")}
+              style={{ marginRight: "0.5rem", cursor: "pointer" }}
+            >
               SIGN IN
             </span>
           )}
-
           {user && (
-            <div className="home-menu" onClick={() => setShowMenu((p) => !p)}>
+            <div
+              className="home-menu"
+              onClick={() => setShowMenu((p) => !p)}
+              style={{ marginRight: "0.5rem" }}
+            >
               <span />
               <span />
               <span />
@@ -118,12 +133,11 @@ export default function SignUp() {
               )}
             </div>
           )}
-
           <img
             src={bagIcon}
-            alt="bag"
-            className="home-icon"
-            onClick={go("/cart")}
+            alt="Cart"
+            className="category-icon"
+            onClick={() => navigate("/cart")}
           />
         </div>
       </header>
