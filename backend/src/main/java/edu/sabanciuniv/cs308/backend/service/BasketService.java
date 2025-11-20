@@ -254,6 +254,12 @@ public class BasketService {
                 iDto.setUnitPrice(item.getUnitPrice());
                 iDto.setLineTotal(item.getLineTotal());
 
+                productRepository.findById(item.getProductId()).ifPresent(product -> {
+                    iDto.setMainImageUrl(product.getMainImageUrl());
+                    iDto.setImageUrls(product.getImageUrls());
+                });
+
+
                 if (item.getLineTotal() != null) {
                     subtotal = subtotal.add(item.getLineTotal());
                 }
