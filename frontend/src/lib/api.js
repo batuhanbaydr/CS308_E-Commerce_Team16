@@ -196,4 +196,67 @@ export function removeBasketItem({ userId, cartId, productId, sku }) {
   return api.delete(`/basket/items/${productId}/${sku}`, { params });
 }
 
+// ---------------- CHECKOUT ----------------
+
+/**
+ * POST /api/checkout
+ * Checkout with shipping, billing addresses and payment details
+ * @param {string} cartId - The cart/order ID
+ * @param {object} shipping - Shipping address object
+ * @param {object} billing - Billing address object  
+ * @param {object} paymentDetails - Payment details object { cardNumber, expiryDate, holderName }
+ */
+export function checkout(cartId, shipping, billing, paymentDetails) {
+  // Extract card details from paymentDetails
+  const cardNumber = paymentDetails?.cardNumber || "";
+  const cardBrand = cardNumber.startsWith("4") ? "VISA" : 
+                    cardNumber.startsWith("5") ? "MASTERCARD" : "VISA";
+  const cardLast4 = cardNumber.slice(-4);
+  
+  // Parse expiry date (assuming MM/YY format)
+  const expiryDate = paymentDetails?.expiryDate || "12/25";
+  const [expMonth, expYear] = expiryDate.split("/").map(Number);
+  const fullExpYear = 2000 + expYear; // Convert YY to YYYY
+  
+  const body = {
+    cartId,
+    // Shipping address
+    shippingFullName: shipping.fullName,
+    shippingLine1: shipping.line1,
+    shippingLine2: shipping.line2 || "",
+    shippingCity: shipping.city,
+    shippingState: shipping.state,
+    shippingCountry: shipping.country,
+    shippingZipCode: shipping.zipCode,
+    shippingPhoneNumber: shipping.phoneNumber,
+    // Billing address
+    useShippingAsBilling: JSON.stringify(shipping) === JSON.stringify(billing),
+    billingFullName: billing.fullName,
+    billingLine1: billing.line1,
+    billingLine2: billing.line2 || "",
+    billingCity: billing.city,
+    billingState: billing.state,
+    billingCountry: billing.country,
+    billingZipCode: billing.zipCode,
+    billingPhoneNumber: billing.phoneNumber,
+    // Payment details
+    cardHolderName: paymentDetails?.holderName || "",
+    cardBrand,
+    cardLast4,
+    cardExpMonth: expMonth,
+    cardExpYear: fullExpYear,
+  };
+  
+  return api.post("/checkout", body);
+}
+
+/**
+ * Process payment (mock function - payment is actually processed in checkout)
+ * This is kept for compatibility with Checkout.jsx
+ */
+export function processPayment(orderId, paymentDetails) {
+  // Payment is already processed in checkout, so this is just a placeholder
+  return Promise.resolve({ data: { success: true, orderId } });
+}
+
 export default api;

@@ -1,5 +1,6 @@
 // src/pages/Cart.jsx
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   meRequest,
   getBasket,
@@ -12,6 +13,7 @@ const CART_STORAGE_KEY = "tidl_cart_id";
 export default function Cart({ onClose }) {
   // fallback so we don't crash if someone renders <Cart /> without onClose
   const safeOnClose = onClose || (() => {});
+  const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -167,10 +169,12 @@ export default function Cart({ onClose }) {
       setErrorMsg("Your basket is empty.");
       return;
     }
-    // here you will navigate to /checkout from wherever you trigger payment,
-    // BUT since this component doesn't know the router in drawer-mode,
-    // we just close and let a "Checkout" button somewhere else handle routing.
+    // Close drawer first
     safeOnClose();
+    // Navigate to checkout page - use setTimeout to ensure drawer closes first
+    setTimeout(() => {
+      navigate("/checkout", { replace: false });
+    }, 50);
   };
 
   const handleClose = () => {

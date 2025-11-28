@@ -13,6 +13,8 @@ import Shirts from "./pages/category/shirts";
 import Pants from "./pages/category/pants";
 import ProductDetailMock from "./pages/ProductDetailMock";
 import ProductDetail from "./pages/ProductDetail";
+import Checkout from "./pages/Checkout";
+import Invoice from "./pages/Invoice";
 
 
 import { CartDrawerProvider } from "./context/CartDrawerContext.jsx"; 
@@ -54,7 +56,6 @@ export default function App() {
               </RequireAuth>
             }
           />
-          {/* Example for checkout later:
           <Route
             path="/checkout"
             element={
@@ -62,7 +63,15 @@ export default function App() {
                 <Checkout />
               </RequireAuth>
             }
-          /> */}
+          />
+          <Route
+            path="/invoice/:orderId"
+            element={
+              <RequireAuth>
+                <Invoice />
+              </RequireAuth>
+            }
+          />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/home" replace />} />

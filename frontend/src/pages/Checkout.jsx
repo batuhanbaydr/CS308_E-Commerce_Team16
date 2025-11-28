@@ -7,9 +7,11 @@ import {
   getBasket,
   meRequest,
   processPayment,
+  logoutRequest,
 } from "../lib/api";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
+import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 
 const EMPTY_ADDRESS = {
   fullName: "",
@@ -24,9 +26,15 @@ const EMPTY_ADDRESS = {
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const { openCart } = useCartDrawer();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
-  const [cartId, setCartId] = useState(() => localStorage.getItem("cartId"));
+  const [showMenu, setShowMenu] = useState(false);
+  const CART_STORAGE_KEY = "tidl_cart_id";
+  const [cartId, setCartId] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(CART_STORAGE_KEY) || null;
+  });
   const [basket, setBasket] = useState({ items: [], subtotal: 0 });
   const [shipping, setShipping] = useState(EMPTY_ADDRESS);
   const [billing, setBilling] = useState(EMPTY_ADDRESS);
@@ -45,12 +53,16 @@ export default function Checkout() {
         const userRes = await meRequest();
         setUser(userRes.data);
 
-        const basketRes = await getBasket(userRes.data.id, cartId);
+        // Get cartId from localStorage if not set
+        const currentCartId = cartId || localStorage.getItem(CART_STORAGE_KEY);
+        const basketRes = await getBasket({ userId: userRes.data.id, cartId: currentCartId });
         setBasket(basketRes.data);
 
         if (basketRes.data.orderId) {
-          localStorage.setItem("cartId", basketRes.data.orderId);
-          setCartId(basketRes.data.orderId);
+          localStorage.setItem(CART_STORAGE_KEY, basketRes.data.orderId);
+          if (!cartId) {
+            setCartId(basketRes.data.orderId);
+          }
         }
 
         const accountRes = await getAccountDetails();
@@ -72,7 +84,7 @@ export default function Checkout() {
       }
     };
     load();
-  }, [cartId, navigate]);
+  }, [navigate]);
 
   useEffect(() => {
     if (useSameAddress) {
@@ -97,6 +109,22 @@ export default function Checkout() {
     setPaymentDetails((prev) => ({ ...prev, [field]: value }));
   };
 
+  const go = (path) => () => navigate(path);
+  const handleLogout = async () => {
+    try { await logoutRequest(); } catch {}
+    setUser(null);
+    navigate("/home");
+  };
+
+  // Set English validation messages
+  const handleInvalid = (e) => {
+    e.target.setCustomValidity("Please fill in this field.");
+  };
+
+  const handleInput = (e) => {
+    e.target.setCustomValidity("");
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!basket.items.length) {
@@ -105,10 +133,11 @@ export default function Checkout() {
     }
     setProcessing(true);
     try {
-      const checkoutRes = await checkout(cartId, shipping, billing, "new");
-      const orderId = checkoutRes.data.orderId || checkoutRes.data.order?.id;
+      const currentCartId = cartId || localStorage.getItem(CART_STORAGE_KEY);
+      const checkoutRes = await checkout(currentCartId, shipping, billing, paymentDetails);
+      const orderId = checkoutRes.data.orderId || checkoutRes.data.order?.id || checkoutRes.data.id;
       await processPayment(orderId, { ...paymentDetails, paymentMethodId: "new" });
-      localStorage.removeItem("cartId");
+      localStorage.removeItem(CART_STORAGE_KEY);
       navigate(`/invoice/${orderId}`);
     } catch (err) {
       console.error("Payment failed:", err);
@@ -120,103 +149,179 @@ export default function Checkout() {
 
   if (loading) {
     return (
-      <div className="home-page">
+      <div className="category-page">
         <div style={{ padding: "2rem", textAlign: "center" }}>Loading checkout...</div>
       </div>
     );
   }
 
   return (
-    <div className="home-page">
-      <header className="home-topbar">
-        <div className="home-left">
-          <span className="home-brand" onClick={() => navigate("/home")}>
-            TIDL
-          </span>
-        </div>
-        <nav className="home-nav">
-          <button className="home-nav-item" onClick={() => navigate("/category/sweatshirts")}>
+    <div className="category-page">
+      <header className="category-topbar">
+        <button className="category-brand" onClick={() => navigate("/home")}>
+          TIDL
+        </button>
+        <nav className="category-nav">
+          <button
+            onClick={() => navigate("/category/sweatshirts")}
+            className="category-nav-item"
+          >
             SWEATSHIRTS
           </button>
+          <button
+            onClick={() => navigate("/category/shirts")}
+            className="category-nav-item"
+          >
+            SHIRTS
+          </button>
+          <button
+            onClick={() => navigate("/category/pants")}
+            className="category-nav-item"
+          >
+            PANTS
+          </button>
+          <button
+            onClick={() => navigate("/shop-the-look")}
+            className="category-nav-item"
+          >
+            SHOP THE LOOK
+          </button>
         </nav>
-        <div className="home-right">
-          <img src={searchIcon} alt="search" className="home-icon" onClick={() => navigate("/search")} />
-          {user && (
-            <span className="login-topbar-link" style={{ cursor: "default" }}>
+        <div className="category-actions">
+          <img
+            src={searchIcon}
+            alt="Search"
+            className="category-icon"
+            onClick={() => navigate("/search")}
+          />
+          {user ? (
+            <span
+              className="login-topbar-link"
+              style={{ cursor: "default", marginRight: "0.5rem" }}
+            >
               {`HEY! ${user.name}`}
             </span>
+          ) : (
+            <span
+              className="home-signin"
+              onClick={() => navigate("/login")}
+              style={{ marginRight: "0.5rem", cursor: "pointer" }}
+            >
+              SIGN IN
+            </span>
           )}
-          <img src={bagIcon} alt="bag" className="home-icon" onClick={() => navigate("/cart")} />
+          {user && (
+            <div
+              className="home-menu"
+              onClick={() => setShowMenu((p) => !p)}
+              style={{ marginRight: "0.5rem" }}
+            >
+              <span />
+              <span />
+              <span />
+              {showMenu && (
+                <div className="details-menu">
+                  <button className="details-menu-item" onClick={go("/profile")}>
+                    Details
+                  </button>
+                  <button className="details-menu-item" onClick={handleLogout}>
+                    Log-out
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          <img
+            src={bagIcon}
+            alt="Cart"
+            className="category-icon"
+            onClick={openCart}
+          />
         </div>
       </header>
 
-      <main style={{ maxWidth: "1100px", margin: "0 auto", padding: "2rem", paddingTop: "6rem" }}>
-        <h1 style={{ fontSize: "2rem", fontWeight: "600", marginBottom: "1rem" }}>CHECKOUT</h1>
+      <main style={{ maxWidth: "1100px", margin: "0 auto", padding: "2rem", paddingTop: "5rem" }}>
+        <h1 style={{ fontSize: "2rem", fontWeight: "600", marginBottom: "1.5rem", letterSpacing: "0.05em" }}>CHECKOUT</h1>
         <form onSubmit={handleSubmit}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: "2rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: "3rem" }}>
             <div>
-              <section style={{ marginBottom: "2rem" }}>
-                <h2>Shipping Address</h2>
+              <section style={{ marginBottom: "2.5rem" }}>
+                <h2 style={{ fontSize: "1.1rem", fontWeight: "600", marginBottom: "1rem", letterSpacing: "0.03em" }}>Shipping Address</h2>
                 <div style={{ display: "grid", gap: "1rem" }}>
                   <input
                     placeholder="Full Name *"
                     value={shipping.fullName}
                     onChange={(e) => handleAddressChange(setShipping)("fullName", e.target.value)}
+                    onInvalid={handleInvalid}
+                    onInput={handleInput}
                     required
-                    style={{ padding: "0.75rem" }}
+                    style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit" }}
                   />
                   <input
                     placeholder="Address Line 1 *"
                     value={shipping.line1}
                     onChange={(e) => handleAddressChange(setShipping)("line1", e.target.value)}
+                    onInvalid={handleInvalid}
+                    onInput={handleInput}
                     required
-                    style={{ padding: "0.75rem" }}
+                    style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit" }}
                   />
                   <input
                     placeholder="City *"
                     value={shipping.city}
                     onChange={(e) => handleAddressChange(setShipping)("city", e.target.value)}
+                    onInvalid={handleInvalid}
+                    onInput={handleInput}
                     required
-                    style={{ padding: "0.75rem" }}
+                    style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit" }}
                   />
                   <div style={{ display: "flex", gap: "1rem" }}>
                     <input
                       placeholder="State *"
                       value={shipping.state}
                       onChange={(e) => handleAddressChange(setShipping)("state", e.target.value)}
+                      onInvalid={handleInvalid}
+                      onInput={handleInput}
                       required
-                      style={{ padding: "0.75rem", flex: 1 }}
+                      style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit", flex: 1 }}
                     />
                     <input
                       placeholder="ZIP Code *"
                       value={shipping.zipCode}
                       onChange={(e) => handleAddressChange(setShipping)("zipCode", e.target.value)}
+                      onInvalid={handleInvalid}
+                      onInput={handleInput}
                       required
-                      style={{ padding: "0.75rem", flex: 1 }}
+                      style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit", flex: 1 }}
                     />
                   </div>
                   <input
                     placeholder="Country *"
                     value={shipping.country}
                     onChange={(e) => handleAddressChange(setShipping)("country", e.target.value)}
+                    onInvalid={handleInvalid}
+                    onInput={handleInput}
                     required
-                    style={{ padding: "0.75rem" }}
+                    style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit" }}
                   />
                   <input
                     placeholder="Phone Number *"
                     value={shipping.phoneNumber}
                     onChange={(e) => handleAddressChange(setShipping)("phoneNumber", e.target.value)}
+                    onInvalid={handleInvalid}
+                    onInput={handleInput}
                     required
-                    style={{ padding: "0.75rem" }}
+                    style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit" }}
                   />
                 </div>
               </section>
-              <section style={{ marginBottom: "2rem" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <section style={{ marginBottom: "2.5rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "14px" }}>
                   <input
                     type="checkbox"
                     checked={useSameAddress}
                     onChange={(e) => setUseSameAddress(e.target.checked)}
+                    style={{ cursor: "pointer" }}
                   />
                   Billing address same as shipping
                 </label>
@@ -226,65 +331,79 @@ export default function Checkout() {
                       placeholder="Billing Full Name *"
                       value={billing.fullName}
                       onChange={(e) => handleAddressChange(setBilling)("fullName", e.target.value)}
+                      onInvalid={handleInvalid}
+                      onInput={handleInput}
                       required
-                      style={{ padding: "0.75rem" }}
+                      style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit" }}
                     />
                     <input
                       placeholder="Billing Address *"
                       value={billing.line1}
                       onChange={(e) => handleAddressChange(setBilling)("line1", e.target.value)}
+                      onInvalid={handleInvalid}
+                      onInput={handleInput}
                       required
-                      style={{ padding: "0.75rem" }}
+                      style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit" }}
                     />
                     <input
                       placeholder="Billing City *"
                       value={billing.city}
                       onChange={(e) => handleAddressChange(setBilling)("city", e.target.value)}
+                      onInvalid={handleInvalid}
+                      onInput={handleInput}
                       required
-                      style={{ padding: "0.75rem" }}
+                      style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit" }}
                     />
                   </div>
                 )}
               </section>
               <section>
-                <h2>Payment</h2>
+                <h2 style={{ fontSize: "1.1rem", fontWeight: "600", marginBottom: "1rem", letterSpacing: "0.03em" }}>Payment</h2>
                 <div style={{ display: "grid", gap: "1rem" }}>
                   <input
                     placeholder="Card Number *"
                     value={paymentDetails.cardNumber}
                     onChange={(e) => handlePaymentChange("cardNumber", e.target.value)}
+                    onInvalid={handleInvalid}
+                    onInput={handleInput}
                     required
-                    style={{ padding: "0.75rem" }}
+                    style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit" }}
                   />
                   <div style={{ display: "flex", gap: "1rem" }}>
                     <input
                       placeholder="Expiry (MM/YY) *"
                       value={paymentDetails.expiryDate}
                       onChange={(e) => handlePaymentChange("expiryDate", e.target.value)}
+                      onInvalid={handleInvalid}
+                      onInput={handleInput}
                       required
-                      style={{ padding: "0.75rem", flex: 1 }}
+                      style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit", flex: 1 }}
                     />
                     <input
                       placeholder="CVV *"
                       value={paymentDetails.cvv}
                       onChange={(e) => handlePaymentChange("cvv", e.target.value)}
+                      onInvalid={handleInvalid}
+                      onInput={handleInput}
                       required
-                      style={{ padding: "0.75rem", flex: 1 }}
+                      style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit", flex: 1 }}
                     />
                   </div>
                   <input
                     placeholder="Cardholder Name *"
                     value={paymentDetails.holderName}
                     onChange={(e) => handlePaymentChange("holderName", e.target.value)}
+                    onInvalid={handleInvalid}
+                    onInput={handleInput}
                     required
-                    style={{ padding: "0.75rem" }}
+                    style={{ padding: "0.75rem", border: "1px solid #e5e5e5", fontSize: "14px", fontFamily: "inherit" }}
                   />
                 </div>
               </section>
             </div>
             <div>
               <div style={{ border: "1px solid #e5e5e5", padding: "2rem", background: "#fff" }}>
-                <h2>Order Summary</h2>
+                <h2 style={{ fontSize: "1.1rem", fontWeight: "600", marginBottom: "1.5rem", letterSpacing: "0.03em" }}>Order Summary</h2>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1rem" }}>
                   {basket.items.map((item) => (
                     <div
