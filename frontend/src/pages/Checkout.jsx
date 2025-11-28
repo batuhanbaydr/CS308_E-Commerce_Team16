@@ -2,11 +2,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  checkout,
+  
   getAccountDetails,
   getBasket,
   meRequest,
-  processPayment,
+  
 } from "../lib/api";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";

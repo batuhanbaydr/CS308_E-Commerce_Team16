@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { meRequest, logoutRequest, listProducts, addToBasket } from "../../lib/api";
 import searchIcon from "../../assets/search.png";
 import bagIcon from "../../assets/bag.png";
-import { useCartDrawer } from "../../context/CartDrawerContext.jsx"; 
+import { useCartDrawer } from "../../context/CartDrawerContext.jsx";
 
 const COLORS = [
   { id: "color-cream", label: "CREAM", value: "cream" },
@@ -16,7 +16,6 @@ const COLORS = [
 ];
 
 const SIZES = ["XS", "S", "M", "L", "XL"];
-
 
 export default function Sweatshirts() {
   const navigate = useNavigate();
@@ -42,10 +41,20 @@ export default function Sweatshirts() {
 
   const [hoveredProductId, setHoveredProductId] = useState(null);
 
-  const [sortOption, setSortOption] = useState(null); // 'priceAsc' | 'priceDesc' | null
+  // 'priceAsc' | 'priceDesc' | 'popularity' | null
+  const [sortOption, setSortOption] = useState(null);
 
-  const [priceBounds, setPriceBounds] = useState({ min: 0, max: 100 }); // NEW
+  const [priceBounds, setPriceBounds] = useState({ min: 0, max: 100 });
   const [priceRange, setPriceRange] = useState({ min: 0, max: 100 });
+
+  // 🔍 search bar state
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // small text-normalizer for search
+  function normalize(x) {
+    return String(x || "").trim().toLowerCase();
+  }
 
   // load current user
   useEffect(() => {
@@ -75,7 +84,6 @@ export default function Sweatshirts() {
         const data = res.data || [];
         setProducts(data);
 
-        // set a nicer default price range based on data
         if (data.length > 0) {
           const prices = data.map((p) =>
             Number(
@@ -86,7 +94,7 @@ export default function Sweatshirts() {
           );
           const min = Math.min(...prices);
           const max = Math.max(...prices);
-          setPriceBounds({ min, max }); // NEW
+          setPriceBounds({ min, max });
           setPriceRange({ min, max });
         }
       })
@@ -107,11 +115,11 @@ export default function Sweatshirts() {
 
   const go = (path) => () => navigate(path);
 
-  // filter using backend data
+  // ==== FILTER + SEARCH + SORT ====
   const filteredProducts = useMemo(() => {
     if (!products) return [];
 
-    // Attach helper fields for filter + sort
+    // Attach helper fields for filter + sort + popularity
     const withMeta = products.map((p) => {
       const price = Number(
         p.basePrice ??
@@ -140,18 +148,24 @@ export default function Sweatshirts() {
       const allSizes = Object.keys(sizeStock);
       const sizesInStock = allSizes.filter((s) => sizeStock[s] > 0);
 
+      // popularity = number of purchases for this product
+      const popularity = Number(
+        p.purchaseCount ?? p.totalPurchases ?? 0 // adjust to your backend field
+      );
+
       return {
         ...p,
         _price: price,
         _color: color,
-        _sizesAll: allSizes, // all sizes (even 0 stock)
-        _sizesInStock: sizesInStock, // only sizes with stock > 0
+        _sizesAll: allSizes,
+        _sizesInStock: sizesInStock,
         _sizeStock: sizeStock,
-        _sizeToSku: sizeToSku, // size -> sku (for addToBasket)
+        _sizeToSku: sizeToSku,
+        _popularity: popularity,
       };
     });
 
-    // FILTERS
+    // FILTERS (price/color/size)
     let list = withMeta.filter((p) => {
       const priceOk =
         p._price >= priceRange.min && p._price <= priceRange.max;
@@ -167,15 +181,30 @@ export default function Sweatshirts() {
       return priceOk && colorOk && sizeOk;
     });
 
+    // 🔍 SEARCH by name or description
+    const term = normalize(searchTerm);
+    if (term) {
+      list = list.filter((p) => {
+        const nameNorm = normalize(p.name);
+        const descNorm = normalize(p.description);
+        return nameNorm.includes(term) || descNorm.includes(term);
+      });
+    }
+
     // SORT
     if (sortOption === "priceAsc") {
       list = [...list].sort((a, b) => a._price - b._price);
     } else if (sortOption === "priceDesc") {
       list = [...list].sort((a, b) => b._price - a._price);
+    } else if (sortOption === "popularity") {
+      // higher popularity first
+      list = [...list].sort(
+        (a, b) => (b._popularity || 0) - (a._popularity || 0)
+      );
     }
 
     return list;
-  }, [products, priceRange, colorFilters, sizeFilters, sortOption]);
+  }, [products, priceRange, colorFilters, sizeFilters, sortOption, searchTerm]);
 
   // toast helpers
   const scheduleMessageClear = () => {
@@ -230,65 +259,74 @@ export default function Sweatshirts() {
   };
 
   const handleAddToCart = async (product) => {
-    // must be logged in
-    if (!user) {
-      navigate("/login");
-      return;
+  // 🔹 We NO LONGER force login here.
+  // Guest users can add to basket using only cartId + product info.
+
+  // extra safety: block if product totally out of stock
+  const sizeStock = product._sizeStock || {};
+  const totalStock = Object.values(sizeStock).reduce(
+    (sum, v) => sum + (typeof v === "number" ? v : Number(v || 0)),
+    0
+  );
+  if (totalStock <= 0) {
+    setNotification("This product is out of stock.");
+    scheduleMessageClear();
+    return;
+  }
+
+  const selectedSize = selectedSizes.get(product.id);
+  if (!selectedSize) {
+    setNotification("Please select a size.");
+    scheduleMessageClear();
+    return;
+  }
+
+  const sku = product._sizeToSku?.[selectedSize];
+  if (!sku) {
+    setNotification("SKU missing for selected size.");
+    scheduleMessageClear();
+    return;
+  }
+
+  const existingCartId =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem(CART_KEY) || undefined
+      : undefined;
+
+  try {
+    const { data } = await addToBasket({
+      userId: user?.id,      // 👈 works for logged in (id) or guest (undefined)
+      cartId: existingCartId,
+      productId: product.id,
+      sku,
+      quantity: 1,
+    });
+
+    if (data.orderId && typeof window !== "undefined") {
+      window.localStorage.setItem(CART_KEY, data.orderId);
     }
 
-    const selectedSize = selectedSizes.get(product.id);
-    if (!selectedSize) {
-      setNotification("Please select a size.");
-      scheduleMessageClear();
-      return;
-    }
+    updateCartQuantity(product.id, selectedSize, 1);
 
-    const sku = product._sizeToSku?.[selectedSize];
-    if (!sku) {
-      setNotification("SKU missing for selected size.");
-      scheduleMessageClear();
-      return;
-    }
+    setNotification(
+      `${product.name} (Size: ${selectedSize}) added to basket.`
+    );
+    scheduleMessageClear();
 
-    const existingCartId =
-      typeof window !== "undefined"
-        ? window.localStorage.getItem(CART_KEY) || undefined
-        : undefined;
+    setSelectedSizes((prev) => {
+      const next = new Map(prev);
+      next.delete(product.id);
+      return next;
+    });
+  } catch (err) {
+    console.error("addToBasket error", err);
+    setNotification("Could not add item to basket.");
+    scheduleMessageClear();
+  }
+};
 
-    try {
-      const { data } = await addToBasket({
-        userId: user.id,
-        cartId: existingCartId,
-        productId: product.id,
-        sku,
-        quantity: 1,
-      });
 
-      if (data.orderId && typeof window !== "undefined") {
-        window.localStorage.setItem(CART_KEY, data.orderId);
-      }
-
-      // optional local UI mark
-      updateCartQuantity(product.id, selectedSize, 1);
-
-      setNotification(
-        `${product.name} (Size: ${selectedSize}) added to basket.`
-      );
-      scheduleMessageClear();
-
-      // clear selected size for this product (optional)
-      setSelectedSizes((prev) => {
-        const next = new Map(prev);
-        next.delete(product.id);
-        return next;
-      });
-    } catch (err) {
-      console.error("addToBasket error", err);
-      setNotification("Could not add item to basket.");
-      scheduleMessageClear();
-    }
-  };
-
+  // ===== RENDER =====
   return (
     <div className="category-page">
       <header className="category-topbar">
@@ -322,6 +360,7 @@ export default function Sweatshirts() {
           </button>
         </nav>
         <div className="category-actions">
+          {/* 🔍 toggle inline search bar */}
           <img
             src={searchIcon}
             alt="Search"
@@ -369,10 +408,37 @@ export default function Sweatshirts() {
             src={bagIcon}
             alt="Cart"
             className="category-icon"
-            onClick={openCart} 
+            onClick={openCart}
           />
         </div>
       </header>
+
+      {/* 🔍 SEARCH BAR (inline, appears when icon clicked or when term not empty) */}
+      {(showSearch || searchTerm) && (
+        <div
+          style={{
+            padding: "0 72px",
+            marginTop: 8,
+            marginBottom: -16,
+            display: "flex",
+            justifyContent: "flex-start",
+          }}
+        >
+          <input
+            type="text"
+            placeholder="Search by name or description..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{
+              flex: 1,
+              maxWidth: 420,
+              padding: "8px 10px",
+              border: "1px solid #dedede",
+              fontSize: 14,
+            }}
+          />
+        </div>
+      )}
 
       <main className="category-layout">
         {/* SIDEBAR */}
@@ -384,6 +450,7 @@ export default function Sweatshirts() {
               setSizeFilters(new Set());
               setPriceRange({ ...priceBounds });
               setSortOption(null);
+              setSearchTerm("");
             }}
           >
             CLEAR FILTERS
@@ -420,6 +487,22 @@ export default function Sweatshirts() {
               }
             >
               Price: High to Low
+            </button>
+
+            {/* ⭐ Popularity sort */}
+            <button
+              className={`category-filter-option${
+                sortOption === "popularity"
+                  ? " category-filter-option--active"
+                  : ""
+              }`}
+              onClick={() =>
+                setSortOption((prev) =>
+                  prev === "popularity" ? null : "popularity"
+                )
+              }
+            >
+              Popularity
             </button>
 
             {/* Reset sort (optional “New Arrivals”) */}
@@ -558,6 +641,14 @@ export default function Sweatshirts() {
                 );
               const displayPrice = `$${priceNumber.toFixed(2)}`;
 
+              // total stock for whole product (all sizes)
+              const totalStock = Object.values(sizeStock).reduce(
+                (sum, v) =>
+                  sum + (typeof v === "number" ? v : Number(v || 0)),
+                0
+              );
+              const productOutOfStock = totalStock <= 0;
+
               // determine main + secondary images
               const primaryImage =
                 product.mainImageUrl || (product.imageUrls || [])[0] || "";
@@ -600,6 +691,22 @@ export default function Sweatshirts() {
                     >
                       {isFavorite ? "♥" : "♡"}
                     </button>
+                    {productOutOfStock && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          bottom: 8,
+                          left: 8,
+                          background: "rgba(0,0,0,0.7)",
+                          color: "#fff",
+                          padding: "4px 8px",
+                          fontSize: 11,
+                          letterSpacing: "0.08em",
+                        }}
+                      >
+                        OUT OF STOCK
+                      </div>
+                    )}
                   </div>
 
                   <div className="product-info">
@@ -661,35 +768,41 @@ export default function Sweatshirts() {
 
                     <button
                       className="product-add-to-basket"
-                      onClick={() => handleAddToCart(product)}
+                      onClick={() =>
+                        !productOutOfStock && handleAddToCart(product)
+                      }
+                      disabled={productOutOfStock}
                       style={{
-                      marginTop: "0.5rem",
-                      width: "50%",
-                      padding: "0.375rem 0.5rem",
-                      backgroundColor: "#3d211c",
-                      color: "white",
-                      border: "1px solid #3d211c",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "0.375rem",
-                      fontSize: "0.75rem",
-                      fontWeight: "500",
-                    }}
-
+                        marginTop: "0.5rem",
+                        width: "50%",
+                        padding: "0.375rem 0.5rem",
+                        backgroundColor: productOutOfStock
+                          ? "#bbbbbb"
+                          : "#3d211c",
+                        color: "white",
+                        border: "1px solid #3d211c",
+                        borderRadius: "4px",
+                        cursor: productOutOfStock ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "0.375rem",
+                        fontSize: "0.75rem",
+                        fontWeight: "500",
+                      }}
                     >
-                      Add to basket
-                      <img
-                        src={bagIcon}
-                        alt="cart"
-                        style={{
-                          width: "14px",
-                          height: "14px",
-                          filter: "brightness(0) invert(1)",
-                        }}
-                      />
+                      {productOutOfStock ? "Out of stock" : "Add to basket"}
+                      {!productOutOfStock && (
+                        <img
+                          src={bagIcon}
+                          alt="cart"
+                          style={{
+                            width: "14px",
+                            height: "14px",
+                            filter: "brightness(0) invert(1)",
+                          }}
+                        />
+                      )}
                     </button>
                   </div>
                 </article>

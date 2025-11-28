@@ -1,5 +1,4 @@
 // src/App.jsx
-// src/App.jsx
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
@@ -13,16 +12,15 @@ import Shirts from "./pages/category/shirts";
 import Pants from "./pages/category/pants";
 import ProductDetailMock from "./pages/ProductDetailMock";
 import ProductDetail from "./pages/ProductDetail";
+import Search from "./pages/Search.jsx";
+import Checkout from "./pages/Checkout.jsx";
 
-
-import { CartDrawerProvider } from "./context/CartDrawerContext.jsx"; 
+import { CartDrawerProvider } from "./context/CartDrawerContext.jsx";
 import "./index.css";
-
 
 export default function App() {
   return (
     <BrowserRouter>
-      
       <CartDrawerProvider>
         <Routes>
           {/* Start on Home */}
@@ -37,10 +35,11 @@ export default function App() {
           <Route path="/category/sweatshirts" element={<Sweatshirts />} />
           <Route path="/category/shirts" element={<Shirts />} />
           <Route path="/category/pants" element={<Pants />} />
-          <Route path="/shop-the-look" element={<div>TODO: Shop The Look</div>} />
-          <Route path="/search" element={<div>TODO: Search</div>} />
-
-
+          <Route
+            path="/shop-the-look"
+            element={<div>TODO: Shop The Look</div>}
+          />
+          <Route path="/search" element={<Search />} />
 
           <Route path="/product/mock" element={<ProductDetailMock />} />
           <Route path="/product/:productId" element={<ProductDetail />} />
@@ -54,15 +53,9 @@ export default function App() {
               </RequireAuth>
             }
           />
-          {/* Example for checkout later:
-          <Route
-            path="/checkout"
-            element={
-              <RequireAuth>
-                <Checkout />
-              </RequireAuth>
-            }
-          /> */}
+
+          
+          <Route path="/checkout" element={<Checkout />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/home" replace />} />

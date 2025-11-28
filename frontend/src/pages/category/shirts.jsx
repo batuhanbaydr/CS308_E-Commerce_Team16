@@ -236,64 +236,71 @@ export default function Shirts() {
 
 
   const handleAddToCart = async (product) => {
-    // must be logged in
-    if (!user) {
-      navigate("/login");
-      return;
+  // 🔹 We NO LONGER force login here.
+  // Guest users can add to basket using only cartId + product info.
+
+  // extra safety: block if product totally out of stock
+  const sizeStock = product._sizeStock || {};
+  const totalStock = Object.values(sizeStock).reduce(
+    (sum, v) => sum + (typeof v === "number" ? v : Number(v || 0)),
+    0
+  );
+  if (totalStock <= 0) {
+    setNotification("This product is out of stock.");
+    scheduleMessageClear();
+    return;
+  }
+
+  const selectedSize = selectedSizes.get(product.id);
+  if (!selectedSize) {
+    setNotification("Please select a size.");
+    scheduleMessageClear();
+    return;
+  }
+
+  const sku = product._sizeToSku?.[selectedSize];
+  if (!sku) {
+    setNotification("SKU missing for selected size.");
+    scheduleMessageClear();
+    return;
+  }
+
+  const existingCartId =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem(CART_KEY) || undefined
+      : undefined;
+
+  try {
+    const { data } = await addToBasket({
+      userId: user?.id,      // 👈 works for logged in (id) or guest (undefined)
+      cartId: existingCartId,
+      productId: product.id,
+      sku,
+      quantity: 1,
+    });
+
+    if (data.orderId && typeof window !== "undefined") {
+      window.localStorage.setItem(CART_KEY, data.orderId);
     }
 
-    const selectedSize = selectedSizes.get(product.id);
-    if (!selectedSize) {
-      setNotification("Please select a size.");
-      scheduleMessageClear();
-      return;
-    }
+    updateCartQuantity(product.id, selectedSize, 1);
 
-    const sku = product._sizeToSku?.[selectedSize];
-    if (!sku) {
-      setNotification("SKU missing for selected size.");
-      scheduleMessageClear();
-      return;
-    }
+    setNotification(
+      `${product.name} (Size: ${selectedSize}) added to basket.`
+    );
+    scheduleMessageClear();
 
-    const existingCartId =
-      typeof window !== "undefined"
-        ? window.localStorage.getItem(CART_KEY) || undefined
-        : undefined;
-
-    try {
-      const { data } = await addToBasket({
-        userId: user.id,
-        cartId: existingCartId,
-        productId: product.id,
-        sku,
-        quantity: 1,
-      });
-
-      if (data.orderId && typeof window !== "undefined") {
-        window.localStorage.setItem(CART_KEY, data.orderId);
-      }
-
-      // optional local UI mark
-      updateCartQuantity(product.id, selectedSize, 1);
-
-      setNotification(
-        `${product.name} (Size: ${selectedSize}) added to basket.`
-      );
-      scheduleMessageClear();
-
-      // clear selected size for this product (optional)
-      setSelectedSizes((prev) => {
-        const next = new Map(prev);
-        next.delete(product.id);
-        return next;
-      });
-    } catch (err) {
-      console.error("addToBasket error", err);
-      setNotification("Could not add item to basket.");
-      scheduleMessageClear();
-    }
-  };
+    setSelectedSizes((prev) => {
+      const next = new Map(prev);
+      next.delete(product.id);
+      return next;
+    });
+  } catch (err) {
+    console.error("addToBasket error", err);
+    setNotification("Could not add item to basket.");
+    scheduleMessageClear();
+  }
+};
 
   return (
     <div className="category-page">

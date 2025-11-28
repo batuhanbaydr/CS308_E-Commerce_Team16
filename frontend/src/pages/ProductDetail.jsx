@@ -1,5 +1,6 @@
 // src/pages/ProductDetail.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+
 import { useNavigate, useParams } from "react-router-dom";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
@@ -32,6 +33,10 @@ export default function ProductDetail() {
   const [related, setRelated] = useState([]);
   const [relatedError, setRelatedError] = useState("");
 
+  const [notification, setNotification] = useState(null);
+  const toastTimeoutRef = useRef(null);
+
+
   const go = (path) => () => navigate(path);
 
   // ---------- load logged-in user ----------
@@ -40,6 +45,18 @@ export default function ProductDetail() {
       .then((res) => setUser(res.data))
       .catch(() => setUser(null));
   }, []);
+
+    // cleanup toast timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  
+
 
   // ===== derive UI-friendly fields from ProductEntity =====
   const galleryImages =
@@ -193,332 +210,361 @@ export default function ProductDetail() {
   const decQty = () => setQuantity((q) => (q > 1 ? q - 1 : 1));
   const incQty = () => setQuantity((q) => q + 1);
 
-  // ---------- REAL ADD TO CART ----------
-  const handleAddToCart = async () => {
-    if (!product) return;
-
-    if (!user) {
-      // require sign-in before adding
-      navigate("/login");
-      return;
+  const scheduleMessageClear = () => {
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
     }
-
-    if (!selectedSize) {
-      alert("Please select a size.");
-      return;
-    }
-
-    const skuMap = product._sizeToSku || {};
-    const skuForSize = skuMap[selectedSize] || uiSku;
-
-    if (!skuForSize) {
-      alert("Selected size is not available.");
-      return;
-    }
-
-    const cartId =
-      typeof window !== "undefined"
-        ? window.localStorage.getItem(CART_STORAGE_KEY) || undefined
-        : undefined;
-
-    try {
-      const { data } = await addToBasket({
-        userId: user.id,
-        cartId,
-        productId: product.id,
-        sku: skuForSize,
-        quantity,
-      });
-
-      // store/refresh cartId for later calls (Cart page, more adds, etc.)
-      if (data.orderId && typeof window !== "undefined") {
-        window.localStorage.setItem(CART_STORAGE_KEY, data.orderId);
-      }
-
-      alert("Added to basket.");
-      // optional: navigate("/cart");
-    } catch (err) {
-      console.error("addToBasket error", err);
-      alert("Could not add to basket. Please try again.");
-    }
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setNotification(null);
+      toastTimeoutRef.current = null;
+    }, 2400);
   };
 
+// ---------- REAL ADD TO CART ----------
+const handleAddToCart = async () => {
+  if (!product) return;
+
+  // must pick a size
+  if (!selectedSize) {
+    setNotification("Please select a size.");
+    scheduleMessageClear();
+    return;
+  }
+
+  const skuMap = product._sizeToSku || {};
+  const skuForSize = skuMap[selectedSize] || uiSku;
+
+  if (!skuForSize) {
+    setNotification("Selected size is not available.");
+    scheduleMessageClear();
+    return;
+  }
+
+  const cartId =
+    typeof window !== "undefined"
+      ? window.localStorage.getItem(CART_STORAGE_KEY) || undefined
+      : undefined;
+
+  try {
+    const { data } = await addToBasket({
+      userId: user?.id,      // 👈 guest safe (undefined OK)
+      cartId,
+      productId: product.id,
+      sku: skuForSize,
+      quantity,
+    });
+
+    // Save cartId (important for guests)
+    if (data.orderId && typeof window !== "undefined") {
+      window.localStorage.setItem(CART_STORAGE_KEY, data.orderId);
+    }
+
+    // SUCCESS MESSAGE (your preferred style)
+    setNotification(`${product.name} (Size: ${selectedSize}) added to basket.`);
+    scheduleMessageClear();
+
+    // optional: auto-open sliding cart drawer
+    // openCart();
+
+  } catch (err) {
+    console.error("addToBasket error", err);
+    setNotification("Could not add item to basket.");
+    scheduleMessageClear();
+  }
+};
+
+
+
   return (
-    <div className="home-page">
-      <header className="category-topbar">
-            <button className="category-brand" onClick={() => navigate("/home")}>
-              TIDL
-            </button>
-            <nav className="category-nav">
-              <button
-                onClick={() => navigate("/category/sweatshirts")}
-                className="category-nav-item category-nav-item--active"
-              >
-                SWEATSHIRTS
-              </button>
-              <button
-                onClick={() => navigate("/category/shirts")}
-                className="category-nav-item"
-              >
-                SHIRTS
-              </button>
-              <button
-                onClick={() => navigate("/category/pants")}
-                className="category-nav-item"
-              >
-                PANTS
-              </button>
-              <button
-                onClick={() => navigate("/shop-the-look")}
-                className="category-nav-item"
-              >
-                SHOP THE LOOK
-              </button>
-            </nav>
-      
-            <div className="category-actions">
-              <img
-                src={searchIcon}
-                alt="Search"
-                className="category-icon"
-                onClick={() => navigate("/search")}
-              />
-              {user ? (
-                <span
-                  className="login-topbar-link"
-                  style={{ cursor: "default", marginRight: "0.5rem" }}
-                >
-                  {`HEY! ${user.name}`}
-                </span>
-              ) : (
-                <span
-                  className="home-signin"
-                  onClick={() => navigate("/login")}
-                  style={{ marginRight: "0.5rem", cursor: "pointer" }}
-                >
-                  SIGN IN
-                </span>
-              )}
-      
-              {user && (
-                <div
-                  className="home-menu"
-                  onClick={() => setShowProfileMenu((p) => !p)}   
-                  style={{ marginRight: "0.5rem" }}
-                >
-                  <span />
-                  <span />
-                  <span />
-                  {showProfileMenu && (                         
-                    <div className="details-menu">
-                      <button className="details-menu-item" onClick={go("/profile")}>
-                        Details
-                      </button>
-                      <button className="details-menu-item" onClick={handleLogout}>
-                        Log-out
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-      
-              <img
-                src={bagIcon}
-                alt="Cart"
-                className="category-icon"
-                onClick={openCart} 
-              />
-            </div>
-          </header>
+  <div className="home-page">
+    <header className="category-topbar">
+      <button className="category-brand" onClick={() => navigate("/home")}>
+        TIDL
+      </button>
+      <nav className="category-nav">
+        <button
+          onClick={() => navigate("/category/sweatshirts")}
+          className="category-nav-item category-nav-item--active"
+        >
+          SWEATSHIRTS
+        </button>
+        <button
+          onClick={() => navigate("/category/shirts")}
+          className="category-nav-item"
+        >
+          SHIRTS
+        </button>
+        <button
+          onClick={() => navigate("/category/pants")}
+          className="category-nav-item"
+        >
+          PANTS
+        </button>
+        <button
+          onClick={() => navigate("/shop-the-look")}
+          className="category-nav-item"
+        >
+          SHOP THE LOOK
+        </button>
+      </nav>
 
-      <main className="product-page">
-        {loading && <div className="product-loading">Loading product…</div>}
-
-        {!loading && errorMsg && (
-          <div className="product-error">{errorMsg}</div>
+      <div className="category-actions">
+        <img
+          src={searchIcon}
+          alt="Search"
+          className="category-icon"
+          onClick={() => navigate("/search")}
+        />
+        {user ? (
+          <span
+            className="login-topbar-link"
+            style={{ cursor: "default", marginRight: "0.5rem" }}
+          >
+            {`HEY! ${user.name}`}
+          </span>
+        ) : (
+          <span
+            className="home-signin"
+            onClick={() => navigate("/login")}
+            style={{ marginRight: "0.5rem", cursor: "pointer" }}
+          >
+            SIGN IN
+          </span>
         )}
 
-        {!loading && !errorMsg && product && (
-          <>
-            <section className="product-main">
-              {/* Left: gallery */}
-              <div className="product-gallery">
-                <div className="product-main-image-wrapper">
-                  {mainImage && (
-                    <img
-                      src={mainImage}
-                      alt={product.name}
-                      className="product-main-image"
-                    />
-                  )}
-                </div>
-
-                <div className="product-thumbs">
-                  {galleryImages.map((img, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      className={`product-thumb-button ${
-                        idx === selectedIndex ? "active" : ""
-                      }`}
-                      onClick={() => setSelectedIndex(idx)}
-                    >
-                      <img src={img} alt={`${product.name} ${idx + 1}`} />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Right: info */}
-              <div className="product-info">
-                <h1 className="product-title">{product.name}</h1>
-                {uiSku && <p className="product-sku">SKU: {uiSku}</p>}
-
-                <p className="product-price">{formattedPrice}</p>
-
-                {uiColor && (
-                  <div className="product-option-group">
-                    <span className="product-option-label">COLOR</span>
-                    <div className="product-color-swatch">{uiColor}</div>
-                  </div>
-                )}
-
-                {uiSizes && uiSizes.length > 0 && (
-                  <div className="product-option-group">
-                    <span className="product-option-label">SIZE</span>
-                    <div className="product-size-row">
-                      {uiSizes.map((size) => {
-                        const stockForSize =
-                          (product &&
-                            product._sizeStock &&
-                            product._sizeStock[size]) ?? 0;
-                        const isOutOfStock = stockForSize <= 0;
-
-                        return (
-                          <button
-                            key={size}
-                            type="button"
-                            className={
-                              "product-size-pill" +
-                              (size === selectedSize ? " active" : "") +
-                              (isOutOfStock ? " product-size-pill--oos" : "")
-                            }
-                            onClick={() =>
-                              !isOutOfStock && setSelectedSize(size)
-                            }
-                            disabled={isOutOfStock}
-                          >
-                            {size}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                <div className="product-option-group">
-                  <span className="product-option-label">QUANTITY</span>
-                  <div className="product-qty-row">
-                    <button
-                      type="button"
-                      className="product-qty-btn"
-                      onClick={decQty}
-                    >
-                      –
-                    </button>
-                    <span className="product-qty-value">{quantity}</span>
-                    <button
-                      type="button"
-                      className="product-qty-btn"
-                      onClick={incQty}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
+        {user && (
+          <div
+            className="home-menu"
+            onClick={() => setShowProfileMenu((p) => !p)}
+            style={{ marginRight: "0.5rem" }}
+          >
+            <span />
+            <span />
+            <span />
+            {showProfileMenu && (
+              <div className="details-menu">
                 <button
-                  type="button"
-                  className="product-add-to-cart"
-                  onClick={handleAddToCart}
+                  className="details-menu-item"
+                  onClick={go("/profile")}
                 >
-                  ADD TO CART
+                  Details
                 </button>
+                <button
+                  className="details-menu-item"
+                  onClick={handleLogout}
+                >
+                  Log-out
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
-                <div className="product-description">
-                  {product.description && <p>{product.description}</p>}
-                  {product.fabric && (
-                    <p>
-                      <strong>Fabric:</strong> {product.fabric}
-                    </p>
-                  )}
-                  {product.madeIn && (
-                    <p>
-                      <strong>Made in:</strong> {product.madeIn}
-                    </p>
-                  )}
+        <img
+          src={bagIcon}
+          alt="Cart"
+          className="category-icon"
+          onClick={openCart}
+        />
+      </div>
+    </header>
+
+    <main className="product-page">
+      {loading && <div className="product-loading">Loading product…</div>}
+
+      {!loading && errorMsg && (
+        <div className="product-error">{errorMsg}</div>
+      )}
+
+      {!loading && !errorMsg && product && (
+        <>
+          <section className="product-main">
+            {/* Left: gallery */}
+            <div className="product-gallery">
+              <div className="product-main-image-wrapper">
+                {mainImage && (
+                  <img
+                    src={mainImage}
+                    alt={product.name}
+                    className="product-main-image"
+                  />
+                )}
+              </div>
+
+              <div className="product-thumbs">
+                {galleryImages.map((img, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`product-thumb-button ${
+                      idx === selectedIndex ? "active" : ""
+                    }`}
+                    onClick={() => setSelectedIndex(idx)}
+                  >
+                    <img src={img} alt={`${product.name} ${idx + 1}`} />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Right: info */}
+            <div className="product-info">
+              <h1 className="product-title">{product.name}</h1>
+              {uiSku && <p className="product-sku">SKU: {uiSku}</p>}
+
+              <p className="product-price">{formattedPrice}</p>
+
+              {uiColor && (
+                <div className="product-option-group">
+                  <span className="product-option-label">COLOR</span>
+                  <div className="product-color-swatch">{uiColor}</div>
+                </div>
+              )}
+
+              {uiSizes && uiSizes.length > 0 && (
+                <div className="product-option-group">
+                  <span className="product-option-label">SIZE</span>
+                  <div className="product-size-row">
+                    {uiSizes.map((size) => {
+                      const stockForSize =
+                        (product &&
+                          product._sizeStock &&
+                          product._sizeStock[size]) ?? 0;
+                      const isOutOfStock = stockForSize <= 0;
+
+                      return (
+                        <button
+                          key={size}
+                          type="button"
+                          className={
+                            "product-size-pill" +
+                            (size === selectedSize ? " active" : "") +
+                            (isOutOfStock ? " product-size-pill--oos" : "")
+                          }
+                          onClick={() =>
+                            !isOutOfStock && setSelectedSize(size)
+                          }
+                          disabled={isOutOfStock}
+                        >
+                          {size}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="product-option-group">
+                <span className="product-option-label">QUANTITY</span>
+                <div className="product-qty-row">
+                  <button
+                    type="button"
+                    className="product-qty-btn"
+                    onClick={decQty}
+                  >
+                    –
+                  </button>
+                  <span className="product-qty-value">{quantity}</span>
+                  <button
+                    type="button"
+                    className="product-qty-btn"
+                    onClick={incQty}
+                  >
+                    +
+                  </button>
                 </div>
               </div>
-            </section>
 
-            {/* YOU MAY ALSO LIKE... */}
-            <section className="product-related">
-              <h2 className="product-related-title">YOU MAY ALSO LIKE…</h2>
-              {relatedError && (
-                <p className="product-related-subtitle">{relatedError}</p>
-              )}
+              <button
+                type="button"
+                className="product-add-to-cart"
+                onClick={handleAddToCart}
+              >
+                ADD TO CART
+              </button>
 
-              {!relatedError && related.length === 0 && (
-                <p className="product-related-subtitle">
-                  More items will appear here soon.
-                </p>
-              )}
+              <div className="product-description">
+                {product.description && <p>{product.description}</p>}
+                {product.fabric && (
+                  <p>
+                    <strong>Fabric:</strong> {product.fabric}
+                  </p>
+                )}
+                {product.madeIn && (
+                  <p>
+                    <strong>Made in:</strong> {product.madeIn}
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
 
-              {related.length > 0 && (
-                <div className="product-related-scroll">
-                  {related.map((p) => {
-                    const priceNumber = Number(
-                      p.basePrice ??
-                        (p.variants &&
-                          p.variants[0] &&
-                          p.variants[0].price) ??
-                        0
-                    );
-                    const displayPrice = `$${priceNumber.toFixed(2)}`;
-                    const img =
-                      p.mainImageUrl || (p.imageUrls && p.imageUrls[0]) || "";
+          {/* YOU MAY ALSO LIKE... */}
+          <section className="product-related">
+            <h2 className="product-related-title">YOU MAY ALSO LIKE…</h2>
+            {relatedError && (
+              <p className="product-related-subtitle">{relatedError}</p>
+            )}
 
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className="product-related-card"
-                        onClick={() => navigate(`/product/${p.id}`)}
-                      >
-                        {img && (
-                          <div className="product-related-image-wrap">
-                            <img
-                              src={img}
-                              alt={p.name}
-                              className="product-related-image"
-                            />
-                          </div>
-                        )}
-                        <div className="product-related-info">
-                          <div className="product-related-name">{p.name}</div>
-                          <div className="product-related-price">
-                            {displayPrice}
-                          </div>
+            {!relatedError && related.length === 0 && (
+              <p className="product-related-subtitle">
+                More items will appear here soon.
+              </p>
+            )}
+
+            {related.length > 0 && (
+              <div className="product-related-scroll">
+                {related.map((p) => {
+                  const priceNumber = Number(
+                    p.basePrice ??
+                      (p.variants &&
+                        p.variants[0] &&
+                        p.variants[0].price) ??
+                      0
+                  );
+                  const displayPrice = `$${priceNumber.toFixed(2)}`;
+                  const img =
+                    p.mainImageUrl ||
+                    (p.imageUrls && p.imageUrls[0]) ||
+                    "";
+
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className="product-related-card"
+                      onClick={() => navigate(`/product/${p.id}`)}
+                    >
+                      {img && (
+                        <div className="product-related-image-wrap">
+                          <img
+                            src={img}
+                            alt={p.name}
+                            className="product-related-image"
+                          />
                         </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          </>
-        )}
-      </main>
-    </div>
-  );
+                      )}
+                      <div className="product-related-info">
+                        <div className="product-related-name">{p.name}</div>
+                        <div className="product-related-price">
+                          {displayPrice}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </main>
+
+    {notification && (
+      <div className="category-toast" role="status">
+        {notification}
+      </div>
+    )}
+  </div>
+);
 }
