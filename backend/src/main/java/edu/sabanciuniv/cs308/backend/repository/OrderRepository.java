@@ -9,4 +9,10 @@ public interface OrderRepository extends MongoRepository<OrderEntity, String> {
 
     Page<OrderEntity> findByUserId(String userId, Pageable pageable);
     OrderEntity findByUserIdAndStatus(String userId, String status);
+
+    boolean existsByUserIdAndStatusAndItemsProductId(
+            String userId,
+            String status,
+            String productId
+    );
 }
