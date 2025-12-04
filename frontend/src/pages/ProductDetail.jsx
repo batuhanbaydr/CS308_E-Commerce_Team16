@@ -1,5 +1,5 @@
 // src/pages/ProductDetail.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
@@ -9,6 +9,8 @@ import {
   meRequest,
   addToBasket,
   logoutRequest,
+  getReviewsForProduct,   
+  createReview,    
 } from "../lib/api";
 import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 
@@ -31,6 +33,26 @@ export default function ProductDetail() {
 
   const [related, setRelated] = useState([]);
   const [relatedError, setRelatedError] = useState("");
+
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState("");
+
+  const [userRating, setUserRating] = useState(0); // 1–5
+  const [userComment, setUserComment] = useState("");
+  const [reviewFormError, setReviewFormError] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  const reviewListRef = useRef(null);
+
+const scrollReviews = (direction) => {
+  if (!reviewListRef.current) return;
+  const amount = 280; // pixels to scroll per click (card width + gap)
+  reviewListRef.current.scrollBy({
+    left: direction === "left" ? -amount : amount,
+    behavior: "smooth",
+  });
+};
 
   const go = (path) => () => navigate(path);
 
@@ -193,6 +215,24 @@ export default function ProductDetail() {
   const decQty = () => setQuantity((q) => (q > 1 ? q - 1 : 1));
   const incQty = () => setQuantity((q) => q + 1);
 
+  // ===== fetch reviews for this product =====
+  useEffect(() => {
+    if (!productId) return;
+
+    setReviewsLoading(true);
+    setReviewsError("");
+
+    getReviewsForProduct(productId)
+      .then((res) => {
+        setReviews(res.data || []);
+      })
+      .catch((err) => {
+        console.error("getReviewsForProduct error", err);
+        setReviewsError("Could not load reviews.");
+      })
+      .finally(() => setReviewsLoading(false));
+  }, [productId]);  
+
   // ---------- REAL ADD TO CART ----------
   const handleAddToCart = async () => {
     if (!product) return;
@@ -240,6 +280,65 @@ export default function ProductDetail() {
     } catch (err) {
       console.error("addToBasket error", err);
       alert("Could not add to basket. Please try again.");
+    }
+  };
+
+  const renderStars = (value) => {
+    const rounded = Math.round(value || 0);
+    return (
+      <span className="product-stars">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <span key={i} className="product-star">
+            {i <= rounded ? "★" : "☆"}
+          </span>
+        ))}
+      </span>
+    );
+  };
+
+  const averageRating =
+    reviews.length > 0
+      ? reviews.reduce((sum, r) => sum + (r.rating || 0), 0) / reviews.length
+      : null;  
+
+  const handleSubmitReview = async (e) => {
+    e.preventDefault();
+    if (!product) return;
+
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    if (!userRating || userRating < 1 || userRating > 5) {
+      setReviewFormError("Please select a rating between 1 and 5.");
+      return;
+    }
+
+    setSubmittingReview(true);
+    setReviewFormError("");
+
+    try {
+      await createReview({
+        productId: product.id,
+        rating: userRating,
+        comment: userComment.trim() || null,
+      });
+
+      // clear form
+      setUserRating(0);
+      setUserComment("");
+
+      // refresh reviews so user sees the updated rating/comment state
+      const res = await getReviewsForProduct(product.id);
+      setReviews(res.data || []);
+    } catch (err) {
+      console.error("createReview error", err);
+      const msg =
+        err?.response?.data?.message || "Could not submit your review.";
+      setReviewFormError(msg);
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
@@ -459,6 +558,120 @@ export default function ProductDetail() {
                   )}
                 </div>
               </div>
+            </section>
+
+            {/* REVIEWS & RATINGS */}
+            <section className="product-reviews">
+              <h2 className="product-reviews-title">REVIEWS</h2>
+
+              {/* Average rating */}
+              {averageRating && (
+                <div className="product-reviews-summary">
+                  <div className="product-reviews-stars">
+                    {renderStars(averageRating)}
+                  </div>
+                  <span className="product-reviews-average">
+                    {averageRating.toFixed(1)} / 5
+                  </span>
+                  <span className="product-reviews-count">
+                    ({reviews.length} rating{reviews.length === 1 ? "" : "s"})
+                  </span>
+                </div>
+              )}
+
+              {/* Loading / error for reviews */}
+              {reviewsLoading && (
+                <p className="product-reviews-message">Loading reviews…</p>
+              )}
+              {!reviewsLoading && reviewsError && (
+                <p className="product-reviews-error">{reviewsError}</p>
+              )}
+
+              {/* Review form (only for logged-in users) */}
+              <div className="product-review-form-wrapper">
+                {user ? (
+                  <form className="product-review-form" onSubmit={handleSubmitReview}>
+                    <h3 className="product-review-form-title">
+                      Write a review
+                    </h3>
+
+                    <div className="product-review-rating-input">
+                      <span className="product-option-label">Your rating</span>
+                      <div className="product-review-stars-input">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            className={
+                              "product-review-star-button" +
+                              (userRating >= star ? " active" : "")
+                            }
+                            onClick={() => setUserRating(star)}
+                            aria-label={`${star} star${star === 1 ? "" : "s"}`}
+                          >
+                            {userRating >= star ? "★" : "☆"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="product-review-comment-input">
+                      <label className="product-option-label">
+                        Comment (optional)
+                      </label>
+                      <textarea
+                        className="product-review-textarea"
+                        rows={3}
+                        value={userComment}
+                        onChange={(e) => setUserComment(e.target.value)}
+                        placeholder="Tell us what you liked or disliked…"
+                      />
+                    </div>
+
+                    {reviewFormError && (
+                      <p className="product-reviews-error">{reviewFormError}</p>
+                    )}
+
+                    <button
+                      type="submit"
+                      className="product-review-submit"
+                      disabled={submittingReview}
+                    >
+                      {submittingReview ? "Submitting…" : "Submit review"}
+                    </button>
+                    <p className="product-review-note">
+                      Comments will appear after moderation. Your rating is counted immediately.
+                    </p>
+                  </form>
+                ) : (
+                  <p className="product-reviews-message">
+                    Please sign in to leave a rating and comment.
+                  </p>
+                )}
+              </div>
+
+              {/* Existing reviews list */}
+              {!reviewsLoading && reviews.length > 0 && (
+                <div className="product-review-list">
+                  {reviews.map((r) => (
+                    <div key={r.id} className="product-review-item">
+                      <div className="product-review-item-header">
+                        {renderStars(r.rating)}
+                        {/* If backend later adds user info, you can show it here */}
+                      </div>
+                      {r.comment && (
+                        <p className="product-review-comment">{r.comment}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!reviewsLoading && !reviewsError && reviews.length === 0 && (
+                <p className="product-reviews-message">
+                  There are no reviews for this product yet.
+                </p>
+              )}
             </section>
 
             {/* YOU MAY ALSO LIKE... */}
