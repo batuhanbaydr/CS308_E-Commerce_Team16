@@ -203,4 +203,37 @@ export const createReview = (payload) =>
   api.post("/reviews", payload);
 
 
+// ===================================================
+//                MOCK CHECKOUT + PAYMENT
+// ===================================================
+
+// Fake checkout endpoint
+export function checkout(cartId, shipping, billing, paymentMethodId = "new") {
+  console.warn("⚠️ MOCK checkout() called — no backend endpoint exists.");
+
+  // simulate an order ID (real backend should generate this)
+  const mockOrderId = `MOCK-${Date.now()}`;
+
+  return Promise.resolve({
+    data: {
+      orderId: mockOrderId,
+      status: "OK",
+    },
+  });
+}
+
+// Fake payment endpoint
+export function processPayment(orderId, paymentDetails) {
+  console.warn("⚠️ MOCK processPayment() called — no backend endpoint exists.");
+  console.log("💳 Payment payload:", { orderId, paymentDetails });
+
+  return Promise.resolve({
+    data: {
+      status: "PAID",
+      orderId,
+    },
+  });
+}
+
+
 export default api;
