@@ -272,4 +272,119 @@ public class BasketService {
         dto.setSubtotal(subtotal);
         return dto;
     }
+    /**
+     * Guest sepetini (cartId) login olan kullanıcıya bağlar.
+     * - cartId ile gelen CART order bulunur (guest sepeti)
+     * - Kullanıcının zaten bir CART'ı varsa merge edilir
+     * - Stok sınırları addItem ile aynı kurallara göre kontrol edilir
+     */
+    public BasketDTO attachCartToUser(String userId, String cartId) {
+
+        if (cartId == null || cartId.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "cartId is required"
+            );
+        }
+
+        // 1) Guest CART'i bul
+        OrderEntity guestCart = orderRepository.findById(cartId)
+                .filter(o -> "CART".equals(o.getStatus()))
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Guest cart not found"
+                ));
+
+        // Eğer cart zaten başka bir user'a aitse hata ver
+        if (guestCart.getUserId() != null && !guestCart.getUserId().equals(userId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Cart belongs to another user"
+            );
+        }
+
+        // 2) Kullanıcının mevcut CART'i var mı?
+        OrderEntity userCart = orderRepository.findByUserIdAndStatus(userId, "CART");
+
+        // Guest sepet boşsa direkt return
+        if (guestCart.getItems() == null || guestCart.getItems().isEmpty()) {
+            // Eğer kullanıcının zaten sepeti varsa onu döndür, yoksa boş DTO
+            if (userCart != null) {
+                return mapToBasketDTO(userCart);
+            }
+            return getBasket(userId, null);
+        }
+
+        // Kullanıcının sepeti yoksa -> guest sepetini direkt ona bağla
+        if (userCart == null) {
+            guestCart.setUserId(userId);
+            OrderEntity saved = orderRepository.save(guestCart);
+            return mapToBasketDTO(saved);
+        }
+
+        // 3) Merge: guestCart.items -> userCart.items
+        if (userCart.getItems() == null) {
+            userCart.setItems(new ArrayList<>());
+        }
+
+        for (OrderItem guestItem : guestCart.getItems()) {
+
+            // Stok bilgisi için ürünü ve varyantı bul
+            ProductEntity product = productRepository.findById(guestItem.getProductId())
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND,
+                            "Product not found while attaching cart: " + guestItem.getProductId()
+                    ));
+
+            ProductEntity.Variant variant = product.getVariants().stream()
+                    .filter(v -> v.getSku().equals(guestItem.getSku()))
+                    .findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND,
+                            "Variant not found while attaching cart: " + guestItem.getSku()
+                    ));
+
+            int stock = variant.getStock();
+
+            // Kullanıcının sepetinde aynı ürün+sku var mı?
+            OrderItem existing = userCart.getItems().stream()
+                    .filter(i -> i.getProductId().equals(guestItem.getProductId())
+                            && i.getSku().equals(guestItem.getSku()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (existing == null) {
+                // Bu ürün kullanıcı sepetinde yok → stok kontrolü
+                if (guestItem.getQuantity() > stock) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Cannot attach cart. Not enough stock for SKU " +
+                                    guestItem.getSku() + ". Available: " + stock
+                    );
+                }
+                // Item'i direkt userCart'a taşı (aynı obje olabilir, guestCart'ı zaten sonra sileceğiz)
+                userCart.getItems().add(guestItem);
+            } else {
+                // Zaten vardı → miktarları topla
+                int newQty = existing.getQuantity() + guestItem.getQuantity();
+                if (newQty > stock) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Cannot attach cart. Stock limit exceeded for SKU " +
+                                    guestItem.getSku() + ". Available: " + stock
+                    );
+                }
+                existing.setQuantity(newQty);
+                existing.setLineTotal(
+                        existing.getUnitPrice().multiply(BigDecimal.valueOf(newQty))
+                );
+            }
+        }
+
+        // Merge sonrası guest cart'ı silebiliriz (artık gereksiz)
+        orderRepository.deleteById(guestCart.getId());
+
+        OrderEntity savedUserCart = orderRepository.save(userCart);
+        return mapToBasketDTO(savedUserCart);
+    }
 }

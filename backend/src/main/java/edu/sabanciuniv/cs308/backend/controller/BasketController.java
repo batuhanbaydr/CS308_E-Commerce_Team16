@@ -1,20 +1,28 @@
 package edu.sabanciuniv.cs308.backend.controller;
 
 import edu.sabanciuniv.cs308.backend.dto.BasketDTO;
+import edu.sabanciuniv.cs308.backend.entity.UserEntity;
+import edu.sabanciuniv.cs308.backend.repository.UserRepository;
 import edu.sabanciuniv.cs308.backend.request.AddToBasketRequest;
 import edu.sabanciuniv.cs308.backend.request.UpdateBasketItemRequest;
 import edu.sabanciuniv.cs308.backend.service.BasketService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/basket")
 public class BasketController {
 
     private final BasketService basketService;
+    private final UserRepository userRepository;
 
-    public BasketController(BasketService basketService) {
+    public BasketController(BasketService basketService,
+                            UserRepository userRepository) {
         this.basketService = basketService;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -55,6 +63,37 @@ public class BasketController {
             @RequestBody UpdateBasketItemRequest request
     ) {
         BasketDTO dto = basketService.updateItem(userId, cartId, request);
+        return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * Guest sepetini login olmuş kullanıcıya bağlar (cart persistence).
+     * Kullanım:
+     *  - Kullanıcı login olduktan sonra frontend:
+     *      POST /api/basket/attach?cartId=...
+     *    çağırır.
+     *  - Kullanıcı bilgisi session'dan (Authentication) alınır.
+     */
+    @PostMapping("/attach")
+    public ResponseEntity<BasketDTO> attachCart(
+            Authentication auth,
+            @RequestParam String cartId
+    ) {
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "User must be logged in to attach cart"
+            );
+        }
+
+        String email = auth.getName(); // username = email
+        UserEntity user = userRepository.findByEmailAddress(email)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "User not found"
+                ));
+
+        BasketDTO dto = basketService.attachCartToUser(user.getId(), cartId);
         return ResponseEntity.ok(dto);
     }
 

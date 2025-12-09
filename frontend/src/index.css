@@ -1536,7 +1536,7 @@ body {
 .product-option-label {
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.1em;
   color: #777777;
   margin-bottom: 8px;
   display: block;
@@ -1724,7 +1724,298 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+} 
+
+/* === PRODUCT REVIEWS & RATINGS === */
+
+.product-reviews {
+  margin-top: 64px;
+  padding-top: 32px;
+  border-top: 1px solid #e9e9e9;
+  font-family: "Montserrat", sans-serif;
+  color: #4b4b4b;
 }
+
+.product-reviews-title {
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+/* summary row (avg stars + count) */
+.product-reviews-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.product-stars {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.product-star {
+  font-size: 25px;
+  color: #3d211c;
+}
+
+.product-reviews-average {
+  font-size: 13px;
+  font-weight: 600;
+  color: #3d211c;
+}
+
+.product-reviews-count {
+  font-size: 12px;
+  color: #777777;
+}
+
+.product-reviews-message {
+  font-size: 13px;
+  color: #555555;
+  margin: 4px 0 0;
+}
+
+.product-reviews-error {
+  font-size: 13px;
+  color: #b00020;
+  margin: 6px 0 0;
+}
+
+/* === two-column layout: form left, carousel right === */
+
+.product-reviews-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+  margin-top: 20px;
+}
+
+/* left: write-a-review card */
+
+.product-review-form-wrapper {
+  flex: 0 0 52%;
+  min-width: 0;
+}
+
+.product-review-form {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #ececec;
+  background: #faf9f8;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.product-review-form-title {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: #5f5f5f;
+}
+
+.product-review-field-label {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8b8b8b;
+}
+
+.product-review-rating-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.product-review-stars-input {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.product-review-star-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 20px;
+  cursor: pointer;
+  color: #bbbbbb;
+  transition: color 120ms ease;
+}
+
+.product-review-star-button.active {
+  color: #3d211c;
+}
+
+/* comment textarea – no overflow */
+
+.product-review-comment-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.product-review-textarea {
+  width: 100%;
+  max-width: 100%;
+  min-height: 80px;
+  resize: vertical;
+  box-sizing: border-box;
+  border: 1px solid #dedede;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  background: #ffffff;
+}
+
+.product-review-textarea:focus {
+  border-color: #b1756a;
+}
+
+/* submit + helper text */
+
+.product-review-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.product-review-submit {
+  padding: 10px 20px;
+  border: none;
+  background: #3d211c;
+  color: #ffffff;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.product-review-submit:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.product-review-submit:hover:not(:disabled) {
+  background: #301813;
+}
+
+.product-review-note {
+  font-size: 11px;
+  color: #777777;
+}
+
+/* right: reviews carousel */
+
+.product-review-carousel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.product-review-arrow {
+  align-self: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid #d5d5d5;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6a6a6a;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.product-review-arrow:hover {
+  background: #3d211c;
+  color: #ffffff;
+  border-color: #3d211c;
+}
+
+.product-review-arrow:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* horizontal list inside carousel */
+
+.product-review-list {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 4px 0;
+  scroll-behavior: smooth;
+}
+
+/* each review card – only stroke */
+
+.product-review-item {
+  min-width: 260px;
+  max-width: 260px;
+  border: 1px solid #e7e7e7;
+  background: #ffffff;
+  padding: 14px 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.product-review-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.product-review-item-rating {
+  font-size: 13px;
+  font-weight: 600;
+  color: #3d211c;
+}
+
+.product-review-comment {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #444444;
+}
+
+/* stack layout on small screens */
+
+@media (max-width: 900px) {
+  .product-reviews-body {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .product-review-form-wrapper {
+    flex: none;
+  }
+
+  .product-review-carousel {
+    width: 100%;
+  }
+
+  .product-review-item {
+    min-width: 220px;
+    max-width: 260px;
+  }
+}
+
  /* ===================== MINI CART DRAWER ONLY ===================== */
 
 /* overlay */

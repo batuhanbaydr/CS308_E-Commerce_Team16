@@ -196,6 +196,13 @@ export function removeBasketItem({ userId, cartId, productId, sku }) {
   return api.delete(`/basket/items/${productId}/${sku}`, { params });
 }
 
+export const getReviewsForProduct = (productId) =>
+  api.get(`/reviews/product/${productId}`);
+
+export const createReview = (payload) =>
+  api.post("/reviews", payload);
+
+
 // ===================================================
 //                MOCK CHECKOUT + PAYMENT
 // ===================================================
