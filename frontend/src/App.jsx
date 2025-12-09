@@ -14,6 +14,7 @@ import ProductDetailMock from "./pages/ProductDetailMock";
 import ProductDetail from "./pages/ProductDetail";
 import Search from "./pages/Search.jsx";
 import Checkout from "./pages/Checkout.jsx";
+import Wishlist from "./pages/Wishlist.jsx";  
 
 import { CartDrawerProvider } from "./context/CartDrawerContext.jsx";
 import "./index.css";
@@ -30,6 +31,7 @@ export default function App() {
           {/* Public auth pages */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/wishlist" element={<Wishlist />} />
 
           {/* Public browsing */}
           <Route path="/category/sweatshirts" element={<Sweatshirts />} />
@@ -52,7 +54,9 @@ export default function App() {
                 <Profile />
               </RequireAuth>
             }
+      
           />
+          
 
           
           <Route path="/checkout" element={<Checkout />} />

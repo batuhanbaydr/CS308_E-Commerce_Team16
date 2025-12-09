@@ -264,6 +264,9 @@ const results = useMemo(() => {
                   <button className="details-menu-item" onClick={go("/profile")}>
                     Details
                   </button>
+                  <button className="details-menu-item" onClick={go("/wishlist")}>
+                    Wishlist  
+                  </button>
                   <button className="details-menu-item" onClick={handleLogout}>
                     Log-out
                   </button>
