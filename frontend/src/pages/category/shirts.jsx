@@ -47,7 +47,7 @@ export default function Shirts() {
 
   const [hoveredProductId, setHoveredProductId] = useState(null);
 
-  const [sortOption, setSortOption] = useState(null); // 'priceAsc' | 'priceDesc' | null
+  const [sortOption, setSortOption] = useState(null); // 'priceAsc' | 'priceDesc' | 'popularity' | null
 
   const [priceBounds, setPriceBounds] = useState({ min: 0, max: 100 }); // NEW
   const [priceRange, setPriceRange] = useState({ min: 0, max: 100 });
@@ -145,6 +145,11 @@ export default function Shirts() {
       const allSizes = Object.keys(sizeStock);
       const sizesInStock = allSizes.filter((s) => sizeStock[s] > 0);
 
+      // popularity = number of purchases for this product
+      const popularity = Number(
+        p.purchaseCount ?? p.totalPurchases ?? 0
+      );
+
       return {
         ...p,
         _price: price,
@@ -153,6 +158,7 @@ export default function Shirts() {
         _sizesInStock: sizesInStock, // only sizes with stock > 0
         _sizeStock: sizeStock,
         _sizeToSku: sizeToSku, // 👉 size -> sku (needed for addToBasket)
+        _popularity: popularity,
       };
     });
 
@@ -177,6 +183,11 @@ export default function Shirts() {
       list = [...list].sort((a, b) => a._price - b._price);
     } else if (sortOption === "priceDesc") {
       list = [...list].sort((a, b) => b._price - a._price);
+    } else if (sortOption === "popularity") {
+      // higher popularity first
+      list = [...list].sort(
+        (a, b) => (b._popularity || 0) - (a._popularity || 0)
+      );
     }
 
     return list;
@@ -438,7 +449,23 @@ export default function Shirts() {
               Price: High to Low
             </button>
 
-            {/* Reset sort (optional “New Arrivals”) */}
+            {/* Popularity sort */}
+            <button
+              className={`category-filter-option${
+                sortOption === "popularity"
+                  ? " category-filter-option--active"
+                  : ""
+              }`}
+              onClick={() =>
+                setSortOption((prev) =>
+                  prev === "popularity" ? null : "popularity"
+                )
+              }
+            >
+              Popularity
+            </button>
+
+            {/* Reset sort (optional "New Arrivals") */}
             <button
               className="category-filter-option"
               onClick={() => setSortOption(null)}

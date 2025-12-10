@@ -14,6 +14,7 @@ import ProductDetailMock from "./pages/ProductDetailMock";
 import ProductDetail from "./pages/ProductDetail";
 import Search from "./pages/Search.jsx";
 import Checkout from "./pages/Checkout.jsx";
+import Invoice from "./pages/Invoice.jsx";
 import Wishlist from "./pages/Wishlist.jsx";  
 
 import { CartDrawerProvider } from "./context/CartDrawerContext.jsx";
@@ -60,6 +61,7 @@ export default function App() {
 
           
           <Route path="/checkout" element={<Checkout />} />
+          <Route path="/invoice/:orderId" element={<Invoice />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/home" replace />} />

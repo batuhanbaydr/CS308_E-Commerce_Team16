@@ -71,46 +71,93 @@ export default function Profile() {
         // Fetch user info
         const userRes = await meRequest();
         const userData = userRes.data;
+        const userId = userData.id;
         setUser({ id: userData.id, name: userData.name || "User", email: userData.emailAddress });
 
-        // Fetch account details
-        const accountRes = await getAccountDetails();
-        const accountData = accountRes.data;
-        setAccountDetails({
-          email: accountData.emailAddress || "",
-          phoneNumber: accountData.phoneNumber || "",
-          password: "••••••••",
-        });
+        // Fetch account details (with error handling)
+        let accountData = {};
+        try {
+          const accountRes = await getAccountDetails();
+          accountData = accountRes.data || {};
+          setAccountDetails({
+            email: accountData.emailAddress || userData.emailAddress || "",
+            phoneNumber: accountData.phoneNumber || "",
+            password: "••••••••",
+          });
+        } catch (err) {
+          console.error("Error fetching account details:", err);
+          // Use user data as fallback
+          setAccountDetails({
+            email: userData.emailAddress || "",
+            phoneNumber: "",
+            password: "••••••••",
+          });
+        }
 
-        // Fetch orders
-        const ordersRes = await getOrders(0, 100);
-        const ordersData = ordersRes.data.content || [];
-        setOrders(ordersData.map(order => ({
-          id: order.id,
-          date: formatDate(order.createdAt),
-          status: order.status || "UNKNOWN",
-          total: formatCurrency(order.grandTotal),
-          items: [], // Will be populated if needed from detail endpoint
-        })));
+        // Fetch orders (with error handling)
+        try {
+          const ordersRes = await getOrders(0, 100);
+          const ordersData = ordersRes.data?.content || [];
+          setOrders(ordersData.map(order => ({
+            id: order.id,
+            date: formatDate(order.createdAt),
+            status: order.status || "UNKNOWN",
+            total: formatCurrency(order.grandTotal),
+            items: [],
+          })));
+        } catch (err) {
+          console.error("Error fetching orders:", err);
+          setOrders([]);
+        }
 
-        // Fetch returns
-        const returnsRes = await getReturns(0, 100);
-        const returnsData = returnsRes.data.content || [];
-        setReturns(returnsData.map(ret => ({
-          id: ret.id,
-          orderId: ret.orderId,
-          date: formatDate(ret.createdAt),
-          status: ret.status || "REQUESTED",
-          reason: ret.reason || "",
-        })));
+        // Fetch returns (with error handling)
+        try {
+          const returnsRes = await getReturns(0, 100);
+          const returnsData = returnsRes.data?.content || [];
+          setReturns(returnsData.map(ret => ({
+            id: ret.id,
+            orderId: ret.orderId,
+            date: formatDate(ret.createdAt),
+            status: ret.status || "REQUESTED",
+            reason: ret.reason || "",
+          })));
+        } catch (err) {
+          console.error("Error fetching returns:", err);
+          setReturns([]);
+        }
 
         // Parse home address if available
+        const addressesList = [];
         if (accountData.homeAddress) {
-          setAddresses([{ id: 1, label: "Home", details: accountData.homeAddress }]);
+          addressesList.push({ id: 1, label: "Home", details: accountData.homeAddress });
+        }
+        
+        // Also load additional addresses from localStorage
+        if (userId) {
+          try {
+            const savedAddresses = localStorage.getItem(`addresses_${userId}`);
+            if (savedAddresses) {
+              const parsed = JSON.parse(savedAddresses);
+              // Add addresses that are not Home (id !== 1)
+              addressesList.push(...parsed.filter(addr => addr.id !== 1));
+            }
+          } catch (err) {
+            console.error("Error loading addresses from localStorage:", err);
+          }
+        }
+        
+        setAddresses(addressesList);
+        
+        // Save addresses to localStorage for checkout page
+        if (userId) {
+          try {
+            localStorage.setItem(`addresses_${userId}`, JSON.stringify(addressesList));
+          } catch (err) {
+            console.error("Error saving addresses to localStorage:", err);
+          }
         }
 
         // Load payment methods from localStorage (using user ID as key)
-        const userId = userData.id;
         if (userId) {
           try {
             const savedCards = localStorage.getItem(`paymentMethods_${userId}`);
@@ -123,7 +170,15 @@ export default function Profile() {
         }
       } catch (err) {
         console.error("Error fetching user data:", err);
-        setError("Failed to load profile data. Please try again.");
+        // Only show error if it's a critical error (like user not found)
+        if (err?.response?.status === 401 || err?.response?.status === 403) {
+          setError("Please log in to view your profile.");
+          setTimeout(() => navigate("/login"), 2000);
+        } else {
+          // For other errors, still show the page but with a warning
+          setError(null);
+          console.warn("Some data could not be loaded, but showing profile page anyway.");
+        }
       } finally {
         setLoading(false);
       }
@@ -174,8 +229,16 @@ export default function Profile() {
     }
   };
   const handleEditAddress = (address) => {
+    if (!address || !address.id) {
+      console.error("Invalid address object:", address);
+      return;
+    }
+    console.log("Editing address:", address);
     setEditingAddressId(address.id);
-    setNewAddress({ label: address.label, details: address.details });
+    setNewAddress({ 
+      label: address.label || "", 
+      details: address.details || "" 
+    });
   };
 
   const handleCancelEditAddress = () => {
@@ -193,14 +256,38 @@ export default function Profile() {
         const userRes = await meRequest();
         const userData = userRes.data;
         await updateProfile(userData.name, "", userData.emailAddress);
-        setAddresses([]);
+        const updatedAddresses = addresses.filter((a) => a.id !== id);
+        setAddresses(updatedAddresses);
+        
+        // Update localStorage
+        if (userData.id) {
+          try {
+            localStorage.setItem(`addresses_${userData.id}`, JSON.stringify(updatedAddresses));
+          } catch (err) {
+            console.error("Error updating localStorage:", err);
+          }
+        }
+        
         alert("Address deleted successfully!");
       } catch (err) {
         console.error("Error deleting address:", err);
         alert("Failed to delete address. Please try again.");
       }
     } else {
-      setAddresses((prev) => prev.filter((a) => a.id !== id));
+      setAddresses((prev) => {
+        const updated = prev.filter((a) => a.id !== id);
+        // Update localStorage
+        if (user && user.id) {
+          try {
+            localStorage.setItem(`addresses_${user.id}`, JSON.stringify(updated));
+          } catch (err) {
+            console.error("Error updating localStorage:", err);
+          }
+        }
+        return updated;
+      });
+      
+      alert("Address deleted successfully!");
     }
   };
 
@@ -220,22 +307,40 @@ export default function Profile() {
         if (newAddress.label === "Home") {
           // Update homeAddress in backend
           await updateProfile(userData.name, newAddress.details.trim(), userData.emailAddress);
-          setAddresses((prev) => 
-            prev.map((a) => 
+          setAddresses((prev) => {
+            const updated = prev.map((a) => 
               a.id === editingAddressId 
                 ? { ...a, label: newAddress.label.trim(), details: newAddress.details.trim() }
                 : a
-            )
-          );
+            );
+            // Update localStorage
+            if (userData.id) {
+              try {
+                localStorage.setItem(`addresses_${userData.id}`, JSON.stringify(updated));
+              } catch (err) {
+                console.error("Error updating localStorage:", err);
+              }
+            }
+            return updated;
+          });
         } else {
           // For other addresses, just update locally (since backend only supports homeAddress)
-          setAddresses((prev) => 
-            prev.map((a) => 
+          setAddresses((prev) => {
+            const updated = prev.map((a) => 
               a.id === editingAddressId 
                 ? { ...a, label: newAddress.label.trim(), details: newAddress.details.trim() }
                 : a
-            )
-          );
+            );
+            // Update localStorage
+            if (userData.id) {
+              try {
+                localStorage.setItem(`addresses_${userData.id}`, JSON.stringify(updated));
+              } catch (err) {
+                console.error("Error updating address in localStorage:", err);
+              }
+            }
+            return updated;
+          });
         }
         alert("Address updated successfully!");
       } else {
@@ -243,10 +348,39 @@ export default function Profile() {
         if (newAddress.label === "Home") {
           // Update homeAddress in backend
           await updateProfile(userData.name, newAddress.details.trim(), userData.emailAddress);
-          setAddresses([{ id: 1, label: "Home", details: newAddress.details.trim() }]);
+          const homeAddr = { id: 1, label: "Home", details: newAddress.details.trim() };
+          setAddresses([homeAddr]);
+          
+          // Update localStorage
+          if (userData.id) {
+            try {
+              // Get other addresses from localStorage
+              const savedAddresses = localStorage.getItem(`addresses_${userData.id}`);
+              let allAddresses = [homeAddr];
+              if (savedAddresses) {
+                const parsed = JSON.parse(savedAddresses);
+                allAddresses.push(...parsed.filter(addr => addr.id !== 1));
+              }
+              localStorage.setItem(`addresses_${userData.id}`, JSON.stringify(allAddresses));
+            } catch (err) {
+              console.error("Error updating localStorage:", err);
+            }
+          }
         } else {
           // For other addresses, add locally
-          setAddresses((prev) => [...prev, { id: Date.now(), label: newAddress.label.trim(), details: newAddress.details.trim() }]);
+          const newAddr = { id: Date.now(), label: newAddress.label.trim(), details: newAddress.details.trim() };
+          setAddresses((prev) => {
+            const updated = [...prev, newAddr];
+            // Save to localStorage
+            if (userData.id) {
+              try {
+                localStorage.setItem(`addresses_${userData.id}`, JSON.stringify(updated));
+              } catch (err) {
+                console.error("Error saving address to localStorage:", err);
+              }
+            }
+            return updated;
+          });
         }
         alert("Address saved successfully!");
       }
@@ -554,8 +688,27 @@ export default function Profile() {
                     <div className="profile-list-item-header"><strong>{address.label}</strong></div>
                     <p className="profile-list-item-description">{address.details}</p>
                     <div className="profile-list-item-actions">
-                      <button className="profile-link-button" type="button" onClick={() => handleEditAddress(address)}>Edit Address</button>
-                      <button type="button" className="profile-icon-button" aria-label="Delete address" onClick={() => handleDeleteAddress(address.id)}>
+                      <button 
+                        className="profile-link-button" 
+                        type="button" 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleEditAddress(address);
+                        }}
+                      >
+                        Edit Address
+                      </button>
+                      <button 
+                        type="button" 
+                        className="profile-icon-button" 
+                        aria-label="Delete address" 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDeleteAddress(address.id);
+                        }}
+                      >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M5 7h14M9 7v10m6-10v10M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                           <path d="M8 7h8l-.7 11a1 1 0 0 1-1 .9h-4.6a1 1 0 0 1-1-.9L8 7Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
@@ -596,8 +749,16 @@ export default function Profile() {
                     required 
                   />
                 </label>
-                <div className="profile-form-actions">
-                  <button type="submit" className="profile-button">
+                <div className="profile-form-actions" style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                  <button 
+                    type="submit" 
+                    className="profile-button"
+                    style={{ 
+                      padding: "0.5rem 1.25rem",
+                      fontSize: "0.875rem",
+                      flex: editingAddressId ? "1" : "none"
+                    }}
+                  >
                     {editingAddressId ? "Update Address" : "Save Address"}
                   </button>
                   {editingAddressId && (
@@ -605,6 +766,16 @@ export default function Profile() {
                       type="button" 
                       className="profile-link-button secondary" 
                       onClick={handleCancelEditAddress}
+                      style={{
+                        padding: "0.5rem 1rem",
+                        fontSize: "0.875rem",
+                        border: "1px solid #e5e5e5",
+                        borderRadius: "4px",
+                        backgroundColor: "#fff",
+                        color: "#301813",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap"
+                      }}
                     >
                       Cancel
                     </button>
@@ -732,13 +903,27 @@ export default function Profile() {
           {/* add / edit card */}
           <div>
             <header className="profile-card-header">
-              <h3>{isEditingCard ? "Edit Card" : "Add New Card"}</h3>
+              <h3>{isEditingCard ? "Edit Card" : "Add Credit/Debit Card"}</h3>
             </header>
             <div className="profile-card-body">
               <form className="profile-form" onSubmit={handleNewCardSubmit}>
                 <label className="profile-field">
-                  <span>Card Label</span>
-                  <input type="text" value={newCard.label} onChange={(e) => setNewCard((p) => ({ ...p, label: e.target.value }))} placeholder="Visa •• 1234" required />
+                  <span>Card Number</span>
+                  <input 
+                    type="text" 
+                    value={newCard.label} 
+                    onChange={(e) => {
+                      // Only allow digits, max 16 characters
+                      let value = e.target.value.replace(/\D/g, '').slice(0, 16);
+                      
+                      // Add space after every 4 digits
+                      value = value.replace(/(.{4})/g, '$1 ').trim();
+                      
+                      setNewCard((p) => ({ ...p, label: value }));
+                    }} 
+                    placeholder="1234 5678 9012 3456" 
+                    required 
+                  />
                 </label>
                 <label className="profile-field">
                   <span>Cardholder Name</span>
@@ -746,12 +931,53 @@ export default function Profile() {
                 </label>
                 <label className="profile-field">
                   <span>Expiry Date</span>
-                  <input type="text" value={newCard.expiry} onChange={(e) => setNewCard((p) => ({ ...p, expiry: e.target.value }))} placeholder="MM / YY" required />
+                  <input 
+                    type="text" 
+                    value={newCard.expiry} 
+                    onChange={(e) => {
+                      // Only allow digits
+                      let value = e.target.value.replace(/\D/g, '');
+                      
+                      // Format as MM/YY (max 4 digits)
+                      if (value.length > 2) {
+                        value = value.slice(0, 2) + '/' + value.slice(2, 4);
+                      }
+                      
+                      setNewCard((p) => ({ ...p, expiry: value }));
+                    }} 
+                    placeholder="MM/YY" 
+                    maxLength={5}
+                    required 
+                  />
                 </label>
-                <div className="profile-form-actions">
-                  <button type="submit" className="profile-button">{isEditingCard ? "Update Card" : "Save Card"}</button>
+                <div className="profile-form-actions" style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                  <button 
+                    type="submit" 
+                    className="profile-button"
+                    style={{ 
+                      padding: "0.5rem 1.25rem",
+                      fontSize: "0.875rem",
+                      flex: isEditingCard ? "1" : "none"
+                    }}
+                  >
+                    {isEditingCard ? "Update Card" : "Save Card"}
+                  </button>
                   {isEditingCard && (
-                    <button type="button" className="profile-link-button secondary" onClick={handleCancelEditCard}>
+                    <button 
+                      type="button" 
+                      className="profile-link-button secondary" 
+                      onClick={handleCancelEditCard}
+                      style={{
+                        padding: "0.5rem 1rem",
+                        fontSize: "0.875rem",
+                        border: "1px solid #e5e5e5",
+                        borderRadius: "4px",
+                        backgroundColor: "#fff",
+                        color: "#301813",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
                       Cancel
                     </button>
                   )}

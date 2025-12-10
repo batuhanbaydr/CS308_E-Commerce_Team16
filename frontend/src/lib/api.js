@@ -207,31 +207,47 @@ export const createReview = (payload) =>
 //                MOCK CHECKOUT + PAYMENT
 // ===================================================
 
-// Fake checkout endpoint
-export function checkout(cartId, shipping, billing, paymentMethodId = "new") {
-  console.warn("⚠️ MOCK checkout() called — no backend endpoint exists.");
-
-  // simulate an order ID (real backend should generate this)
-  const mockOrderId = `MOCK-${Date.now()}`;
-
-  return Promise.resolve({
-    data: {
-      orderId: mockOrderId,
-      status: "OK",
-    },
-  });
-}
-
-// Fake payment endpoint
-export function processPayment(orderId, paymentDetails) {
-  console.warn("⚠️ MOCK processPayment() called — no backend endpoint exists.");
-  console.log("💳 Payment payload:", { orderId, paymentDetails });
-
-  return Promise.resolve({
-    data: {
-      status: "PAID",
-      orderId,
-    },
+// Checkout endpoint - creates order with unique ID from MongoDB
+export function checkout(cartId, shipping, billing, paymentDetails, useSameAddress = true) {
+  // Extract card info from paymentDetails
+  const cardNumber = paymentDetails.cardNumber?.replace(/\s/g, '') || '';
+  const cardLast4 = cardNumber.slice(-4);
+  const expiryParts = paymentDetails.expiryDate?.split('/') || [];
+  const cardExpMonth = parseInt(expiryParts[0]) || 0;
+  const cardExpYear = parseInt(expiryParts[1]) ? 2000 + parseInt(expiryParts[1]) : 0;
+  
+  // Determine card brand (simple detection)
+  let cardBrand = 'VISA';
+  if (cardNumber.startsWith('5')) cardBrand = 'MASTERCARD';
+  if (cardNumber.startsWith('3')) cardBrand = 'AMEX';
+  
+  return api.post("/checkout", {
+    cartId: cartId,
+    // Shipping address
+    shippingFullName: shipping.fullName,
+    shippingLine1: shipping.line1,
+    shippingLine2: shipping.line2 || "",
+    shippingCity: shipping.city,
+    shippingState: shipping.state,
+    shippingCountry: shipping.country,
+    shippingZipCode: shipping.zipCode,
+    shippingPhoneNumber: shipping.phoneNumber,
+    // Billing address
+    useShippingAsBilling: useSameAddress,
+    billingFullName: billing.fullName,
+    billingLine1: billing.line1,
+    billingLine2: billing.line2 || "",
+    billingCity: billing.city,
+    billingState: billing.state,
+    billingCountry: billing.country,
+    billingZipCode: billing.zipCode,
+    billingPhoneNumber: billing.phoneNumber,
+    // Payment details
+    cardHolderName: paymentDetails.holderName,
+    cardBrand: cardBrand,
+    cardLast4: cardLast4,
+    cardExpMonth: cardExpMonth,
+    cardExpYear: cardExpYear,
   });
 }
 

@@ -16,6 +16,7 @@ export default function SignUp() {
   });
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [emailError, setEmailError] = useState("");
   const navigate = useNavigate();
 
   // 🔧 Added for the unified top bar (no signup logic changes):
@@ -29,7 +30,19 @@ export default function SignUp() {
   };
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+    
+    // Email validation: check for Turkish characters before @
+    if (name === "emailAddress") {
+      const localPart = value.split("@")[0];
+      const turkishChars = /[çğıöşüÇĞİÖŞÜ]/;
+      if (localPart && turkishChars.test(localPart)) {
+        setEmailError("The part before '@' should not contain Turkish characters (like 'ç', 'ğ', 'ı', 'ö', 'ş', 'ü').");
+      } else {
+        setEmailError("");
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -173,7 +186,7 @@ export default function SignUp() {
             />
 
             <input
-              className="login-input"
+              className={`login-input ${emailError ? "login-input--error" : ""}`}
               type="email"
               name="emailAddress"
               placeholder="E-mail"
@@ -181,6 +194,11 @@ export default function SignUp() {
               onChange={handleChange}
               required
             />
+            {emailError && (
+              <p className="login-error" style={{ fontSize: "12px", marginTop: "4px", marginBottom: "8px" }}>
+                {emailError}
+              </p>
+            )}
 
             <input
               className="login-input"

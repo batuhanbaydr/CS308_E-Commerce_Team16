@@ -42,7 +42,7 @@ export default function Pants() {
 
   const [hoveredProductId, setHoveredProductId] = useState(null);
 
-  const [sortOption, setSortOption] = useState(null); // 'priceAsc' | 'priceDesc' | null
+  const [sortOption, setSortOption] = useState(null); // 'priceAsc' | 'priceDesc' | 'popularity' | null
 
   const [priceBounds, setPriceBounds] = useState({ min: 0, max: 100 });
   const [priceRange, setPriceRange] = useState({ min: 0, max: 100 });
@@ -139,6 +139,11 @@ export default function Pants() {
       const allSizes = Object.keys(sizeStock);
       const sizesInStock = allSizes.filter((s) => sizeStock[s] > 0);
 
+      // popularity = number of purchases for this product
+      const popularity = Number(
+        p.purchaseCount ?? p.totalPurchases ?? 0
+      );
+
       return {
         ...p,
         _price: price,
@@ -147,6 +152,7 @@ export default function Pants() {
         _sizesInStock: sizesInStock, // only sizes with stock > 0
         _sizeStock: sizeStock,
         _sizeToSku: sizeToSku, // size -> sku
+        _popularity: popularity,
       };
     });
 
@@ -171,6 +177,11 @@ export default function Pants() {
       list = [...list].sort((a, b) => a._price - b._price);
     } else if (sortOption === "priceDesc") {
       list = [...list].sort((a, b) => b._price - a._price);
+    } else if (sortOption === "popularity") {
+      // higher popularity first
+      list = [...list].sort(
+        (a, b) => (b._popularity || 0) - (a._popularity || 0)
+      );
     }
 
     return list;
@@ -429,6 +440,22 @@ export default function Pants() {
               }
             >
               Price: High to Low
+            </button>
+
+            {/* Popularity sort */}
+            <button
+              className={`category-filter-option${
+                sortOption === "popularity"
+                  ? " category-filter-option--active"
+                  : ""
+              }`}
+              onClick={() =>
+                setSortOption((prev) =>
+                  prev === "popularity" ? null : "popularity"
+                )
+              }
+            >
+              Popularity
             </button>
 
             {/* Reset sort */}
