@@ -5,6 +5,8 @@ import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
 import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 
+const CART_STORAGE_KEY = "tidl_cart_id";
+
 export default function Login() {
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
@@ -39,6 +41,12 @@ export default function Login() {
         meData = data;
       } catch (inner) {
         console.log("could not load /users/me", inner);
+      }
+
+      // Clear guest cartId from localStorage when user logs in
+      // This ensures the logged-in user only sees their own cart, not the previous guest's cart
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(CART_STORAGE_KEY);
       }
 
       navigate("/home", { state: { user: meData } });

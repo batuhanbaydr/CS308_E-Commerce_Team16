@@ -46,6 +46,11 @@ export default function Cart({ onClose }) {
     window.localStorage.setItem(CART_STORAGE_KEY, orderId);
   };
 
+  const clearCartId = () => {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(CART_STORAGE_KEY);
+  };
+
   // load current user (if logged in)
   useEffect(() => {
     const loadMe = async () => {
@@ -76,13 +81,22 @@ export default function Cart({ onClose }) {
       setLoadingBasket(true);
       setErrorMsg("");
       try {
-        const cartId = getStoredCartId();
+        // If user is logged in, clear any guest cartId from localStorage
+        // This ensures logged-in users only see their own cart
+        if (user?.id) {
+          clearCartId();
+        }
+
+        const cartId = user?.id ? undefined : getStoredCartId(); // Only use cartId for guests
         const { data } = await getBasket({
           userId: user?.id, // can be undefined for guests
           cartId,
         });
         setBasket(data);
-        if (data.orderId) saveCartId(data.orderId);
+        // Only save cartId for guests (not for logged-in users)
+        if (data.orderId && !user?.id) {
+          saveCartId(data.orderId);
+        }
       } catch (err) {
         console.error(err);
         setErrorMsg("Could not load your basket. Please try again.");
