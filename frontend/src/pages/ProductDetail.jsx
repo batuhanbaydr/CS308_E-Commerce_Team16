@@ -720,13 +720,22 @@ const handleSubmitReview = async (e) => {
                         {renderStars(r.rating)}
                         {/* If backend later adds user info, you can show it here */}
                       </div>
-                      {r.comment && (
+                      {r.comment && r.status === "APPROVED" ? (
                         <p className="product-review-comment">{r.comment}</p>
-                      )}
-                    </div>
+                      ) : r.comment && r.status !== "APPROVED" ? (
+                        <p
+                          className="product-review-comment pending-comment"
+                          style={{ opacity: 0.6, fontStyle: "italic" }}
+                        >
+                          This comment will appear after moderation.
+                        </p>
+                      ) : null}
+                   </div>
                   ))}
                 </div>
               )}
+                
+             
 
               {!reviewsLoading && !reviewsError && reviews.length === 0 && (
                 <p className="product-reviews-message">
