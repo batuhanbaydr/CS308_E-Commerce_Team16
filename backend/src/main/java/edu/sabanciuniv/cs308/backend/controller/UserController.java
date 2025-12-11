@@ -4,6 +4,7 @@ import edu.sabanciuniv.cs308.backend.dto.UserDTO;
 import edu.sabanciuniv.cs308.backend.entity.UserEntity;
 import edu.sabanciuniv.cs308.backend.repository.UserRepository;
 import edu.sabanciuniv.cs308.backend.request.ProfileUpdateRequest;
+import lombok.Data;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 import java.util.Optional;
 
+@Data
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
@@ -35,6 +37,8 @@ public class UserController {
         dto.setEmailAddress(user.getEmailAddress());
         dto.setHomeAddress(user.getHomeAddress());
         dto.setRole(user.getRole().name());
+
+        dto.setAddresses(user.getAddresses());
 
         return ResponseEntity.ok(dto);
     }
@@ -61,6 +65,11 @@ public class UserController {
         if (req.getHomeAddress() != null) {
             user.setHomeAddress(req.getHomeAddress());
         }
+
+        if (req.getAddresses() != null) {
+            user.setAddresses(req.getAddresses());
+        }
+
         if (req.getEmailAddress() != null && !req.getEmailAddress().isBlank()) {
             if (!req.getEmailAddress().equalsIgnoreCase(user.getEmailAddress()) &&
                     userRepository.existsByEmailAddress(req.getEmailAddress())) {
@@ -78,6 +87,8 @@ public class UserController {
         dto.setEmailAddress(user.getEmailAddress());
         dto.setHomeAddress(user.getHomeAddress());
         dto.setRole(user.getRole().name());
+
+        dto.setAddresses(user.getAddresses());
 
         return ResponseEntity.ok(dto);
     }
