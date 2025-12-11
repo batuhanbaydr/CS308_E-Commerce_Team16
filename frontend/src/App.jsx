@@ -58,10 +58,22 @@ export default function App() {
       
           />
           
-
-          
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/invoice/:orderId" element={<Invoice />} />
+          <Route
+            path="/checkout"
+            element={
+              <RequireAuth>
+                <Checkout />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/invoice/:orderId"
+            element={
+              <RequireAuth>
+                <Invoice />
+              </RequireAuth>
+            }
+          />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/home" replace />} />

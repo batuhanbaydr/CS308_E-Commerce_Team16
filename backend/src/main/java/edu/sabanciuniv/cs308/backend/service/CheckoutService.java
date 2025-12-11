@@ -21,16 +21,20 @@ import java.time.Instant;
 @Service
 public class CheckoutService {
 
+    
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
+    private final EmailService emailService;
 
     public CheckoutService(UserRepository userRepository,
                            OrderRepository orderRepository,
-                           ProductRepository productRepository) {
+                           ProductRepository productRepository,
+                            EmailService emailService) {
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
+        this.emailService = emailService;
     }
 
     @Transactional
@@ -105,9 +109,12 @@ public class CheckoutService {
         }
 
         OrderEntity saved = orderRepository.save(cart);
+        OrderDetailDTO dto = OrderMapper.toDetail(saved);
+
+        emailService.sendOrderConfirmation(user, dto);
 
         // 10) Sipariş detayını döndür
-        return OrderMapper.toDetail(saved);
+        return dto;
     }
 
     // --------------------------------------------------------

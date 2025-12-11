@@ -22,12 +22,13 @@ const EMPTY_ADDRESS = {
   country: "Turkey",
   phoneNumber: "",
 };
+const CART_STORAGE_KEY = "tidl_cart_id";
 
 export default function Checkout() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
-  const [cartId, setCartId] = useState(() => localStorage.getItem("cartId"));
+  const [cartId, setCartId] = useState(() => localStorage.getItem(CART_STORAGE_KEY));
   const [basket, setBasket] = useState({ items: [], subtotal: 0 });
   const [shipping, setShipping] = useState(EMPTY_ADDRESS);
   const [billing, setBilling] = useState(EMPTY_ADDRESS);
@@ -61,7 +62,7 @@ export default function Checkout() {
         setBasket(basketRes.data);
 
         if (basketRes.data.orderId) {
-          localStorage.setItem("cartId", basketRes.data.orderId);
+          localStorage.setItem(CART_STORAGE_KEY, basketRes.data.orderId);
           setCartId(basketRes.data.orderId);
         }
 
@@ -173,7 +174,7 @@ export default function Checkout() {
       if (!orderId) {
         throw new Error("Order ID not received from server");
       }
-      localStorage.removeItem("cartId");
+      localStorage.removeItem(CART_STORAGE_KEY);
       navigate(`/invoice/${orderId}`);
     } catch (err) {
       console.error("Checkout failed:", err);
