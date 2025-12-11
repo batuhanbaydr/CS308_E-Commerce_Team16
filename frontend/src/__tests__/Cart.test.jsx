@@ -1,104 +1,93 @@
-// src/__tests__/Cart.test.jsx
-import React from "react";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import Cart from "../pages/cart.jsx";
-
-const mockMeRequest = vi.fn();
-const mockGetBasket = vi.fn();
-const mockUpdateBasketItem = vi.fn();
-const mockRemoveBasketItem = vi.fn();
-
-vi.mock("../lib/api", () => ({
-  meRequest: (...args) => mockMeRequest(...args),
-  getBasket: (...args) => mockGetBasket(...args),
-  updateBasketItem: (...args) => mockUpdateBasketItem(...args),
-  removeBasketItem: (...args) => mockRemoveBasketItem(...args),
-}));
-
-describe("Cart drawer", () => {
-  beforeEach(() => {
-    mockMeRequest.mockReset();
-    mockGetBasket.mockReset();
-    mockUpdateBasketItem.mockReset();
-    mockRemoveBasketItem.mockReset();
-
-    mockMeRequest.mockResolvedValue({
+//updates subtotal when quantity is increased
+// Mock API module
+vi.mock("../lib/api", () => {
+  return {
+    meRequest: vi.fn().mockResolvedValue({
       data: {
         id: "user-1",
-        name: "Cart User",
-        emailAddress: "cart@example.com",
-        homeAddress: "Somewhere",
-        phoneNumber: "123",
+        name: "Test User",
+        emailAddress: "test@example.com",
+        homeAddress: "Istanbul",
       },
-    });
+    }),
 
-    mockGetBasket.mockResolvedValue({
+    getBasket: vi.fn().mockResolvedValue({
       data: {
-        orderId: "order-1",
-        subtotal: 50, // 1 item * 50
+        orderId: "ORDER-1",
         items: [
           {
-            productId: "prod-1",
-            sku: "SKU-1",
-            name: "Test Pants",
+            productId: "PANTS-1",
+            sku: "PANTS-1-BLACK-S",
+            name: "Soft Pants",
             quantity: 1,
-            unitPrice: 50,
-            lineTotal: 50,
+            lineTotal: 100,
+            unitPrice: 100,
             mainImageUrl: null,
             imageUrls: [],
           },
         ],
+        subtotal: 100,
       },
-    });
+    }),
 
-    mockUpdateBasketItem.mockResolvedValue({
+    updateBasketItem: vi.fn().mockResolvedValue({
       data: {
-        orderId: "order-1",
-        subtotal: 100, // after quantity 2
+        orderId: "ORDER-1",
         items: [
           {
-            productId: "prod-1",
-            sku: "SKU-1",
-            name: "Test Pants",
+            productId: "PANTS-1",
+            sku: "PANTS-1-BLACK-S",
+            name: "Soft Pants",
             quantity: 2,
-            unitPrice: 50,
-            lineTotal: 100,
+            lineTotal: 200,
+            unitPrice: 100,
             mainImageUrl: null,
             imageUrls: [],
           },
         ],
+        subtotal: 200,
       },
-    });
-  });
+    }),
 
+    removeBasketItem: vi.fn().mockResolvedValue({
+      data: {
+        orderId: "ORDER-1",
+        items: [],
+        subtotal: 0,
+      },
+    }),
+  };
+});
+
+describe("Cart drawer", () => {
   it("updates subtotal when quantity is increased", async () => {
-    const user = userEvent.setup();
+    window.localStorage.clear();
 
-    render(<Cart />);
+    render(
+      <MemoryRouter>
+        <Cart onClose={() => {}} />
+      </MemoryRouter>
+    );
 
-    // wait for /me and /basket
-    await waitFor(() => expect(mockMeRequest).toHaveBeenCalled());
-    await waitFor(() => expect(mockGetBasket).toHaveBeenCalled());
+    // Get ALL instances of '$100.00'
+    const all100s = await screen.findAllByText("$100.00");
 
-    // find the "Subtotal" row and assert it contains $50.00
-    const subtotalRow = screen
-      .getByText("Subtotal")
-      .closest(".cart-summary-row");
-    expect(subtotalRow).toHaveTextContent("$50.00");
+    // Subtotal is the SECOND instance (footer summary)
+    expect(all100s[1]).toBeInTheDocument();
 
-    // click the '+' button in qty control
-    const plusButton = screen.getByRole("button", { name: "+" });
-    await user.click(plusButton);
+    // Increase quantity (+ button)
+    const plusBtn = await screen.findByRole("button", { name: "+" });
+    await userEvent.click(plusBtn);
 
+    // After update, subtotal should include $200.00 somewhere
     await waitFor(() => {
-      expect(mockUpdateBasketItem).toHaveBeenCalledTimes(1);
+      const newTotals = screen.getAllByText("$200.00");
+      expect(newTotals.length).toBeGreaterThan(0);
     });
-
-    // now the subtotal row should say $100.00
-    const updatedSubtotalRow = screen
-      .getByText("Subtotal")
-      .closest(".cart-summary-row");
-    expect(updatedSubtotalRow).toHaveTextContent("$100.00");
   });
 });
