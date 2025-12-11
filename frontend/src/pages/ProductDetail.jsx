@@ -294,8 +294,12 @@ const handleAddToCart = async () => {
     return;
   }
 
+  // If user is logged in, don't use cartId from localStorage
+  // This ensures logged-in users only see their own cart, not guest cart
   const cartId =
-    typeof window !== "undefined"
+    user?.id
+      ? undefined // Logged-in users don't use cartId
+      : typeof window !== "undefined"
       ? window.localStorage.getItem(CART_STORAGE_KEY) || undefined
       : undefined;
 
@@ -308,8 +312,8 @@ const handleAddToCart = async () => {
       quantity,
     });
 
-    // Save cartId (important for guests)
-    if (data.orderId && typeof window !== "undefined") {
+    // Save cartId only for guests (not for logged-in users)
+    if (data.orderId && !user?.id && typeof window !== "undefined") {
       window.localStorage.setItem(CART_STORAGE_KEY, data.orderId);
     }
 

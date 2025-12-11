@@ -124,7 +124,11 @@ export default function Cart({ onClose }) {
     setErrorMsg("");
 
     try {
-      const cartId = basket?.orderId || getStoredCartId();
+      // If user is logged in, don't use cartId from localStorage
+      // This ensures logged-in users only see their own cart, not guest cart
+      const cartId = user?.id
+        ? undefined // Logged-in users don't use cartId
+        : basket?.orderId || getStoredCartId();
       const { data } = await updateBasketItem({
         userId: user?.id, // optional
         cartId,
@@ -134,7 +138,10 @@ export default function Cart({ onClose }) {
       });
 
       setBasket(data);
-      if (data.orderId) saveCartId(data.orderId);
+      // Save cartId only for guests (not for logged-in users)
+      if (data.orderId && !user?.id) {
+        saveCartId(data.orderId);
+      }
     } catch (err) {
       console.error(err);
       setErrorMsg("Could not update item. Please try again.");
@@ -149,7 +156,11 @@ export default function Cart({ onClose }) {
     setErrorMsg("");
 
     try {
-      const cartId = basket?.orderId || getStoredCartId();
+      // If user is logged in, don't use cartId from localStorage
+      // This ensures logged-in users only see their own cart, not guest cart
+      const cartId = user?.id
+        ? undefined // Logged-in users don't use cartId
+        : basket?.orderId || getStoredCartId();
       const { data } = await removeBasketItem({
         userId: user?.id, // optional
         cartId,
@@ -158,7 +169,10 @@ export default function Cart({ onClose }) {
       });
 
       setBasket(data);
-      if (data.orderId) saveCartId(data.orderId);
+      // Save cartId only for guests (not for logged-in users)
+      if (data.orderId && !user?.id) {
+        saveCartId(data.orderId);
+      }
     } catch (err) {
       console.error(err);
       setErrorMsg("Could not remove item. Please try again.");

@@ -276,8 +276,12 @@ export default function Shirts() {
     return;
   }
 
+  // If user is logged in, don't use cartId from localStorage
+  // This ensures logged-in users only see their own cart, not guest cart
   const existingCartId =
-    typeof window !== "undefined"
+    user?.id
+      ? undefined // Logged-in users don't use cartId
+      : typeof window !== "undefined"
       ? window.localStorage.getItem(CART_KEY) || undefined
       : undefined;
 
@@ -290,7 +294,8 @@ export default function Shirts() {
       quantity: 1,
     });
 
-    if (data.orderId && typeof window !== "undefined") {
+    // Save cartId only for guests (not for logged-in users)
+    if (data.orderId && !user?.id && typeof window !== "undefined") {
       window.localStorage.setItem(CART_KEY, data.orderId);
     }
 

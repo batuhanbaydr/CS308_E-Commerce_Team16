@@ -148,6 +148,9 @@ export default function Checkout() {
     }
   }, [shipping, useSameAddress]);
 
+  // simple fake shipping (same as cart.jsx)
+  const estimatedShipping = 8.5;
+
   const totals = useMemo(() => {
     const subtotal = basket.items.reduce(
         (sum, item) => sum + (parseFloat(item.lineTotal) || 0),
@@ -155,8 +158,8 @@ export default function Checkout() {
     );
     return {
       subtotal,
-      shipping: 0,
-      grandTotal: subtotal,
+      shipping: estimatedShipping,
+      grandTotal: subtotal + estimatedShipping,
     };
   }, [basket]);
 
@@ -843,7 +846,7 @@ export default function Checkout() {
                             marginBottom: "0.5rem",
                           }}
                       >
-                        <span>Shipping</span>
+                        <span>Estimated Shipping</span>
                         <span>${totals.shipping.toFixed(2)}</span>
                       </div>
                       <div
@@ -856,7 +859,7 @@ export default function Checkout() {
                             borderTop: "1px solid #e5e5e5",
                           }}
                       >
-                        <span>Total</span>
+                        <span>Estimated Total</span>
                         <span>${totals.grandTotal.toFixed(2)}</span>
                       </div>
                     </div>

@@ -74,16 +74,12 @@ export default function Profile() {
 
   const [returns, setReturns] = useState([]);
   const [newReturn, setNewReturn] = useState({ orderId: "", reason: "" });
-  const [cards, setCards] = useState([]);
-  const [newCard, setNewCard] = useState({ label: "", holder: "", expiry: "" });
-  const [editingCardId, setEditingCardId] = useState(null);
   const [passwordChange, setPasswordChange] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
   const { openCart } = useCartDrawer();
-  const isEditingCard = editingCardId !== null;
 
   // Fetch user data on mount
   useEffect(() => {
@@ -182,17 +178,6 @@ export default function Profile() {
           }
         }
 
-        // Load payment methods from localStorage (using user ID as key)
-        if (userId) {
-          try {
-            const savedCards = localStorage.getItem(`paymentMethods_${userId}`);
-            if (savedCards) {
-              setCards(JSON.parse(savedCards));
-            }
-          } catch (err) {
-            console.error("Error loading payment methods from localStorage:", err);
-          }
-        }
       } catch (err) {
         console.error("Error fetching user data:", err);
         // Only show error if it's a critical error (like user not found)
@@ -442,67 +427,6 @@ export default function Profile() {
     }
   };
 
-  const handleEditCard = (card) => {
-    setEditingCardId(card.id);
-    setNewCard({ label: card.label, holder: card.holder, expiry: card.expiry });
-  };
-  const handleCancelEditCard = () => {
-    setEditingCardId(null);
-    setNewCard({ label: "", holder: "", expiry: "" });
-  };
-
-  // Save cards to localStorage whenever cards change
-  const saveCardsToLocalStorage = (cardsToSave) => {
-    if (user && user.id) {
-      try {
-        localStorage.setItem(
-            `paymentMethods_${user.id}`,
-            JSON.stringify(cardsToSave)
-        );
-      } catch (err) {
-        console.error("Error saving payment methods to localStorage:", err);
-      }
-    }
-  };
-
-  const handleNewCardSubmit = (event) => {
-    event.preventDefault();
-    if (
-        !newCard.label.trim() ||
-        !newCard.holder.trim() ||
-        !newCard.expiry.trim()
-    ) {
-      alert("Please fill in all fields!");
-      return;
-    }
-    const normalized = {
-      label: newCard.label.trim(),
-      holder: newCard.holder.trim(),
-      expiry: newCard.expiry.trim(),
-    };
-    let updatedCards;
-    if (editingCardId) {
-      updatedCards = cards.map((c) =>
-          c.id === editingCardId ? { ...c, ...normalized } : c
-      );
-      setCards(updatedCards);
-      setEditingCardId(null);
-    } else {
-      updatedCards = [...cards, { id: Date.now(), ...normalized }];
-      setCards(updatedCards);
-    }
-    saveCardsToLocalStorage(updatedCards);
-    setNewCard({ label: "", holder: "", expiry: "" });
-    alert("Card saved successfully!");
-  };
-
-  const handleDeleteCard = (id) => {
-    const updatedCards = cards.filter((c) => c.id !== id);
-    setCards(updatedCards);
-    saveCardsToLocalStorage(updatedCards);
-    if (editingCardId === id) handleCancelEditCard();
-    alert("Card deleted successfully!");
-  };
 
   if (loading) {
     return (
@@ -1086,169 +1010,6 @@ export default function Profile() {
                   >
                     Submit Request
                   </button>
-                </form>
-              </div>
-            </div>
-          </section>
-
-          {/* Payment methods */}
-          <section className="profile-card profile-card-grid">
-            <div>
-              <header className="profile-card-header">
-                <h2>Payment Methods</h2>
-              </header>
-              <div className="profile-card-body">
-                <ul className="profile-list">
-                  {cards.map((card) => (
-                      <li key={card.id} className="profile-list-item">
-                        <div className="profile-list-item-header">
-                          <strong>{card.label}</strong>
-                          <span>{card.expiry}</span>
-                        </div>
-                        <p className="profile-list-item-description">
-                          Cardholder: {card.holder}
-                        </p>
-                        <div className="profile-list-item-actions">
-                          <button
-                              className="profile-link-button"
-                              type="button"
-                              onClick={() => handleEditCard(card)}
-                          >
-                            Edit Card
-                          </button>
-                          <button
-                              type="button"
-                              className="profile-icon-button"
-                              aria-label="Delete card"
-                              onClick={() => handleDeleteCard(card.id)}
-                          >
-                            <svg
-                                width="18"
-                                height="18"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                            >
-                              <path
-                                  d="M5 7h14M9 7v10m6-10v10M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"
-                                  stroke="currentColor"
-                                  strokeWidth="1.6"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                              />
-                              <path
-                                  d="M8 7h8l-.7 11a1 1 0 0 1-1 .9h-4.6a1 1 0 0 1-1-.9L8 7Z"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.4"
-                                  strokeLinejoin="round"
-                              />
-                            </svg>
-                          </button>
-                        </div>
-                      </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            {/* add / edit card */}
-            <div>
-              <header className="profile-card-header">
-                <h3>{isEditingCard ? "Edit Card" : "Add Credit/Debit Card"}</h3>
-              </header>
-              <div className="profile-card-body">
-                <form className="profile-form" onSubmit={handleNewCardSubmit}>
-                  <label className="profile-field">
-                    <span>Card Number</span>
-                    <input
-                        type="text"
-                        value={newCard.label}
-                        onChange={(e) => {
-                          // Only allow digits, max 16 characters
-                          let value = e.target.value.replace(/\D/g, "").slice(0, 16);
-
-                          // Add space after every 4 digits
-                          value = value.replace(/(.{4})/g, "$1 ").trim();
-
-                          setNewCard((p) => ({ ...p, label: value }));
-                        }}
-                        placeholder="1234 5678 9012 3456"
-                        required
-                    />
-                  </label>
-                  <label className="profile-field">
-                    <span>Cardholder Name</span>
-                    <input
-                        type="text"
-                        value={newCard.holder}
-                        onChange={(e) =>
-                            setNewCard((p) => ({ ...p, holder: e.target.value }))
-                        }
-                        placeholder="Name on card"
-                        required
-                    />
-                  </label>
-                  <label className="profile-field">
-                    <span>Expiry Date</span>
-                    <input
-                        type="text"
-                        value={newCard.expiry}
-                        onChange={(e) => {
-                          // Only allow digits
-                          let value = e.target.value.replace(/\D/g, "");
-
-                          // Format as MM/YY (max 4 digits)
-                          if (value.length > 2) {
-                            value = value.slice(0, 2) + "/" + value.slice(2, 4);
-                          }
-
-                          setNewCard((p) => ({ ...p, expiry: value }));
-                        }}
-                        placeholder="MM/YY"
-                        maxLength={5}
-                        required
-                    />
-                  </label>
-                  <div
-                      className="profile-form-actions"
-                      style={{
-                        display: "flex",
-                        gap: "0.75rem",
-                        alignItems: "center",
-                      }}
-                  >
-                    <button
-                        type="submit"
-                        className="profile-button"
-                        style={{
-                          padding: "0.5rem 1.25rem",
-                          fontSize: "0.875rem",
-                          flex: isEditingCard ? "1" : "none",
-                        }}
-                    >
-                      {isEditingCard ? "Update Card" : "Save Card"}
-                    </button>
-                    {isEditingCard && (
-                        <button
-                            type="button"
-                            className="profile-link-button secondary"
-                            onClick={handleCancelEditCard}
-                            style={{
-                              padding: "0.5rem 1rem",
-                              fontSize: "0.875rem",
-                              border: "1px solid #e5e5e5",
-                              borderRadius: "4px",
-                              backgroundColor: "#fff",
-                              color: "#301813",
-                              cursor: "pointer",
-                              whiteSpace: "nowrap",
-                            }}
-                        >
-                          Cancel
-                        </button>
-                    )}
-                  </div>
                 </form>
               </div>
             </div>

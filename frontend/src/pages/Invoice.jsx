@@ -1,7 +1,7 @@
 // src/pages/Invoice.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { meRequest, getOrderDetail } from "../lib/api";
+import { meRequest, getOrderDetail, logoutRequest } from "../lib/api";
 import { useCartDrawer } from "../context/CartDrawerContext";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
@@ -101,7 +101,7 @@ export default function Invoice() {
 
   return (
     <div className="home-page">
-      <header className="category-topbar">
+      <header className="category-topbar no-print">
         <button className="category-brand" onClick={() => navigate("/home")}>
           TIDL
         </button>
@@ -367,12 +367,11 @@ export default function Invoice() {
         </div>
 
         {/* Action Buttons */}
-        <div style={{ 
+        <div className="invoice-actions" style={{ 
           display: "flex", 
           gap: "1rem", 
           justifyContent: "center", 
-          marginTop: "2rem",
-          printDisplay: "none"
+          marginTop: "2rem"
         }}>
           <button
             onClick={handlePrint}
@@ -408,13 +407,49 @@ export default function Invoice() {
       </main>
 
       <style>{`
+        @page {
+          margin: 0;
+          size: A4;
+        }
         @media print {
-          .home-topbar,
-          button {
+          header,
+          .no-print,
+          .no-print *,
+          header.category-topbar,
+          .category-topbar,
+          .category-topbar *,
+          button,
+          .category-actions,
+          .category-actions *,
+          nav,
+          nav *,
+          .category-nav,
+          .category-nav *,
+          .category-icon,
+          .login-topbar-link,
+          .home-signin,
+          .home-menu,
+          .details-menu,
+          .invoice-actions,
+          .invoice-actions * {
             display: none !important;
+            visibility: hidden !important;
           }
           body {
-            background: white;
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          html {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          main {
+            padding: 1rem !important;
+            margin: 0 !important;
+            max-width: 100% !important;
           }
         }
       `}</style>
