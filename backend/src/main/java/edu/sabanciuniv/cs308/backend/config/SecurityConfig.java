@@ -71,6 +71,7 @@ public class SecurityConfig {
                     "/api/users/me/payment-methods/**",
                         "/api/reviews"
                 ).authenticated()
+                .requestMatchers("/api/admin/**").authenticated()
                 .anyRequest().permitAll()
             )
             .authenticationProvider(authenticationProvider())
