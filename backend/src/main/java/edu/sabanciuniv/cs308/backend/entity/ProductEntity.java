@@ -28,6 +28,10 @@ public class ProductEntity {
     private String fabric;   // "95% cotton, 5% elastane"
     private String madeIn;   // "Turkey"
 
+    // Yeni eklenen alanlar
+    private String warrantyStatus;     // Örn: "24 months"
+    private String distributorInfo;    // Örn: "ABC Distribution GmbH"
+
     @Data
     public static class Variant {
         private String sku;        // Benzersiz stok kodu, örn: "ELB-BEYAZ-M"
