@@ -25,8 +25,9 @@ export function meRequest() {
   return api.get("/users/me");
 }
 
-export function updateProfile(name, homeAddress, emailAddress) {
-  return api.put("/users/me", { name, homeAddress, emailAddress });
+export function updateProfile(profile) {
+  // profile = { name, homeAddress, emailAddress, addresses: [...] }
+  return api.put("/users/me", profile);
 }
 
 export function logoutRequest() {
@@ -77,14 +78,14 @@ export function getPaymentMethods() {
 }
 
 export function addPaymentMethod(
-  brand,
-  last4,
-  expMonth,
-  expYear,
-  holderName,
-  nickname,
-  isDefault = false,
-  token = ""
+    brand,
+    last4,
+    expMonth,
+    expYear,
+    holderName,
+    nickname,
+    isDefault = false,
+    token = ""
 ) {
   return api.post("/users/me/payment-methods", {
     brand,
@@ -99,12 +100,12 @@ export function addPaymentMethod(
 }
 
 export function updatePaymentMethod(
-  pmId,
-  holderName,
-  expMonth,
-  expYear,
-  nickname,
-  isDefault
+    pmId,
+    holderName,
+    expMonth,
+    expYear,
+    nickname,
+    isDefault
 ) {
   return api.put(`/users/me/payment-methods/${pmId}`, {
     holderName,
@@ -175,12 +176,12 @@ export function addToBasket({ userId, cartId, productId, sku, quantity }) {
  *   updateBasketItem({ userId, cartId, productId, sku, quantity })
  */
 export function updateBasketItem({
-  userId,
-  cartId,
-  productId,
-  sku,
-  quantity,
-}) {
+                                   userId,
+                                   cartId,
+                                   productId,
+                                   sku,
+                                   quantity,
+                                 }) {
   const body = { productId, sku, quantity };
   const params = buildBasketParams(userId, cartId);
   return api.put("/basket/items", body, { params });
@@ -197,10 +198,10 @@ export function removeBasketItem({ userId, cartId, productId, sku }) {
 }
 
 export const getReviewsForProduct = (productId) =>
-  api.get(`/reviews/product/${productId}`);
+    api.get(`/reviews/product/${productId}`);
 
 export const createReview = (payload) =>
-  api.post("/reviews", payload);
+    api.post("/reviews", payload);
 
 
 // ===================================================
@@ -215,12 +216,12 @@ export function checkout(cartId, shipping, billing, paymentDetails, useSameAddre
   const expiryParts = paymentDetails.expiryDate?.split('/') || [];
   const cardExpMonth = parseInt(expiryParts[0]) || 0;
   const cardExpYear = parseInt(expiryParts[1]) ? 2000 + parseInt(expiryParts[1]) : 0;
-  
+
   // Determine card brand (simple detection)
   let cardBrand = 'VISA';
   if (cardNumber.startsWith('5')) cardBrand = 'MASTERCARD';
   if (cardNumber.startsWith('3')) cardBrand = 'AMEX';
-  
+
   return api.post("/checkout", {
     cartId: cartId,
     // Shipping address

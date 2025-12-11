@@ -4,11 +4,11 @@ import { useNavigate } from "react-router-dom";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
 import { useCartDrawer } from "../context/CartDrawerContext.jsx";
-import { 
-  logoutRequest, 
-  meRequest, 
-  getAccountDetails, 
-  updateAccount, 
+import {
+  logoutRequest,
+  meRequest,
+  getAccountDetails,
+  updateAccount,
   changePassword,
   getOrders,
   getReturns,
@@ -21,7 +21,11 @@ const formatDate = (dateString) => {
   if (!dateString) return "";
   try {
     const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+    });
   } catch {
     return dateString;
   }
@@ -31,7 +35,10 @@ const formatDate = (dateString) => {
 const formatCurrency = (amount) => {
   if (!amount) return "₺0,00";
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return `₺${num.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `₺${num.toLocaleString("tr-TR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 };
 
 export default function Profile() {
@@ -47,17 +54,34 @@ export default function Profile() {
   const [error, setError] = useState(null);
 
   // profile states
-  const [accountDetails, setAccountDetails] = useState({ email: "", phoneNumber: "", password: "••••••••" });
+  const [accountDetails, setAccountDetails] = useState({
+    email: "",
+    phoneNumber: "",
+    password: "••••••••",
+  });
   const [orders, setOrders] = useState([]);
+
+  // ⭐ address state: label + line1 + city + district + zipCode
   const [addresses, setAddresses] = useState([]);
-  const [newAddress, setNewAddress] = useState({ label: "", details: "" });
+  const [newAddress, setNewAddress] = useState({
+    label: "",
+    line1: "",
+    city: "",
+    district: "",
+    zipCode: "",
+  });
   const [editingAddressId, setEditingAddressId] = useState(null);
+
   const [returns, setReturns] = useState([]);
   const [newReturn, setNewReturn] = useState({ orderId: "", reason: "" });
   const [cards, setCards] = useState([]);
   const [newCard, setNewCard] = useState({ label: "", holder: "", expiry: "" });
   const [editingCardId, setEditingCardId] = useState(null);
-  const [passwordChange, setPasswordChange] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [passwordChange, setPasswordChange] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
   const { openCart } = useCartDrawer();
   const isEditingCard = editingCardId !== null;
 
@@ -72,7 +96,11 @@ export default function Profile() {
         const userRes = await meRequest();
         const userData = userRes.data;
         const userId = userData.id;
-        setUser({ id: userData.id, name: userData.name || "User", email: userData.emailAddress });
+        setUser({
+          id: userData.id,
+          name: userData.name || "User",
+          email: userData.emailAddress,
+        });
 
         // Fetch account details (with error handling)
         let accountData = {};
@@ -98,13 +126,15 @@ export default function Profile() {
         try {
           const ordersRes = await getOrders(0, 100);
           const ordersData = ordersRes.data?.content || [];
-          setOrders(ordersData.map(order => ({
-            id: order.id,
-            date: formatDate(order.createdAt),
-            status: order.status || "UNKNOWN",
-            total: formatCurrency(order.grandTotal),
-            items: [],
-          })));
+          setOrders(
+              ordersData.map((order) => ({
+                id: order.id,
+                date: formatDate(order.createdAt),
+                status: order.status || "UNKNOWN",
+                total: formatCurrency(order.grandTotal),
+                items: [],
+              }))
+          );
         } catch (err) {
           console.error("Error fetching orders:", err);
           setOrders([]);
@@ -114,44 +144,39 @@ export default function Profile() {
         try {
           const returnsRes = await getReturns(0, 100);
           const returnsData = returnsRes.data?.content || [];
-          setReturns(returnsData.map(ret => ({
-            id: ret.id,
-            orderId: ret.orderId,
-            date: formatDate(ret.createdAt),
-            status: ret.status || "REQUESTED",
-            reason: ret.reason || "",
-          })));
+          setReturns(
+              returnsData.map((ret) => ({
+                id: ret.id,
+                orderId: ret.orderId,
+                date: formatDate(ret.createdAt),
+                status: ret.status || "REQUESTED",
+                reason: ret.reason || "",
+              }))
+          );
         } catch (err) {
           console.error("Error fetching returns:", err);
           setReturns([]);
         }
 
-        // Parse home address if available
-        const addressesList = [];
-        if (accountData.homeAddress) {
-          addressesList.push({ id: 1, label: "Home", details: accountData.homeAddress });
-        }
-        
-        // Also load additional addresses from localStorage
+        // ⭐ Adresleri backend'ten gelen userData.addresses alanından oku
+        const addressesFromBackend = (userData.addresses || []).map((addr) => ({
+          id: addr.id,
+          label: addr.label || "",
+          line1: addr.line1 || "",
+          city: addr.city || "",
+          district: addr.state || "",
+          zipCode: addr.zipCode || "",
+        }));
+
+        setAddresses(addressesFromBackend);
+
+        // checkout için cache
         if (userId) {
           try {
-            const savedAddresses = localStorage.getItem(`addresses_${userId}`);
-            if (savedAddresses) {
-              const parsed = JSON.parse(savedAddresses);
-              // Add addresses that are not Home (id !== 1)
-              addressesList.push(...parsed.filter(addr => addr.id !== 1));
-            }
-          } catch (err) {
-            console.error("Error loading addresses from localStorage:", err);
-          }
-        }
-        
-        setAddresses(addressesList);
-        
-        // Save addresses to localStorage for checkout page
-        if (userId) {
-          try {
-            localStorage.setItem(`addresses_${userId}`, JSON.stringify(addressesList));
+            localStorage.setItem(
+                `addresses_${userId}`,
+                JSON.stringify(addressesFromBackend)
+            );
           } catch (err) {
             console.error("Error saving addresses to localStorage:", err);
           }
@@ -177,7 +202,9 @@ export default function Profile() {
         } else {
           // For other errors, still show the page but with a warning
           setError(null);
-          console.warn("Some data could not be loaded, but showing profile page anyway.");
+          console.warn(
+              "Some data could not be loaded, but showing profile page anyway."
+          );
         }
       } finally {
         setLoading(false);
@@ -185,10 +212,14 @@ export default function Profile() {
     };
 
     fetchUserData();
-  }, []);
+  }, [navigate]);
 
   const handleLogout = async () => {
-    try { await logoutRequest(); } catch (err) { console.log("logout error (ignored):", err); }
+    try {
+      await logoutRequest();
+    } catch (err) {
+      console.log("logout error (ignored):", err);
+    }
     navigate("/login");
   };
 
@@ -205,7 +236,10 @@ export default function Profile() {
       alert("Account updated successfully!");
     } catch (err) {
       console.error("Error updating account:", err);
-      alert(err.response?.data?.message || "Failed to update account. Please try again.");
+      alert(
+          err.response?.data?.message ||
+          "Failed to update account. Please try again."
+      );
     }
   };
 
@@ -220,178 +254,153 @@ export default function Profile() {
       return;
     }
     try {
-      await changePassword(passwordChange.currentPassword, passwordChange.newPassword);
+      await changePassword(
+          passwordChange.currentPassword,
+          passwordChange.newPassword
+      );
       alert("Password changed successfully!");
-      setPasswordChange({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      setPasswordChange({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
     } catch (err) {
       console.error("Error changing password:", err);
-      alert(err.response?.data?.message || "Failed to change password. Please try again.");
+      alert(
+          err.response?.data?.message ||
+          "Failed to change password. Please try again."
+      );
     }
   };
+
+  // ⭐ Backend ile adres listesini senkronize eden helper
+  const syncAddressesWithBackend = async (updatedAddresses) => {
+    try {
+      const meRes = await meRequest();
+      const userData = meRes.data;
+
+      await updateProfile({
+        name: userData.name,
+        emailAddress: userData.emailAddress,
+        homeAddress: userData.homeAddress, // kullanmıyorsan backend ignore eder
+        addresses: updatedAddresses.map((a) => ({
+          id: a.id,
+          label: a.label,
+          fullName: "",
+          line1: a.line1,
+          line2: "",
+          city: a.city,
+          state: a.district,
+          country: "Turkey",
+          zipCode: a.zipCode,
+          isDefault: false,
+          phoneNumber: "",
+        })),
+      });
+
+      setAddresses(updatedAddresses);
+
+      if (userData.id) {
+        try {
+          localStorage.setItem(
+              `addresses_${userData.id}`,
+              JSON.stringify(updatedAddresses)
+          );
+        } catch (err) {
+          console.error("Error saving addresses to localStorage:", err);
+        }
+      }
+    } catch (err) {
+      console.error("Error syncing addresses with backend:", err);
+      alert(
+          err.response?.data?.message ||
+          "Failed to save address. Please try again."
+      );
+    }
+  };
+
   const handleEditAddress = (address) => {
     if (!address || !address.id) {
       console.error("Invalid address object:", address);
       return;
     }
-    console.log("Editing address:", address);
     setEditingAddressId(address.id);
-    setNewAddress({ 
-      label: address.label || "", 
-      details: address.details || "" 
+    setNewAddress({
+      label: address.label || "",
+      line1: address.line1 || "",
+      city: address.city || "",
+      district: address.district || "",
+      zipCode: address.zipCode || "",
     });
   };
 
   const handleCancelEditAddress = () => {
     setEditingAddressId(null);
-    setNewAddress({ label: "", details: "" });
+    setNewAddress({
+      label: "",
+      line1: "",
+      city: "",
+      district: "",
+      zipCode: "",
+    });
   };
 
+  // ⭐ Silme: sadece listeyi filtrele + backend'e gönder
   const handleDeleteAddress = async (id) => {
-    const address = addresses.find(a => a.id === id);
-    if (!address) return;
-    
-    // If it's the home address, clear it
-    if (address.label === "Home") {
-      try {
-        const userRes = await meRequest();
-        const userData = userRes.data;
-        await updateProfile(userData.name, "", userData.emailAddress);
-        const updatedAddresses = addresses.filter((a) => a.id !== id);
-        setAddresses(updatedAddresses);
-        
-        // Update localStorage
-        if (userData.id) {
-          try {
-            localStorage.setItem(`addresses_${userData.id}`, JSON.stringify(updatedAddresses));
-          } catch (err) {
-            console.error("Error updating localStorage:", err);
-          }
-        }
-        
-        alert("Address deleted successfully!");
-      } catch (err) {
-        console.error("Error deleting address:", err);
-        alert("Failed to delete address. Please try again.");
-      }
-    } else {
-      setAddresses((prev) => {
-        const updated = prev.filter((a) => a.id !== id);
-        // Update localStorage
-        if (user && user.id) {
-          try {
-            localStorage.setItem(`addresses_${user.id}`, JSON.stringify(updated));
-          } catch (err) {
-            console.error("Error updating localStorage:", err);
-          }
-        }
-        return updated;
-      });
-      
-      alert("Address deleted successfully!");
-    }
+    const updated = addresses.filter((a) => a.id !== id);
+    await syncAddressesWithBackend(updated);
+    alert("Address deleted successfully!");
   };
 
+  // ⭐ Ekle / güncelle: backend tabanlı
   const handleNewAddressSubmit = async (event) => {
     event.preventDefault();
-    if (!newAddress.label.trim() || !newAddress.details.trim()) {
-      alert("Please fill in all fields!");
+
+    const trimmed = {
+      label: newAddress.label.trim(),
+      line1: newAddress.line1.trim(),
+      city: newAddress.city.trim(),
+      district: newAddress.district.trim(),
+      zipCode: newAddress.zipCode.trim(),
+    };
+
+    if (!trimmed.label || !trimmed.line1 || !trimmed.city || !trimmed.zipCode) {
+      alert("Please fill in all required fields!");
       return;
     }
 
-    try {
-      const userRes = await meRequest();
-      const userData = userRes.data;
-      
-      if (editingAddressId) {
-        // Update existing address
-        if (newAddress.label === "Home") {
-          // Update homeAddress in backend
-          await updateProfile(userData.name, newAddress.details.trim(), userData.emailAddress);
-          setAddresses((prev) => {
-            const updated = prev.map((a) => 
-              a.id === editingAddressId 
-                ? { ...a, label: newAddress.label.trim(), details: newAddress.details.trim() }
-                : a
-            );
-            // Update localStorage
-            if (userData.id) {
-              try {
-                localStorage.setItem(`addresses_${userData.id}`, JSON.stringify(updated));
-              } catch (err) {
-                console.error("Error updating localStorage:", err);
-              }
-            }
-            return updated;
-          });
-        } else {
-          // For other addresses, just update locally (since backend only supports homeAddress)
-          setAddresses((prev) => {
-            const updated = prev.map((a) => 
-              a.id === editingAddressId 
-                ? { ...a, label: newAddress.label.trim(), details: newAddress.details.trim() }
-                : a
-            );
-            // Update localStorage
-            if (userData.id) {
-              try {
-                localStorage.setItem(`addresses_${userData.id}`, JSON.stringify(updated));
-              } catch (err) {
-                console.error("Error updating address in localStorage:", err);
-              }
-            }
-            return updated;
-          });
-        }
-        alert("Address updated successfully!");
-      } else {
-        // Add new address
-        if (newAddress.label === "Home") {
-          // Update homeAddress in backend
-          await updateProfile(userData.name, newAddress.details.trim(), userData.emailAddress);
-          const homeAddr = { id: 1, label: "Home", details: newAddress.details.trim() };
-          setAddresses([homeAddr]);
-          
-          // Update localStorage
-          if (userData.id) {
-            try {
-              // Get other addresses from localStorage
-              const savedAddresses = localStorage.getItem(`addresses_${userData.id}`);
-              let allAddresses = [homeAddr];
-              if (savedAddresses) {
-                const parsed = JSON.parse(savedAddresses);
-                allAddresses.push(...parsed.filter(addr => addr.id !== 1));
-              }
-              localStorage.setItem(`addresses_${userData.id}`, JSON.stringify(allAddresses));
-            } catch (err) {
-              console.error("Error updating localStorage:", err);
-            }
-          }
-        } else {
-          // For other addresses, add locally
-          const newAddr = { id: Date.now(), label: newAddress.label.trim(), details: newAddress.details.trim() };
-          setAddresses((prev) => {
-            const updated = [...prev, newAddr];
-            // Save to localStorage
-            if (userData.id) {
-              try {
-                localStorage.setItem(`addresses_${userData.id}`, JSON.stringify(updated));
-              } catch (err) {
-                console.error("Error saving address to localStorage:", err);
-              }
-            }
-            return updated;
-          });
-        }
-        alert("Address saved successfully!");
-      }
-      
-      setNewAddress({ label: "", details: "" });
-      setEditingAddressId(null);
-    } catch (err) {
-      console.error("Error saving address:", err);
-      alert(err.response?.data?.message || "Failed to save address. Please try again.");
+    let updated;
+
+    if (editingAddressId) {
+      // mevcut adresi güncelle
+      updated = addresses.map((a) =>
+          a.id === editingAddressId ? { ...a, ...trimmed } : a
+      );
+    } else {
+      // yeni adres
+      const newAddr = {
+        id: Date.now().toString(), // basit unique id
+        ...trimmed,
+      };
+      updated = [...addresses, newAddr];
     }
+
+    await syncAddressesWithBackend(updated);
+
+    alert(
+        editingAddressId ? "Address updated successfully!" : "Address saved successfully!"
+    );
+
+    setNewAddress({
+      label: "",
+      line1: "",
+      city: "",
+      district: "",
+      zipCode: "",
+    });
+    setEditingAddressId(null);
   };
+
   const handleNewReturnSubmit = async (event) => {
     event.preventDefault();
     if (!newReturn.orderId.trim() || !newReturn.reason.trim()) {
@@ -400,40 +409,56 @@ export default function Profile() {
     }
     try {
       // For now, we'll send empty orderItemIds array - backend may require specific item IDs
-      const response = await createReturn(newReturn.orderId.trim(), [], newReturn.reason.trim());
+      const response = await createReturn(
+          newReturn.orderId.trim(),
+          [],
+          newReturn.reason.trim()
+      );
       console.log("Return request response:", response);
       alert("Return request submitted successfully!");
-      
+
       // Refresh returns list
       const returnsRes = await getReturns(0, 100);
       const returnsData = returnsRes.data.content || [];
-      setReturns(returnsData.map(ret => ({
-        id: ret.id,
-        orderId: ret.orderId,
-        date: formatDate(ret.createdAt),
-        status: ret.status || "REQUESTED",
-        reason: ret.reason || "",
-      })));
-      
+      setReturns(
+          returnsData.map((ret) => ({
+            id: ret.id,
+            orderId: ret.orderId,
+            date: formatDate(ret.createdAt),
+            status: ret.status || "REQUESTED",
+            reason: ret.reason || "",
+          }))
+      );
+
       setNewReturn({ orderId: "", reason: "" });
     } catch (err) {
       console.error("Error creating return:", err);
       console.error("Error response:", err.response);
-      const errorMessage = err.response?.data?.message || err.message || "Failed to submit return request. Please try again.";
+      const errorMessage =
+          err.response?.data?.message ||
+          err.message ||
+          "Failed to submit return request. Please try again.";
       alert(errorMessage);
     }
   };
+
   const handleEditCard = (card) => {
     setEditingCardId(card.id);
     setNewCard({ label: card.label, holder: card.holder, expiry: card.expiry });
   };
-  const handleCancelEditCard = () => { setEditingCardId(null); setNewCard({ label: "", holder: "", expiry: "" }); };
-  
+  const handleCancelEditCard = () => {
+    setEditingCardId(null);
+    setNewCard({ label: "", holder: "", expiry: "" });
+  };
+
   // Save cards to localStorage whenever cards change
   const saveCardsToLocalStorage = (cardsToSave) => {
     if (user && user.id) {
       try {
-        localStorage.setItem(`paymentMethods_${user.id}`, JSON.stringify(cardsToSave));
+        localStorage.setItem(
+            `paymentMethods_${user.id}`,
+            JSON.stringify(cardsToSave)
+        );
       } catch (err) {
         console.error("Error saving payment methods to localStorage:", err);
       }
@@ -442,14 +467,24 @@ export default function Profile() {
 
   const handleNewCardSubmit = (event) => {
     event.preventDefault();
-    if (!newCard.label.trim() || !newCard.holder.trim() || !newCard.expiry.trim()) {
+    if (
+        !newCard.label.trim() ||
+        !newCard.holder.trim() ||
+        !newCard.expiry.trim()
+    ) {
       alert("Please fill in all fields!");
       return;
     }
-    const normalized = { label: newCard.label.trim(), holder: newCard.holder.trim(), expiry: newCard.expiry.trim() };
+    const normalized = {
+      label: newCard.label.trim(),
+      holder: newCard.holder.trim(),
+      expiry: newCard.expiry.trim(),
+    };
     let updatedCards;
     if (editingCardId) {
-      updatedCards = cards.map((c) => (c.id === editingCardId ? { ...c, ...normalized } : c));
+      updatedCards = cards.map((c) =>
+          c.id === editingCardId ? { ...c, ...normalized } : c
+      );
       setCards(updatedCards);
       setEditingCardId(null);
     } else {
@@ -460,7 +495,7 @@ export default function Profile() {
     setNewCard({ label: "", holder: "", expiry: "" });
     alert("Card saved successfully!");
   };
-  
+
   const handleDeleteCard = (id) => {
     const updatedCards = cards.filter((c) => c.id !== id);
     setCards(updatedCards);
@@ -471,529 +506,765 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="home-page">
-        <div style={{ padding: "2rem", textAlign: "center" }}>Loading...</div>
-      </div>
+        <div className="home-page">
+          <div style={{ padding: "2rem", textAlign: "center" }}>Loading...</div>
+        </div>
     );
   }
 
   if (error) {
     return (
-      <div className="home-page">
-        <div style={{ padding: "2rem", textAlign: "center", color: "red" }}>{error}</div>
-      </div>
+        <div className="home-page">
+          <div
+              style={{ padding: "2rem", textAlign: "center", color: "red" }}
+          >
+            {error}
+          </div>
+        </div>
     );
   }
 
   return (
       <div className="category-page">
-    <header className="category-topbar">
-      <button className="category-brand" onClick={() => navigate("/home")}>
-        TIDL
-      </button>
-      <nav className="category-nav">
-        <button
-          onClick={() => navigate("/category/sweatshirts")}
-          className="category-nav-item category-nav-item--active"
-        >
-          SWEATSHIRTS
-        </button>
-        <button
-          onClick={() => navigate("/category/shirts")}
-          className="category-nav-item"
-        >
-          SHIRTS
-        </button>
-        <button
-          onClick={() => navigate("/category/pants")}
-          className="category-nav-item"
-        >
-          PANTS
-        </button>
-        <button
-          onClick={() => navigate("/shop-the-look")}
-          className="category-nav-item"
-        >
-          SHOP THE LOOK
-        </button>
-      </nav>
+        <header className="category-topbar">
+          <button className="category-brand" onClick={() => navigate("/home")}>
+            TIDL
+          </button>
+          <nav className="category-nav">
+            <button
+                onClick={() => navigate("/category/sweatshirts")}
+                className="category-nav-item category-nav-item--active"
+            >
+              SWEATSHIRTS
+            </button>
+            <button
+                onClick={() => navigate("/category/shirts")}
+                className="category-nav-item"
+            >
+              SHIRTS
+            </button>
+            <button
+                onClick={() => navigate("/category/pants")}
+                className="category-nav-item"
+            >
+              PANTS
+            </button>
+            <button
+                onClick={() => navigate("/shop-the-look")}
+                className="category-nav-item"
+            >
+              SHOP THE LOOK
+            </button>
+          </nav>
 
-      <div className="category-actions">
-        <img
-          src={searchIcon}
-          alt="Search"
-          className="category-icon"
-          onClick={() => navigate("/search")}
-        />
-        {user ? (
-          <span
-            className="login-topbar-link"
-            style={{ cursor: "default", marginRight: "0.5rem" }}
-          >
-            {`HEY! ${user.name}`}
-          </span>
-        ) : (
-          <span
-            className="home-signin"
-            onClick={() => navigate("/login")}
-            style={{ marginRight: "0.5rem", cursor: "pointer" }}
-          >
-            SIGN IN
-          </span>
-        )}
-
-        {user && (
-          <div
-            className="home-menu"
-            onClick={() => setShowProfileMenu((p) => !p)}   
-            style={{ marginRight: "0.5rem" }}
-          >
-            <span />
-            <span />
-            <span />
-            {showProfileMenu && (                         
-              <div className="details-menu">
-                <button className="details-menu-item" onClick={go("/profile")}>
-                  Details
-                </button>
-                <button className="details-menu-item" onClick={go("/wishlist")}>
-                    Wishlist  
-                </button>
-                <button className="details-menu-item" onClick={handleLogout}>
-                  Log-out
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        <img
-          src={bagIcon}
-          alt="Cart"
-          className="category-icon"
-          onClick={openCart} 
-        />
-      </div>
-    </header>
-
-
-
-      {/* profile content */}
-      <main className="profile-wrapper">
-        <section className="profile-hero">
-          <h1 className="profile-heading">Hi, {user ? user.name : "there"}!</h1>
-          <p className="profile-subheading">
-            Manage your orders, account information, and saved preferences all in one place.
-          </p>
-        </section>
-
-        {/* Orders */}
-        <section className="profile-card">
-          <header className="profile-card-header">
-            <h2>Orders</h2>
-            <p>Orders with details</p>
-          </header>
-          <div className="profile-card-body">
-            {orders.length === 0 ? (
-              <p style={{ color: "#666" }}>No orders found.</p>
+          <div className="category-actions">
+            <img
+                src={searchIcon}
+                alt="Search"
+                className="category-icon"
+                onClick={() => navigate("/search")}
+            />
+            {user ? (
+                <span
+                    className="login-topbar-link"
+                    style={{ cursor: "default", marginRight: "0.5rem" }}
+                >
+              {`HEY! ${user.name}`}
+            </span>
             ) : (
-              <ul className="profile-list">
-                {orders.map((order) => (
-                  <li key={order.id} className="profile-list-item">
-                    <div className="profile-list-item-header">
-                      <span className="profile-pill">{order.status}</span>
-                      <strong>{order.id}</strong>
-                    </div>
-                    <div className="profile-list-item-meta">
-                      <span>{order.date}</span>
-                      <span>{order.total}</span>
-                    </div>
-                    {order.items && order.items.length > 0 && (
-                      <p className="profile-list-item-description">{order.items.join(", ")}</p>
-                    )}
-                  </li>
-                ))}
-              </ul>
+                <span
+                    className="home-signin"
+                    onClick={() => navigate("/login")}
+                    style={{ marginRight: "0.5rem", cursor: "pointer" }}
+                >
+              SIGN IN
+            </span>
             )}
-          </div>
-        </section>
 
-        {/* Account details */}
-        <section className="profile-card">
-          <header className="profile-card-header">
-            <h2>Account Details</h2>
-          </header>
-          <div className="profile-card-body">
-            <form className="profile-form" onSubmit={handleAccountSubmit}>
-              <label className="profile-field">
-                <span>Email</span>
-                <input type="email" name="email" value={accountDetails.email} onChange={handleAccountChange} required />
-              </label>
-              <label className="profile-field">
-                <span>Phone Number</span>
-                <input type="tel" name="phoneNumber" value={accountDetails.phoneNumber} onChange={handleAccountChange} required />
-              </label>
-              <button type="submit" className="profile-button">Save Changes</button>
-            </form>
-          </div>
-        </section>
-
-        {/* Change Password */}
-        <section className="profile-card">
-          <header className="profile-card-header">
-            <h2>Change Password</h2>
-          </header>
-          <div className="profile-card-body">
-            <form className="profile-form" onSubmit={handlePasswordChange}>
-              <label className="profile-field">
-                <span>Current Password</span>
-                <input 
-                  type="password" 
-                  value={passwordChange.currentPassword} 
-                  onChange={(e) => setPasswordChange(prev => ({ ...prev, currentPassword: e.target.value }))} 
-                  required 
-                />
-              </label>
-              <label className="profile-field">
-                <span>New Password</span>
-                <input 
-                  type="password" 
-                  value={passwordChange.newPassword} 
-                  onChange={(e) => setPasswordChange(prev => ({ ...prev, newPassword: e.target.value }))} 
-                  required 
-                />
-              </label>
-              <label className="profile-field">
-                <span>Confirm New Password</span>
-                <input 
-                  type="password" 
-                  value={passwordChange.confirmPassword} 
-                  onChange={(e) => setPasswordChange(prev => ({ ...prev, confirmPassword: e.target.value }))} 
-                  required 
-                />
-              </label>
-              <button type="submit" className="profile-button">Change Password</button>
-            </form>
-          </div>
-        </section>
-
-        {/* Addresses */}
-        <section className="profile-card profile-card-grid">
-          <div>
-            <header className="profile-card-header"><h2>Addresses</h2></header>
-            <div className="profile-card-body">
-              <ul className="profile-list">
-                {addresses.map((address) => (
-                  <li key={address.id} className="profile-list-item">
-                    <div className="profile-list-item-header"><strong>{address.label}</strong></div>
-                    <p className="profile-list-item-description">{address.details}</p>
-                    <div className="profile-list-item-actions">
-                      <button 
-                        className="profile-link-button" 
-                        type="button" 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleEditAddress(address);
-                        }}
-                      >
-                        Edit Address
-                      </button>
-                      <button 
-                        type="button" 
-                        className="profile-icon-button" 
-                        aria-label="Delete address" 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleDeleteAddress(address.id);
-                        }}
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M5 7h14M9 7v10m6-10v10M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M8 7h8l-.7 11a1 1 0 0 1-1 .9h-4.6a1 1 0 0 1-1-.9L8 7Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* add new address / edit address */}
-          <div>
-            <header className="profile-card-header">
-              <h3>{editingAddressId ? "Edit Address" : "Add New Address"}</h3>
-              <p>{editingAddressId ? "Update the selected address" : "Store another delivery location"}</p>
-            </header>
-            <div className="profile-card-body">
-              <form className="profile-form" onSubmit={handleNewAddressSubmit}>
-                <label className="profile-field">
-                  <span>Label</span>
-                  <input 
-                    type="text" 
-                    value={newAddress.label} 
-                    onChange={(e) => setNewAddress((p) => ({ ...p, label: e.target.value }))} 
-                    placeholder="Home, Work..." 
-                    required 
-                  />
-                </label>
-                <label className="profile-field">
-                  <span>Address</span>
-                  <textarea 
-                    rows={3} 
-                    value={newAddress.details} 
-                    onChange={(e) => setNewAddress((p) => ({ ...p, details: e.target.value }))} 
-                    placeholder="Street, City, ZIP" 
-                    required 
-                  />
-                </label>
-                <div className="profile-form-actions" style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-                  <button 
-                    type="submit" 
-                    className="profile-button"
-                    style={{ 
-                      padding: "0.5rem 1.25rem",
-                      fontSize: "0.875rem",
-                      flex: editingAddressId ? "1" : "none"
-                    }}
-                  >
-                    {editingAddressId ? "Update Address" : "Save Address"}
-                  </button>
-                  {editingAddressId && (
-                    <button 
-                      type="button" 
-                      className="profile-link-button secondary" 
-                      onClick={handleCancelEditAddress}
-                      style={{
-                        padding: "0.5rem 1rem",
-                        fontSize: "0.875rem",
-                        border: "1px solid #e5e5e5",
-                        borderRadius: "4px",
-                        backgroundColor: "#fff",
-                        color: "#301813",
-                        cursor: "pointer",
-                        whiteSpace: "nowrap"
-                      }}
-                    >
-                      Cancel
-                    </button>
+            {user && (
+                <div
+                    className="home-menu"
+                    onClick={() => setShowProfileMenu((p) => !p)}
+                    style={{ marginRight: "0.5rem" }}
+                >
+                  <span />
+                  <span />
+                  <span />
+                  {showProfileMenu && (
+                      <div className="details-menu">
+                        <button
+                            className="details-menu-item"
+                            onClick={go("/profile")}
+                        >
+                          Details
+                        </button>
+                        <button
+                            className="details-menu-item"
+                            onClick={go("/wishlist")}
+                        >
+                          Wishlist
+                        </button>
+                        <button
+                            className="details-menu-item"
+                            onClick={handleLogout}
+                        >
+                          Log-out
+                        </button>
+                      </div>
                   )}
                 </div>
-              </form>
-            </div>
-          </div>
-        </section>
+            )}
 
-        {/* Returns */}
-        <section className="profile-card profile-card-grid">
-          <div>
+            <img
+                src={bagIcon}
+                alt="Cart"
+                className="category-icon"
+                onClick={openCart}
+            />
+          </div>
+        </header>
+
+        {/* profile content */}
+        <main className="profile-wrapper">
+          <section className="profile-hero">
+            <h1 className="profile-heading">
+              Hi, {user ? user.name : "there"}!
+            </h1>
+            <p className="profile-subheading">
+              Manage your orders, account information, and saved preferences all
+              in one place.
+            </p>
+          </section>
+
+          {/* Orders */}
+          <section className="profile-card">
             <header className="profile-card-header">
-              <h2>Returns</h2>
-              <p>Track previous requests</p>
+              <h2>Orders</h2>
+              <p>Orders with details</p>
             </header>
             <div className="profile-card-body">
-              {returns.length === 0 ? (
-                <p style={{ color: "#666" }}>No return requests found.</p>
+              {orders.length === 0 ? (
+                  <p style={{ color: "#666" }}>No orders found.</p>
               ) : (
-                <ul className="profile-list">
-                  {returns.map((item) => (
-                    <li key={item.id} className="profile-list-item">
-                      <div className="profile-list-item-header">
-                        <strong>{item.orderId}</strong>
-                        <span className="profile-pill muted">{item.status}</span>
-                      </div>
-                      <div className="profile-list-item-meta">
-                        <span>{item.id}</span>
-                        <span>{item.date}</span>
-                      </div>
-                      <p className="profile-list-item-description">Reason: {item.reason}</p>
-                    </li>
-                  ))}
-                </ul>
+                  <ul className="profile-list">
+                    {orders.map((order) => (
+                        <li key={order.id} className="profile-list-item">
+                          <div className="profile-list-item-header">
+                            <span className="profile-pill">{order.status}</span>
+                            <strong>{order.id}</strong>
+                          </div>
+                          <div className="profile-list-item-meta">
+                            <span>{order.date}</span>
+                            <span>{order.total}</span>
+                          </div>
+                          {order.items && order.items.length > 0 && (
+                              <p className="profile-list-item-description">
+                                {order.items.join(", ")}
+                              </p>
+                          )}
+                        </li>
+                    ))}
+                  </ul>
               )}
             </div>
-          </div>
+          </section>
 
-          {/* new return */}
-          <div>
+          {/* Account details */}
+          <section className="profile-card">
             <header className="profile-card-header">
-              <h3>New Return Request</h3>
+              <h2>Account Details</h2>
             </header>
             <div className="profile-card-body">
-              <form className="profile-form" onSubmit={handleNewReturnSubmit}>
+              <form className="profile-form" onSubmit={handleAccountSubmit}>
                 <label className="profile-field">
-                  <span>Order Number</span>
-                  {orders.length > 0 ? (
-                    <select
-                      value={newReturn.orderId}
-                      onChange={(e) => setNewReturn((p) => ({ ...p, orderId: e.target.value }))}
+                  <span>Email</span>
+                  <input
+                      type="email"
+                      name="email"
+                      value={accountDetails.email}
+                      onChange={handleAccountChange}
                       required
-                      style={{ width: "100%", padding: "0.5rem", fontSize: "1rem", border: "1px solid #ccc", borderRadius: "4px" }}
-                    >
-                      <option value="">Select an order...</option>
-                      {orders.map((order) => (
-                        <option key={order.id} value={order.id}>
-                          {order.id} - {order.date} - {order.total}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input 
-                      type="text" 
-                      value={newReturn.orderId} 
-                      onChange={(e) => setNewReturn((p) => ({ ...p, orderId: e.target.value }))} 
-                      placeholder="Enter order ID (e.g., ORD-XXXX)" 
-                      required 
-                    />
-                  )}
-                  {orders.length === 0 && (
-                    <p style={{ fontSize: "0.875rem", color: "#666", marginTop: "0.25rem" }}>
-                      No orders available. Please make an order first.
-                    </p>
-                  )}
-                </label>
-                <label className="profile-field">
-                  <span>Reason</span>
-                  <textarea 
-                    rows={3} 
-                    value={newReturn.reason} 
-                    onChange={(e) => setNewReturn((p) => ({ ...p, reason: e.target.value }))} 
-                    placeholder="Describe the issue" 
-                    required 
                   />
                 </label>
-                <button type="submit" className="profile-button" disabled={orders.length === 0}>
-                  Submit Request
+                <label className="profile-field">
+                  <span>Phone Number</span>
+                  <input
+                      type="tel"
+                      name="phoneNumber"
+                      value={accountDetails.phoneNumber}
+                      onChange={handleAccountChange}
+                      required
+                  />
+                </label>
+                <button type="submit" className="profile-button">
+                  Save Changes
                 </button>
               </form>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* Payment methods */}
-        <section className="profile-card profile-card-grid">
-          <div>
-            <header className="profile-card-header"><h2>Payment Methods</h2></header>
-            <div className="profile-card-body">
-              <ul className="profile-list">
-                {cards.map((card) => (
-                  <li key={card.id} className="profile-list-item">
-                    <div className="profile-list-item-header">
-                      <strong>{card.label}</strong>
-                      <span>{card.expiry}</span>
-                    </div>
-                    <p className="profile-list-item-description">Cardholder: {card.holder}</p>
-                    <div className="profile-list-item-actions">
-                      <button className="profile-link-button" type="button" onClick={() => handleEditCard(card)}>Edit Card</button>
-                      <button type="button" className="profile-icon-button" aria-label="Delete card" onClick={() => handleDeleteCard(card.id)}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M5 7h14M9 7v10m6-10v10M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M8 7h8l-.7 11a1 1 0 0 1-1 .9h-4.6a1 1 0 0 1-1-.9L8 7Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-                        </svg>
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* add / edit card */}
-          <div>
+          {/* Change Password */}
+          <section className="profile-card">
             <header className="profile-card-header">
-              <h3>{isEditingCard ? "Edit Card" : "Add Credit/Debit Card"}</h3>
+              <h2>Change Password</h2>
             </header>
             <div className="profile-card-body">
-              <form className="profile-form" onSubmit={handleNewCardSubmit}>
+              <form className="profile-form" onSubmit={handlePasswordChange}>
                 <label className="profile-field">
-                  <span>Card Number</span>
-                  <input 
-                    type="text" 
-                    value={newCard.label} 
-                    onChange={(e) => {
-                      // Only allow digits, max 16 characters
-                      let value = e.target.value.replace(/\D/g, '').slice(0, 16);
-                      
-                      // Add space after every 4 digits
-                      value = value.replace(/(.{4})/g, '$1 ').trim();
-                      
-                      setNewCard((p) => ({ ...p, label: value }));
-                    }} 
-                    placeholder="1234 5678 9012 3456" 
-                    required 
-                  />
-                </label>
-                <label className="profile-field">
-                  <span>Cardholder Name</span>
-                  <input type="text" value={newCard.holder} onChange={(e) => setNewCard((p) => ({ ...p, holder: e.target.value }))} placeholder="Name on card" required />
-                </label>
-                <label className="profile-field">
-                  <span>Expiry Date</span>
-                  <input 
-                    type="text" 
-                    value={newCard.expiry} 
-                    onChange={(e) => {
-                      // Only allow digits
-                      let value = e.target.value.replace(/\D/g, '');
-                      
-                      // Format as MM/YY (max 4 digits)
-                      if (value.length > 2) {
-                        value = value.slice(0, 2) + '/' + value.slice(2, 4);
+                  <span>Current Password</span>
+                  <input
+                      type="password"
+                      value={passwordChange.currentPassword}
+                      onChange={(e) =>
+                          setPasswordChange((prev) => ({
+                            ...prev,
+                            currentPassword: e.target.value,
+                          }))
                       }
-                      
-                      setNewCard((p) => ({ ...p, expiry: value }));
-                    }} 
-                    placeholder="MM/YY" 
-                    maxLength={5}
-                    required 
+                      required
                   />
                 </label>
-                <div className="profile-form-actions" style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-                  <button 
-                    type="submit" 
-                    className="profile-button"
-                    style={{ 
-                      padding: "0.5rem 1.25rem",
-                      fontSize: "0.875rem",
-                      flex: isEditingCard ? "1" : "none"
-                    }}
-                  >
-                    {isEditingCard ? "Update Card" : "Save Card"}
-                  </button>
-                  {isEditingCard && (
-                    <button 
-                      type="button" 
-                      className="profile-link-button secondary" 
-                      onClick={handleCancelEditCard}
-                      style={{
-                        padding: "0.5rem 1rem",
-                        fontSize: "0.875rem",
-                        border: "1px solid #e5e5e5",
-                        borderRadius: "4px",
-                        backgroundColor: "#fff",
-                        color: "#301813",
-                        cursor: "pointer",
-                        whiteSpace: "nowrap"
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
+                <label className="profile-field">
+                  <span>New Password</span>
+                  <input
+                      type="password"
+                      value={passwordChange.newPassword}
+                      onChange={(e) =>
+                          setPasswordChange((prev) => ({
+                            ...prev,
+                            newPassword: e.target.value,
+                          }))
+                      }
+                      required
+                  />
+                </label>
+                <label className="profile-field">
+                  <span>Confirm New Password</span>
+                  <input
+                      type="password"
+                      value={passwordChange.confirmPassword}
+                      onChange={(e) =>
+                          setPasswordChange((prev) => ({
+                            ...prev,
+                            confirmPassword: e.target.value,
+                          }))
+                      }
+                      required
+                  />
+                </label>
+                <button type="submit" className="profile-button">
+                  Change Password
+                </button>
               </form>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* bottom logout */}
-        <section className="profile-card profile-logout-card">
-          <button className="profile-button secondary logout-button" type="button" onClick={() => navigate("/login")}>
-            Log Out
-          </button>
-        </section>
-      </main>
-    </div>
+          {/* Addresses */}
+          <section className="profile-card profile-card-grid">
+            <div>
+              <header className="profile-card-header">
+                <h2>Addresses</h2>
+              </header>
+              <div className="profile-card-body">
+                <ul className="profile-list">
+                  {addresses.map((address) => (
+                      <li key={address.id} className="profile-list-item">
+                        <div className="profile-list-item-header">
+                          <strong>{address.label}</strong>
+                        </div>
+                        <p className="profile-list-item-description">
+                          {address.line1}
+                          <br />
+                          {(address.zipCode || address.city) && (
+                              <>
+                                {address.zipCode && `${address.zipCode} `}
+                                {address.city}
+                              </>
+                          )}
+                          {address.district && (
+                              <>
+                                <br />
+                                {address.district}
+                              </>
+                          )}
+                        </p>
+                        <div className="profile-list-item-actions">
+                          <button
+                              className="profile-link-button"
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleEditAddress(address);
+                              }}
+                          >
+                            Edit Address
+                          </button>
+                          <button
+                              type="button"
+                              className="profile-icon-button"
+                              aria-label="Delete address"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteAddress(address.id);
+                              }}
+                          >
+                            <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path
+                                  d="M5 7h14M9 7v10m6-10v10M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                              />
+                              <path
+                                  d="M8 7h8l-.7 11a1 1 0 0 1-1 .9h-4.6a1 1 0 0 1-1-.9L8 7Z"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.4"
+                                  strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* add new address / edit address */}
+            <div>
+              <header className="profile-card-header">
+                <h3>{editingAddressId ? "Edit Address" : "Add New Address"}</h3>
+                <p>
+                  {editingAddressId
+                      ? "Update the selected address"
+                      : "Store another delivery location"}
+                </p>
+              </header>
+              <div className="profile-card-body">
+                <form className="profile-form" onSubmit={handleNewAddressSubmit}>
+                  <label className="profile-field">
+                    <span>Label</span>
+                    <input
+                        type="text"
+                        value={newAddress.label}
+                        onChange={(e) =>
+                            setNewAddress((p) => ({ ...p, label: e.target.value }))
+                        }
+                        placeholder="Home, Work..."
+                        required
+                    />
+                  </label>
+
+                  <label className="profile-field">
+                    <span>Address Line 1</span>
+                    <input
+                        type="text"
+                        value={newAddress.line1}
+                        onChange={(e) =>
+                            setNewAddress((p) => ({ ...p, line1: e.target.value }))
+                        }
+                        placeholder="Street and number"
+                        required
+                    />
+                  </label>
+
+                  <div
+                      className="profile-field"
+                      style={{ display: "flex", gap: "0.75rem" }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <span style={{ display: "block", marginBottom: 4 }}>City</span>
+                      <input
+                          type="text"
+                          value={newAddress.city}
+                          onChange={(e) =>
+                              setNewAddress((p) => ({ ...p, city: e.target.value }))
+                          }
+                          placeholder="City"
+                          required
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                    <span style={{ display: "block", marginBottom: 4 }}>
+                      District
+                    </span>
+                      <input
+                          type="text"
+                          value={newAddress.district}
+                          onChange={(e) =>
+                              setNewAddress((p) => ({
+                                ...p,
+                                district: e.target.value,
+                              }))
+                          }
+                          placeholder="District"
+                      />
+                    </div>
+                    <div style={{ flexBasis: "140px" }}>
+                    <span style={{ display: "block", marginBottom: 4 }}>
+                      ZIP Code
+                    </span>
+                      <input
+                          type="text"
+                          value={newAddress.zipCode}
+                          onChange={(e) =>
+                              setNewAddress((p) => ({
+                                ...p,
+                                zipCode: e.target.value,
+                              }))
+                          }
+                          placeholder="ZIP"
+                          required
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                      className="profile-form-actions"
+                      style={{
+                        display: "flex",
+                        gap: "0.75rem",
+                        alignItems: "center",
+                      }}
+                  >
+                    <button
+                        type="submit"
+                        className="profile-button"
+                        style={{
+                          padding: "0.5rem 1.25rem",
+                          fontSize: "0.875rem",
+                          flex: editingAddressId ? "1" : "none",
+                        }}
+                    >
+                      {editingAddressId ? "Update Address" : "Save Address"}
+                    </button>
+                    {editingAddressId && (
+                        <button
+                            type="button"
+                            className="profile-link-button secondary"
+                            onClick={handleCancelEditAddress}
+                            style={{
+                              padding: "0.5rem 1rem",
+                              fontSize: "0.875rem",
+                              border: "1px solid #e5e5e5",
+                              borderRadius: "4px",
+                              backgroundColor: "#fff",
+                              color: "#301813",
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                        >
+                          Cancel
+                        </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+            </div>
+          </section>
+
+          {/* Returns */}
+          <section className="profile-card profile-card-grid">
+            <div>
+              <header className="profile-card-header">
+                <h2>Returns</h2>
+                <p>Track previous requests</p>
+              </header>
+              <div className="profile-card-body">
+                {returns.length === 0 ? (
+                    <p style={{ color: "#666" }}>No return requests found.</p>
+                ) : (
+                    <ul className="profile-list">
+                      {returns.map((item) => (
+                          <li key={item.id} className="profile-list-item">
+                            <div className="profile-list-item-header">
+                              <strong>{item.orderId}</strong>
+                              <span className="profile-pill muted">
+                          {item.status}
+                        </span>
+                            </div>
+                            <div className="profile-list-item-meta">
+                              <span>{item.id}</span>
+                              <span>{item.date}</span>
+                            </div>
+                            <p className="profile-list-item-description">
+                              Reason: {item.reason}
+                            </p>
+                          </li>
+                      ))}
+                    </ul>
+                )}
+              </div>
+            </div>
+
+            {/* new return */}
+            <div>
+              <header className="profile-card-header">
+                <h3>New Return Request</h3>
+              </header>
+              <div className="profile-card-body">
+                <form className="profile-form" onSubmit={handleNewReturnSubmit}>
+                  <label className="profile-field">
+                    <span>Order Number</span>
+                    {orders.length > 0 ? (
+                        <select
+                            value={newReturn.orderId}
+                            onChange={(e) =>
+                                setNewReturn((p) => ({
+                                  ...p,
+                                  orderId: e.target.value,
+                                }))
+                            }
+                            required
+                            style={{
+                              width: "100%",
+                              padding: "0.5rem",
+                              fontSize: "1rem",
+                              border: "1px solid #ccc",
+                              borderRadius: "4px",
+                            }}
+                        >
+                          <option value="">Select an order...</option>
+                          {orders.map((order) => (
+                              <option key={order.id} value={order.id}>
+                                {order.id} - {order.date} - {order.total}
+                              </option>
+                          ))}
+                        </select>
+                    ) : (
+                        <input
+                            type="text"
+                            value={newReturn.orderId}
+                            onChange={(e) =>
+                                setNewReturn((p) => ({
+                                  ...p,
+                                  orderId: e.target.value,
+                                }))
+                            }
+                            placeholder="Enter order ID (e.g., ORD-XXXX)"
+                            required
+                        />
+                    )}
+                    {orders.length === 0 && (
+                        <p
+                            style={{
+                              fontSize: "0.875rem",
+                              color: "#666",
+                              marginTop: "0.25rem",
+                            }}
+                        >
+                          No orders available. Please make an order first.
+                        </p>
+                    )}
+                  </label>
+                  <label className="profile-field">
+                    <span>Reason</span>
+                    <textarea
+                        rows={3}
+                        value={newReturn.reason}
+                        onChange={(e) =>
+                            setNewReturn((p) => ({ ...p, reason: e.target.value }))
+                        }
+                        placeholder="Describe the issue"
+                        required
+                    />
+                  </label>
+                  <button
+                      type="submit"
+                      className="profile-button"
+                      disabled={orders.length === 0}
+                  >
+                    Submit Request
+                  </button>
+                </form>
+              </div>
+            </div>
+          </section>
+
+          {/* Payment methods */}
+          <section className="profile-card profile-card-grid">
+            <div>
+              <header className="profile-card-header">
+                <h2>Payment Methods</h2>
+              </header>
+              <div className="profile-card-body">
+                <ul className="profile-list">
+                  {cards.map((card) => (
+                      <li key={card.id} className="profile-list-item">
+                        <div className="profile-list-item-header">
+                          <strong>{card.label}</strong>
+                          <span>{card.expiry}</span>
+                        </div>
+                        <p className="profile-list-item-description">
+                          Cardholder: {card.holder}
+                        </p>
+                        <div className="profile-list-item-actions">
+                          <button
+                              className="profile-link-button"
+                              type="button"
+                              onClick={() => handleEditCard(card)}
+                          >
+                            Edit Card
+                          </button>
+                          <button
+                              type="button"
+                              className="profile-icon-button"
+                              aria-label="Delete card"
+                              onClick={() => handleDeleteCard(card.id)}
+                          >
+                            <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path
+                                  d="M5 7h14M9 7v10m6-10v10M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                              />
+                              <path
+                                  d="M8 7h8l-.7 11a1 1 0 0 1-1 .9h-4.6a1 1 0 0 1-1-.9L8 7Z"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.4"
+                                  strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* add / edit card */}
+            <div>
+              <header className="profile-card-header">
+                <h3>{isEditingCard ? "Edit Card" : "Add Credit/Debit Card"}</h3>
+              </header>
+              <div className="profile-card-body">
+                <form className="profile-form" onSubmit={handleNewCardSubmit}>
+                  <label className="profile-field">
+                    <span>Card Number</span>
+                    <input
+                        type="text"
+                        value={newCard.label}
+                        onChange={(e) => {
+                          // Only allow digits, max 16 characters
+                          let value = e.target.value.replace(/\D/g, "").slice(0, 16);
+
+                          // Add space after every 4 digits
+                          value = value.replace(/(.{4})/g, "$1 ").trim();
+
+                          setNewCard((p) => ({ ...p, label: value }));
+                        }}
+                        placeholder="1234 5678 9012 3456"
+                        required
+                    />
+                  </label>
+                  <label className="profile-field">
+                    <span>Cardholder Name</span>
+                    <input
+                        type="text"
+                        value={newCard.holder}
+                        onChange={(e) =>
+                            setNewCard((p) => ({ ...p, holder: e.target.value }))
+                        }
+                        placeholder="Name on card"
+                        required
+                    />
+                  </label>
+                  <label className="profile-field">
+                    <span>Expiry Date</span>
+                    <input
+                        type="text"
+                        value={newCard.expiry}
+                        onChange={(e) => {
+                          // Only allow digits
+                          let value = e.target.value.replace(/\D/g, "");
+
+                          // Format as MM/YY (max 4 digits)
+                          if (value.length > 2) {
+                            value = value.slice(0, 2) + "/" + value.slice(2, 4);
+                          }
+
+                          setNewCard((p) => ({ ...p, expiry: value }));
+                        }}
+                        placeholder="MM/YY"
+                        maxLength={5}
+                        required
+                    />
+                  </label>
+                  <div
+                      className="profile-form-actions"
+                      style={{
+                        display: "flex",
+                        gap: "0.75rem",
+                        alignItems: "center",
+                      }}
+                  >
+                    <button
+                        type="submit"
+                        className="profile-button"
+                        style={{
+                          padding: "0.5rem 1.25rem",
+                          fontSize: "0.875rem",
+                          flex: isEditingCard ? "1" : "none",
+                        }}
+                    >
+                      {isEditingCard ? "Update Card" : "Save Card"}
+                    </button>
+                    {isEditingCard && (
+                        <button
+                            type="button"
+                            className="profile-link-button secondary"
+                            onClick={handleCancelEditCard}
+                            style={{
+                              padding: "0.5rem 1rem",
+                              fontSize: "0.875rem",
+                              border: "1px solid #e5e5e5",
+                              borderRadius: "4px",
+                              backgroundColor: "#fff",
+                              color: "#301813",
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                        >
+                          Cancel
+                        </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+            </div>
+          </section>
+
+          {/* bottom logout */}
+          <section className="profile-card profile-logout-card">
+            <button
+                className="profile-button secondary logout-button"
+                type="button"
+                onClick={() => navigate("/login")}
+            >
+              Log Out
+            </button>
+          </section>
+        </main>
+      </div>
   );
 }
