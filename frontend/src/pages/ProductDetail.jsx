@@ -600,8 +600,9 @@ const handleSubmitReview = async (e) => {
                 type="button"
                 className="product-add-to-cart"
                 onClick={handleAddToCart}
+                disabled={!selectedSize || isSelectedSizeOutOfStock}
               >
-                ADD TO CART
+                {isSelectedSizeOutOfStock ? "OUT OF STOCK" : "ADD TO CART"}
               </button>
 
                 <div className="product-description">
