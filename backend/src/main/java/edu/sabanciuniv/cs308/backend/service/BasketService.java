@@ -38,7 +38,22 @@ public class BasketService {
         if (cartId != null && !cartId.isBlank()) {
             Optional<OrderEntity> byId = orderRepository.findById(cartId);
             if (byId.isPresent() && "CART".equals(byId.get().getStatus())) {
-                return byId.get();
+                OrderEntity foundCart = byId.get();
+
+                // Security check: If userId is provided and cart belongs to another user,
+                // ignore the cartId and use the user's own cart instead
+                if (userId != null && !userId.isBlank() && foundCart.getUserId() != null
+                        && !foundCart.getUserId().equals(userId)) {
+                    // Cart belongs to another user, ignore it and use user's own cart
+                    OrderEntity userCart = orderRepository.findByUserIdAndStatus(userId, "CART");
+                    if (userCart != null) {
+                        return userCart;
+                    }
+                    // User has no cart yet, will create new one below
+                } else {
+                    // Cart is valid (guest cart or belongs to this user)
+                    return foundCart;
+                }
             }
             // cartId geçersizse: yeni oluşturacağız
         }
@@ -65,10 +80,27 @@ public class BasketService {
         OrderEntity cart = null;
 
         if (cartId != null && !cartId.isBlank()) {
-            cart = orderRepository.findById(cartId)
-                    .filter(o -> "CART".equals(o.getStatus()))
-                    .orElse(null);
-        } else if (userId != null && !userId.isBlank()) {
+            Optional<OrderEntity> foundCart = orderRepository.findById(cartId)
+                    .filter(o -> "CART".equals(o.getStatus()));
+
+            if (foundCart.isPresent()) {
+                OrderEntity cartEntity = foundCart.get();
+
+                // Security check: If userId is provided and cart belongs to another user,
+                // ignore the cartId and use the user's own cart instead
+                if (userId != null && !userId.isBlank() && cartEntity.getUserId() != null
+                        && !cartEntity.getUserId().equals(userId)) {
+                    // Cart belongs to another user, ignore it and use user's own cart
+                    cart = orderRepository.findByUserIdAndStatus(userId, "CART");
+                } else {
+                    // Cart is valid (guest cart or belongs to this user)
+                    cart = cartEntity;
+                }
+            }
+        }
+
+        // If no cart found yet and userId is provided, try to get user's cart
+        if (cart == null && userId != null && !userId.isBlank()) {
             cart = orderRepository.findByUserIdAndStatus(userId, "CART");
         }
 
