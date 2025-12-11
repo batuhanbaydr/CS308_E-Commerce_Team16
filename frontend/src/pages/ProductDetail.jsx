@@ -118,6 +118,13 @@ const scrollReviews = (direction) => {
           minimumFractionDigits: 2,
         }).format(uiPrice)
       : "";
+    const selectedSizeStock =
+        selectedSize && product && product._sizeStock
+          ? product._sizeStock[selectedSize] ?? 0
+          : 0;
+    const isSelectedSizeOutOfStock =
+        !!selectedSize && selectedSizeStock <= 0;
+
 
     const handleLogout = async () => {
         try { await logoutRequest(); } catch {}
@@ -266,6 +273,14 @@ const handleAddToCart = async () => {
   // must pick a size
   if (!selectedSize) {
     setNotification("Please select a size.");
+    scheduleMessageClear();
+    return;
+  }
+  // check stock for selected size
+  const sizeStockMap = product._sizeStock || {};
+  const stockForSelected = sizeStockMap[selectedSize] ?? 0;
+  if (stockForSelected <= 0) {
+    setNotification("This size is out of stock.");
     scheduleMessageClear();
     return;
   }
@@ -550,6 +565,15 @@ const handleSubmitReview = async (e) => {
                   </div>
                 </div>
               )}
+              { selectedSize && (
+                <p
+                  className="product-stock-info"
+                  style={{ marginTop: "0.5rem", fontSize: "0.9rem" }}
+                >
+                  Stock: {selectedSizeStock}
+                </p>
+              )}
+
 
               <div className="product-option-group">
                 <span className="product-option-label">QUANTITY</span>
