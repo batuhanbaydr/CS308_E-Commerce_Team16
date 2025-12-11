@@ -1,9 +1,16 @@
 package edu.sabanciuniv.cs308.backend.request;
 
+import edu.sabanciuniv.cs308.backend.entity.UserEntity;
+import lombok.Data;
+
+import java.util.List;
+@Data
 public class ProfileUpdateRequest {
     private String name;
     private String homeAddress;
     private String emailAddress; // optional: change email
+
+    private List<UserEntity.Address> addresses;
 
     public String getName() { return name; }
     public String getHomeAddress() { return homeAddress; }
