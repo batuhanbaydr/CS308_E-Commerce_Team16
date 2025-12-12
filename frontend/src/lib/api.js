@@ -197,6 +197,16 @@ export function removeBasketItem({ userId, cartId, productId, sku }) {
   return api.delete(`/basket/items/${productId}/${sku}`, { params });
 }
 
+/**
+ * POST /api/basket/attach?cartId=...
+ * Attach guest cart to logged-in user
+ * usage:
+ *   attachCartToUser(cartId)
+ */
+export function attachCartToUser(cartId) {
+  return api.post("/basket/attach", null, { params: { cartId } });
+}
+
 export const getReviewsForProduct = (productId) =>
     api.get(`/reviews/product/${productId}`);
 
