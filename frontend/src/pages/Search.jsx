@@ -1,14 +1,14 @@
 // src/pages/Search.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import {
-  meRequest,
-  logoutRequest,
-  listProducts,
-} from "../lib/api";
+import { meRequest, logoutRequest, listProducts } from "../lib/api";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
 import { useCartDrawer } from "../context/CartDrawerContext.jsx";
+
+function normalize(x) {
+  return String(x || "").trim().toLowerCase();
+}
 
 function buildSearchText(product) {
   const parts = [];
@@ -31,11 +31,6 @@ function buildSearchText(product) {
 
   // join everything and normalize once
   return normalize(parts.join(" "));
-}
-
-
-function normalize(x) {
-  return String(x || "").trim().toLowerCase();
 }
 
 export default function Search() {
@@ -95,71 +90,79 @@ export default function Search() {
     load();
   }, []);
 
-const COLOR_KEYWORDS = new Set([
-  "white",
-  "cream",
-  "navy",
-  "pink",
-  "brown",
-  "grey",
-  "black",
-]);
+  // 🔁 DYNAMIC COLOR KEYWORDS built from variants (bonus: fuzzy-friendly)
+  const COLOR_KEYWORDS = useMemo(() => {
+    const set = new Set();
 
+    (allProducts || []).forEach((p) => {
+      (p.variants || []).forEach((v) => {
+        const raw = String(v.color || "").trim().toLowerCase();
+        if (!raw) return;
 
-    // filter & sort products based on search text & sort option
-const results = useMemo(() => {
-  const q = normalize(searchText);
-  if (!q) return [];
+        // full color string, e.g. "light camel"
+        set.add(raw);
 
-  const tokens = q.split(/\s+/).filter(Boolean);
-
-  let list = allProducts
-    .map((p) => {
-      const searchText = buildSearchText(p);
-
-      const variantColors = (p.variants || [])
-        .map((v) => normalize(v.color || ""))
-        .filter(Boolean);
-
-      const matchesAllTokens = tokens.every((tok) => {
-        // if this token is a known color word, only match against colors
-        if (COLOR_KEYWORDS.has(tok)) {
-          return variantColors.some((c) => c.includes(tok));
-        }
-
-        // otherwise: normal text search on all fields
-        return searchText.includes(tok);
+        // bonus: also add individual words "light" and "camel"
+        raw.split(/\s+/).forEach((tok) => {
+          if (tok) set.add(tok);
+        });
       });
+    });
 
-      return matchesAllTokens ? p : null;
-    })
-    .filter(Boolean);
+    return set;
+  }, [allProducts]);
 
-  // attach meta info for sorting
-  list = list.map((p) => ({
-    ...p,
-    _popularity: Number(
-      p.purchaseCount ?? p.totalPurchases ?? 0
-    ),
-    _price: Number(
-      p.basePrice ??
-        (p.variants && p.variants[0] && p.variants[0].price) ??
-        0
-    ),
-  }));
+  // filter & sort products based on search text & sort option
+  const results = useMemo(() => {
+    const q = normalize(searchText);
+    if (!q) return [];
 
-  if (sortBy === "popularity") {
-    list.sort((a, b) => (b._popularity || 0) - (a._popularity || 0));
-  } else if (sortBy === "priceAsc") {
-    list.sort((a, b) => a._price - b._price);
-  } else if (sortBy === "priceDesc") {
-    list.sort((a, b) => b._price - a._price);
-  }
+    const tokens = q.split(/\s+/).filter(Boolean);
 
-  return list;
-}, [allProducts, searchText, sortBy]);
+    let list = allProducts
+      .map((p) => {
+        const searchText = buildSearchText(p);
 
+        const variantColors = (p.variants || [])
+          .map((v) => normalize(v.color || ""))
+          .filter(Boolean);
 
+        const matchesAllTokens = tokens.every((tok) => {
+          // if this token is a known color word, only match against colors
+          if (COLOR_KEYWORDS.has(tok)) {
+            // BONUS: fuzzy color match — "camel" matches "light camel"
+            return variantColors.some((c) => c.includes(tok));
+          }
+
+          // otherwise: normal text search on all fields
+          return searchText.includes(tok);
+        });
+
+        return matchesAllTokens ? p : null;
+      })
+      .filter(Boolean);
+
+    // attach meta info for sorting
+    list = list.map((p) => ({
+      ...p,
+      _popularity: Number(p.purchaseCount ?? p.totalPurchases ?? 0),
+      _price: Number(
+        p.basePrice ??
+          (p.variants && p.variants[0] && p.variants[0].price) ??
+          0
+      ),
+    }));
+
+    if (sortBy === "popularity") {
+      list.sort((a, b) => (b._popularity || 0) - (a._popularity || 0));
+    } else if (sortBy === "priceAsc") {
+      list.sort((a, b) => a._price - b._price);
+    } else if (sortBy === "priceDesc") {
+      list.sort((a, b) => b._price - a._price);
+    }
+
+    return list;
+  }, [allProducts, searchText, sortBy, COLOR_KEYWORDS]);
 
   const handleLogout = async () => {
     try {
@@ -265,7 +268,7 @@ const results = useMemo(() => {
                     Details
                   </button>
                   <button className="details-menu-item" onClick={go("/wishlist")}>
-                    Wishlist  
+                    Wishlist
                   </button>
                   <button className="details-menu-item" onClick={handleLogout}>
                     Log-out
