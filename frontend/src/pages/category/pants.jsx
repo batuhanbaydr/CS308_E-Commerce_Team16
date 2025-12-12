@@ -7,17 +7,49 @@ import {
   listProducts,
   addToBasket,
 } from "../../lib/api";
-import { useCartDrawer } from "../../context/CartDrawerContext.jsx"; 
+import { useCartDrawer } from "../../context/CartDrawerContext.jsx";
 import searchIcon from "../../assets/search.png";
 import bagIcon from "../../assets/bag.png";
 
-const COLORS = [
-  { id: "color-cream", label: "BLACK", value: "black" },
-  { id: "color-brown", label: "BLUE", value: "blue" },
-];
-
 const SIZES = ["XS", "S", "M", "L", "XL"];
 const CART_KEY = "tidl_cart_id";
+
+// ===== search helpers (same style as Shirts) =====================
+const COLOR_KEYWORDS = new Set([
+  "white",
+  "cream",
+  "navy",
+  "pink",
+  "brown",
+  "grey",
+  "black",
+  "blue",
+]);
+
+function normalize(str) {
+  return String(str || "").trim().toLowerCase();
+}
+
+function buildSearchText(product) {
+  const parts = [];
+
+  parts.push(
+    product.name,
+    product.description,
+    product.category,
+    product.fabric,
+    product.madeIn
+  );
+
+  (product.variants || []).forEach((v) => {
+    if (v.color) parts.push(v.color);
+    if (v.size) parts.push(v.size);
+    if (v.sku) parts.push(v.sku);
+  });
+
+  return normalize(parts.join(" "));
+}
+// ================================================================
 
 export default function Pants() {
   const navigate = useNavigate();
@@ -46,6 +78,30 @@ export default function Pants() {
 
   const [priceBounds, setPriceBounds] = useState({ min: 0, max: 100 });
   const [priceRange, setPriceRange] = useState({ min: 0, max: 100 });
+
+  // 🔍 sidebar search state
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // 🟡 dynamic color pills built from product variants
+  const colorOptions = useMemo(() => {
+    const seen = new Set();
+
+    (products || []).forEach((p) => {
+      (p.variants || []).forEach((v) => {
+        const raw = (v.color || "").trim();
+        if (!raw) return;
+        seen.add(raw);
+      });
+    });
+
+    return Array.from(seen)
+      .sort((a, b) => a.localeCompare(b))
+      .map((c) => ({
+        id: `color-${c.toLowerCase().replace(/\s+/g, "-")}`,
+        label: c.toUpperCase(), // DISPLAY: "LIGHT CAMEL"
+        value: c.toLowerCase(), // FILTER VALUE: "light camel"
+      }));
+  }, [products]);
 
   // load current user
   useEffect(() => {
@@ -106,11 +162,11 @@ export default function Pants() {
 
   const go = (path) => () => navigate(path);
 
-  // filter using backend data
+  // filter + search + sort using backend data
   const filteredProducts = useMemo(() => {
     if (!products) return [];
 
-    // Attach helper fields for filter + sort
+    // Attach helper fields for filter + sort + popularity + search
     const withMeta = products.map((p) => {
       const price = Number(
         p.basePrice ??
@@ -139,20 +195,26 @@ export default function Pants() {
       const allSizes = Object.keys(sizeStock);
       const sizesInStock = allSizes.filter((s) => sizeStock[s] > 0);
 
-      // popularity = number of purchases for this product
       const popularity = Number(
         p.purchaseCount ?? p.totalPurchases ?? 0
       );
+
+      const searchText = buildSearchText(p);
+      const variantColors = (p.variants || [])
+        .map((v) => normalize(v.color || ""))
+        .filter(Boolean);
 
       return {
         ...p,
         _price: price,
         _color: color,
-        _sizesAll: allSizes, // all sizes (even 0 stock)
-        _sizesInStock: sizesInStock, // only sizes with stock > 0
+        _sizesAll: allSizes,
+        _sizesInStock: sizesInStock,
         _sizeStock: sizeStock,
-        _sizeToSku: sizeToSku, // size -> sku
+        _sizeToSku: sizeToSku,
         _popularity: popularity,
+        _searchText: searchText,
+        _variantColors: variantColors,
       };
     });
 
@@ -172,20 +234,41 @@ export default function Pants() {
       return priceOk && colorOk && sizeOk;
     });
 
+    // 🔍 SEARCH (same behaviour as other pages)
+    const q = normalize(searchTerm);
+    if (q) {
+      const tokens = q.split(/\s+/).filter(Boolean);
+
+      list = list.filter((p) =>
+        tokens.every((tok) => {
+          if (COLOR_KEYWORDS.has(tok)) {
+            return p._variantColors.some((c) => c.includes(tok));
+          }
+          return p._searchText.includes(tok);
+        })
+      );
+    }
+
     // SORT
     if (sortOption === "priceAsc") {
       list = [...list].sort((a, b) => a._price - b._price);
     } else if (sortOption === "priceDesc") {
       list = [...list].sort((a, b) => b._price - a._price);
     } else if (sortOption === "popularity") {
-      // higher popularity first
       list = [...list].sort(
         (a, b) => (b._popularity || 0) - (a._popularity || 0)
       );
     }
 
     return list;
-  }, [products, priceRange, colorFilters, sizeFilters, sortOption]);
+  }, [
+    products,
+    priceRange,
+    colorFilters,
+    sizeFilters,
+    sortOption,
+    searchTerm,
+  ]);
 
   // toast helpers
   const scheduleMessageClear = () => {
@@ -239,79 +322,70 @@ export default function Pants() {
     });
   };
 
-
   const handleAddToCart = async (product) => {
-  // 🔹 We NO LONGER force login here.
-  // Guest users can add to basket using only cartId + product info.
-
-  // extra safety: block if product totally out of stock
-  const sizeStock = product._sizeStock || {};
-  const totalStock = Object.values(sizeStock).reduce(
-    (sum, v) => sum + (typeof v === "number" ? v : Number(v || 0)),
-    0
-  );
-  if (totalStock <= 0) {
-    setNotification("This product is out of stock.");
-    scheduleMessageClear();
-    return;
-  }
-
-  const selectedSize = selectedSizes.get(product.id);
-  if (!selectedSize) {
-    setNotification("Please select a size.");
-    scheduleMessageClear();
-    return;
-  }
-
-  const sku = product._sizeToSku?.[selectedSize];
-  if (!sku) {
-    setNotification("SKU missing for selected size.");
-    scheduleMessageClear();
-    return;
-  }
-
-  // If user is logged in, don't use cartId from localStorage
-  // This ensures logged-in users only see their own cart, not guest cart
-  const existingCartId =
-    user?.id
-      ? undefined // Logged-in users don't use cartId
-      : typeof window !== "undefined"
-      ? window.localStorage.getItem(CART_KEY) || undefined
-      : undefined;
-
-  try {
-    const { data } = await addToBasket({
-      userId: user?.id,      // 👈 works for logged in (id) or guest (undefined)
-      cartId: existingCartId,
-      productId: product.id,
-      sku,
-      quantity: 1,
-    });
-
-    // Save cartId only for guests (not for logged-in users)
-    if (data.orderId && !user?.id && typeof window !== "undefined") {
-      window.localStorage.setItem(CART_KEY, data.orderId);
+    const sizeStock = product._sizeStock || {};
+    const totalStock = Object.values(sizeStock).reduce(
+      (sum, v) => sum + (typeof v === "number" ? v : Number(v || 0)),
+      0
+    );
+    if (totalStock <= 0) {
+      setNotification("This product is out of stock.");
+      scheduleMessageClear();
+      return;
     }
 
-    updateCartQuantity(product.id, selectedSize, 1);
+    const selectedSize = selectedSizes.get(product.id);
+    if (!selectedSize) {
+      setNotification("Please select a size.");
+      scheduleMessageClear();
+      return;
+    }
 
-    setNotification(
-      `${product.name} (Size: ${selectedSize}) added to basket.`
-    );
-    scheduleMessageClear();
+    const sku = product._sizeToSku?.[selectedSize];
+    if (!sku) {
+      setNotification("SKU missing for selected size.");
+      scheduleMessageClear();
+      return;
+    }
 
-    setSelectedSizes((prev) => {
-      const next = new Map(prev);
-      next.delete(product.id);
-      return next;
-    });
-  } catch (err) {
-    console.error("addToBasket error", err);
-    setNotification("Could not add item to basket.");
-    scheduleMessageClear();
-  }
-};
+    const existingCartId =
+      user?.id
+        ? undefined
+        : typeof window !== "undefined"
+        ? window.localStorage.getItem(CART_KEY) || undefined
+        : undefined;
 
+    try {
+      const { data } = await addToBasket({
+        userId: user?.id,
+        cartId: existingCartId,
+        productId: product.id,
+        sku,
+        quantity: 1,
+      });
+
+      if (data.orderId && !user?.id && typeof window !== "undefined") {
+        window.localStorage.setItem(CART_KEY, data.orderId);
+      }
+
+      updateCartQuantity(product.id, selectedSize, 1);
+
+      setNotification(
+        `${product.name} (Size: ${selectedSize}) added to basket.`
+      );
+      scheduleMessageClear();
+
+      setSelectedSizes((prev) => {
+        const next = new Map(prev);
+        next.delete(product.id);
+        return next;
+      });
+    } catch (err) {
+      console.error("addToBasket error", err);
+      setNotification("Could not add item to basket.");
+      scheduleMessageClear();
+    }
+  };
 
   return (
     <div className="category-page">
@@ -346,12 +420,13 @@ export default function Pants() {
           </button>
         </nav>
         <div className="category-actions">
-          <img
-            src={searchIcon}
-            alt="Search"
-            className="category-icon"
-            onClick={() => navigate("/search")}
-          />
+        <img
+          src={searchIcon}
+          alt="Search"
+          className="category-icon"
+          onClick={() => navigate("/search")}
+        />
+
           {user ? (
             <span
               className="login-topbar-link"
@@ -383,7 +458,7 @@ export default function Pants() {
                     Details
                   </button>
                   <button className="details-menu-item" onClick={go("/wishlist")}>
-                    Wishlist  
+                    Wishlist
                   </button>
                   <button className="details-menu-item" onClick={handleLogout}>
                     Log-out
@@ -396,7 +471,7 @@ export default function Pants() {
             src={bagIcon}
             alt="Cart"
             className="category-icon"
-            onClick={openCart} 
+            onClick={openCart}
           />
         </div>
       </header>
@@ -404,6 +479,16 @@ export default function Pants() {
       <main className="category-layout">
         {/* SIDEBAR */}
         <aside className="category-sidebar">
+          {/* 🔍 Search bar (same component behaviour) */}
+          <input
+            id="category-sidebar-search"
+            type="text"
+            className="category-search-input"
+            placeholder="Search within this category"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+
           <button
             className="category-clear"
             onClick={() => {
@@ -411,6 +496,7 @@ export default function Pants() {
               setSizeFilters(new Set());
               setPriceRange({ ...priceBounds });
               setSortOption(null);
+              setSearchTerm("");
             }}
           >
             CLEAR FILTERS
@@ -419,10 +505,11 @@ export default function Pants() {
           <section className="category-filter">
             <h3 className="category-filter-title">SORT</h3>
 
-            {/* Low → High */}
             <button
               className={`category-filter-option${
-                sortOption === "priceAsc" ? " category-filter-option--active" : ""
+                sortOption === "priceAsc"
+                  ? " category-filter-option--active"
+                  : ""
               }`}
               onClick={() =>
                 setSortOption((prev) =>
@@ -433,10 +520,11 @@ export default function Pants() {
               Price: Low to High
             </button>
 
-            {/* High → Low */}
             <button
               className={`category-filter-option${
-                sortOption === "priceDesc" ? " category-filter-option--active" : ""
+                sortOption === "priceDesc"
+                  ? " category-filter-option--active"
+                  : ""
               }`}
               onClick={() =>
                 setSortOption((prev) =>
@@ -447,7 +535,6 @@ export default function Pants() {
               Price: High to Low
             </button>
 
-            {/* Popularity sort */}
             <button
               className={`category-filter-option${
                 sortOption === "popularity"
@@ -463,7 +550,6 @@ export default function Pants() {
               Popularity
             </button>
 
-            {/* Reset sort */}
             <button
               className="category-filter-option"
               onClick={() => setSortOption(null)}
@@ -475,14 +561,14 @@ export default function Pants() {
           <section className="category-filter">
             <h3 className="category-filter-title">COLOR</h3>
             <div className="category-filter-pills">
-              {COLORS.map((c) => {
+              {colorOptions.map((c) => {
                 const active = colorFilters.has(c.value);
                 return (
                   <button
                     key={c.id}
-                    className={`category-pill${
-                      active ? " category-pill--active" : ""
-                    }`}
+                    className={
+                      "category-pill" + (active ? " category-pill--active" : "")
+                    }
                     onClick={() => {
                       setColorFilters((prev) => {
                         const next = new Set(prev);

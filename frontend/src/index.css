@@ -2472,3 +2472,17 @@ body {
   font-weight: 600;
   color: #3d211c;
 }
+
+.category-search-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #dedede;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  margin-bottom: 12px;
+  outline: none;
+}
+
+.category-search-input:focus {
+  border-color: #3d211c;
+}
