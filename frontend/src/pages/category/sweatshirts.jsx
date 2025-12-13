@@ -203,6 +203,20 @@ export default function Sweatshirts() {
         p.purchaseCount ?? p.totalPurchases ?? 0
       );
 
+      // star rating helpers from backend
+      const avg =
+        typeof p.averageRating === "number"
+          ? p.averageRating
+          : Number(p.averageRating ?? 0);
+
+      const count =
+        typeof p.ratingCount === "number"
+          ? p.ratingCount
+          : Number(p.ratingCount ?? 0);
+
+      const safeAvg = Number.isFinite(avg) ? avg : 0;
+      const safeCount = Number.isFinite(count) ? count : 0;
+
       // search helpers
       const searchText = buildSearchText(p);
       const variantColors = (p.variants || [])
@@ -218,6 +232,8 @@ export default function Sweatshirts() {
         _sizeStock: sizeStock,
         _sizeToSku: sizeToSku,
         _popularity: popularity,
+        _rating: safeAvg,
+        _ratingCount: safeCount,
         _searchText: searchText,
         _variantColors: variantColors,
       };
@@ -260,9 +276,24 @@ export default function Sweatshirts() {
     } else if (sortOption === "priceDesc") {
       list = [...list].sort((a, b) => b._price - a._price);
     } else if (sortOption === "popularity") {
-      list = [...list].sort(
-        (a, b) => (b._popularity || 0) - (a._popularity || 0)
-      );
+      // Popularity = highest avg rating first, then most ratings
+      list = [...list].sort((a, b) => {
+        const ar = a._rating ?? 0;
+        const br = b._rating ?? 0;
+
+        if (br !== ar) {
+          return br - ar; // higher average rating first
+        }
+
+        const ac = a._ratingCount ?? 0;
+        const bc = b._ratingCount ?? 0;
+
+        if (bc !== ac) {
+          return bc - ac; // more ratings first
+        }
+
+        return 0;
+      });
     }
 
     return list;

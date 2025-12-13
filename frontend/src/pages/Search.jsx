@@ -143,18 +143,51 @@ export default function Search() {
       .filter(Boolean);
 
     // attach meta info for sorting
-    list = list.map((p) => ({
-      ...p,
-      _popularity: Number(p.purchaseCount ?? p.totalPurchases ?? 0),
-      _price: Number(
-        p.basePrice ??
-          (p.variants && p.variants[0] && p.variants[0].price) ??
-          0
-      ),
-    }));
+    list = list.map((p) => {
+      const avg =
+        typeof p.averageRating === "number"
+          ? p.averageRating
+          : Number(p.averageRating ?? 0);
+
+      const count =
+        typeof p.ratingCount === "number"
+          ? p.ratingCount
+          : Number(p.ratingCount ?? 0);
+
+      return {
+        ...p,
+        _popularity: Number(p.purchaseCount ?? p.totalPurchases ?? 0),
+        _price: Number(
+          p.basePrice ??
+            (p.variants && p.variants[0] && p.variants[0].price) ??
+            0
+        ),
+        _rating: Number.isFinite(avg) ? avg : 0,
+        _ratingCount: Number.isFinite(count) ? count : 0,
+      };
+    });
 
     if (sortBy === "popularity") {
-      list.sort((a, b) => (b._popularity || 0) - (a._popularity || 0));
+      list.sort((a, b) => {
+        const ar = a._rating ?? 0;
+        const br = b._rating ?? 0;
+
+        // 1) highest average rating first
+        if (br !== ar) {
+          return br - ar; // descending
+        }
+
+        const ac = a._ratingCount ?? 0;
+        const bc = b._ratingCount ?? 0;
+
+        // 2) if same avg rating, more ratings first
+        if (bc !== ac) {
+          return bc - ac; // descending
+        }
+
+        // 3) fallback
+        return 0;
+      });
     } else if (sortBy === "priceAsc") {
       list.sort((a, b) => a._price - b._price);
     } else if (sortBy === "priceDesc") {
