@@ -722,19 +722,33 @@ const handleSubmitReview = async (e) => {
                     <div key={r.id} className="product-review-item">
                       <div className="product-review-item-header">
                         {renderStars(r.rating)}
-                        {/* If backend later adds user info, you can show it here */}
                       </div>
-                      {r.comment && r.status === "APPROVED" ? (
+
+                      {/* APPROVED → show real comment */}
+                      {r.commentStatus === "APPROVED" && r.comment && (
                         <p className="product-review-comment">{r.comment}</p>
-                      ) : r.comment && r.status !== "APPROVED" ? (
+                      )}
+
+                      {/* PENDING → waiting message */}
+                      {r.commentStatus === "PENDING" && (
                         <p
                           className="product-review-comment pending-comment"
                           style={{ opacity: 0.6, fontStyle: "italic" }}
                         >
                           This comment will appear after moderation.
                         </p>
-                      ) : null}
-                   </div>
+                      )}
+
+                      {/* REJECTED → declined message */}
+                      {r.commentStatus === "REJECTED" && (
+                        <p
+                          className="product-review-comment declined-comment"
+                          style={{ opacity: 0.6, fontStyle: "italic" }}
+                        >
+                          This comment is declined.
+                        </p>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
