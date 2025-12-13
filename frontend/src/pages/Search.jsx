@@ -187,7 +187,7 @@ export default function Search() {
   const filterLabel = (() => {
     switch (sortBy) {
       case "popularity":
-        return "Popularity";
+        return "Popularity (by Top Rated)";
       case "priceAsc":
         return "Price: Low to High";
       case "priceDesc":
@@ -319,45 +319,51 @@ export default function Search() {
               </button>
 
               {showFilterMenu && (
-                <div className="search-simple-filter-menu">
+                <div className="filter-menu">
                   <button
-                    type="button"
-                    onClick={() => {
-                      setSortBy("relevance");
-                      setShowFilterMenu(false);
-                    }}
-                  >
-                    Relevance
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSortBy("popularity");
-                      setShowFilterMenu(false);
-                    }}
-                  >
-                    Popularity
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSortBy("priceAsc");
-                      setShowFilterMenu(false);
-                    }}
-                  >
-                    Price: Low to High
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSortBy("priceDesc");
-                      setShowFilterMenu(false);
-                    }}
-                  >
-                    Price: High to Low
-                  </button>
-                </div>
-              )}
+                  type="button"
+                  onClick={() => {
+                    setSortBy("relevance");
+                    setShowFilterMenu(false);
+                  }}
+                >
+                  Relevance
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("popularity");
+                    setShowFilterMenu(false);
+                  }}
+                >
+                  Popularity (by Top Rated)
+                </button>
+
+                
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("priceAsc");
+                    setShowFilterMenu(false);
+                  }}
+                >
+                  Price: Low to High
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("priceDesc");
+                    setShowFilterMenu(false);
+                  }}
+                >
+                  Price: High to Low
+                </button>
+              </div>
+            )}
+
             </div>
           </div>
 
