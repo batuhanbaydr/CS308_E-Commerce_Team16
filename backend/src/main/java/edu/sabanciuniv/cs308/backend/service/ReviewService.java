@@ -36,6 +36,24 @@ public class ReviewService {
         this.productRepository = productRepository;
     }
 
+    private void updateProductRatingStats(String productId) {
+        List<ReviewEntity> reviews = reviewRepository.findByProductId(productId);
+        double avg = reviews.stream()
+            .mapToInt(r -> r.getRating() == null ? 0 : r.getRating())
+            .average()
+            .orElse(0.0);
+        int count = reviews.size();
+
+        ProductEntity product = productRepository.findById(productId)
+              .orElseThrow(() -> new RuntimeException("Product not found"));
+
+         product.setAverageRating(avg);
+
+
+         productRepository.save(product);
+    }
+
+
     // CUSTOMER review bırakıyor
     public ReviewEntity createReview(String emailOfUser, CreateReviewRequest req) {
         // Rating sınırı (burayı 1–10 yapmak istersen condition'ı değiştirirsin)
@@ -99,7 +117,13 @@ public class ReviewService {
             }
         }
 
-        return reviewRepository.save(review);
+        ReviewEntity saved = reviewRepository.save(review);
+
+        // 🔴 BURAYA EKLE
+        updateProductRatingStats(product.getId());
+
+        return saved;
+
     }
 
     // Product sayfasında gösterilecek review'lar

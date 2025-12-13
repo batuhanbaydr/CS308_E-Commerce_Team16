@@ -138,18 +138,19 @@ const results = useMemo(() => {
   // attach meta info for sorting
   list = list.map((p) => ({
     ...p,
-    _popularity: Number(
-      p.purchaseCount ?? p.totalPurchases ?? 0
-    ),
+    _popularity: Number(p.purchaseCount ?? p.totalPurchases ?? 0),
     _price: Number(
       p.basePrice ??
         (p.variants && p.variants[0] && p.variants[0].price) ??
         0
     ),
+    _rating: Number(p.averageRating ?? 0),
+    _ratingCount: Number(p.ratingCount ?? 0),
   }));
 
   if (sortBy === "popularity") {
-    list.sort((a, b) => (b._popularity || 0) - (a._popularity || 0));
+    list.sort((a, b) => (b._rating - a._rating) ||(b._ratingCount - a._ratingCount));
+
   } else if (sortBy === "priceAsc") {
     list.sort((a, b) => a._price - b._price);
   } else if (sortBy === "priceDesc") {
@@ -184,7 +185,7 @@ const results = useMemo(() => {
   const filterLabel = (() => {
     switch (sortBy) {
       case "popularity":
-        return "Popularity";
+        return "Popularity (by Top Rated)";
       case "priceAsc":
         return "Price: Low to High";
       case "priceDesc":
@@ -316,45 +317,51 @@ const results = useMemo(() => {
               </button>
 
               {showFilterMenu && (
-                <div className="search-simple-filter-menu">
+                <div className="filter-menu">
                   <button
-                    type="button"
-                    onClick={() => {
-                      setSortBy("relevance");
-                      setShowFilterMenu(false);
-                    }}
-                  >
-                    Relevance
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSortBy("popularity");
-                      setShowFilterMenu(false);
-                    }}
-                  >
-                    Popularity
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSortBy("priceAsc");
-                      setShowFilterMenu(false);
-                    }}
-                  >
-                    Price: Low to High
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSortBy("priceDesc");
-                      setShowFilterMenu(false);
-                    }}
-                  >
-                    Price: High to Low
-                  </button>
-                </div>
-              )}
+                  type="button"
+                  onClick={() => {
+                    setSortBy("relevance");
+                    setShowFilterMenu(false);
+                  }}
+                >
+                  Relevance
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("popularity");
+                    setShowFilterMenu(false);
+                  }}
+                >
+                  Popularity (by Top Rated)
+                </button>
+
+                
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("priceAsc");
+                    setShowFilterMenu(false);
+                  }}
+                >
+                  Price: Low to High
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSortBy("priceDesc");
+                    setShowFilterMenu(false);
+                  }}
+                >
+                  Price: High to Low
+                </button>
+              </div>
+            )}
+
             </div>
           </div>
 

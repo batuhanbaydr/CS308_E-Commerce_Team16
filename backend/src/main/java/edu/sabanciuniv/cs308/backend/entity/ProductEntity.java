@@ -2,6 +2,7 @@ package edu.sabanciuniv.cs308.backend.entity;
 
 import lombok.Data;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.math.BigDecimal;
@@ -14,30 +15,35 @@ public class ProductEntity {
     @Id
     private String id;
 
-    private String name;           // Ürün adı, örn: "Keten Elbise"
-    private String description;    // Açıklama
-    private String category;       // Örn: "Elbise", "Pantolon", "Bluz"
-    private BigDecimal basePrice;  // Ana fiyat (örnek: 599.90)
+    private String name;
+    private String description;
+    private String category;
+    private BigDecimal basePrice;
 
-    private String mainImageUrl;   // Ana görsel
-    private List<String> imageUrls; // Ek görseller
+    private String mainImageUrl;
+    private List<String> imageUrls;
 
-    // Ürün varyantları (örnek: renk, beden)
     private List<Variant> variants;
 
-    private String fabric;   // "95% cotton, 5% elastane"
-    private String madeIn;   // "Turkey"
+    private String fabric;
+    private String madeIn;
 
-    // Yeni eklenen alanlar
-    private String warrantyStatus;     // Örn: "24 months"
-    private String distributorInfo;    // Örn: "ABC Distribution GmbH"
+    // DB'ye yazılmayacak, sadece response'ta dönecek
+    @Transient
+    private Double averageRating;
+
+    @Transient
+    private Long ratingCount;
+
+    private String warrantyStatus;
+    private String distributorInfo;
 
     @Data
     public static class Variant {
-        private String sku;        // Benzersiz stok kodu, örn: "ELB-BEYAZ-M"
-        private String size;       // "XS", "S", "M", "L", "XL"
-        private String color;      // "Beyaz", "Siyah"
-        private int stock;         // Stok miktarı
-        private BigDecimal price;  // Bu varyantın fiyatı (farklı olabilir)
+        private String sku;
+        private String size;
+        private String color;
+        private int stock;
+        private BigDecimal price;
     }
 }
