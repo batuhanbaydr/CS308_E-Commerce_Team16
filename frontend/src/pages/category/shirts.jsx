@@ -6,6 +6,9 @@ import {
   logoutRequest,
   listProducts,
   addToBasket,
+  getWishlist,
+  addWishlistItem,
+  removeWishlistItem,
 } from "../../lib/api";
 
 import searchIcon from "../../assets/search.png";
@@ -65,7 +68,9 @@ export default function Shirts() {
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productError, setProductError] = useState("");
 
-  const [favorites, setFavorites] = useState(() => new Set());
+  // ✅ wishlist ids stored as STRINGS (backend)
+  const [wishlistIds, setWishlistIds] = useState(() => new Set());
+
   const [selectedSizes, setSelectedSizes] = useState(() => new Map());
   const [cartItems, setCartItems] = useState(() => new Map());
 
@@ -99,10 +104,19 @@ export default function Shirts() {
       .sort((a, b) => a.localeCompare(b))
       .map((c) => ({
         id: `color-${c.toLowerCase().replace(/\s+/g, "-")}`,
-        label: c.toUpperCase(), // DISPLAY: "LIGHT CAMEL"
-        value: c.toLowerCase(), // FILTER VALUE: "light camel"
+        label: c.toUpperCase(),
+        value: c.toLowerCase(),
       }));
   }, [products]);
+
+  // toast helpers
+  const scheduleMessageClear = () => {
+    if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setNotification(null);
+      toastTimeoutRef.current = null;
+    }, 2400);
+  };
 
   // load current user
   useEffect(() => {
@@ -121,6 +135,24 @@ export default function Shirts() {
       }
     };
   }, []);
+
+  // ✅ load wishlist (backend) whenever user is present
+  useEffect(() => {
+    if (!user) {
+      setWishlistIds(new Set());
+      return;
+    }
+
+    (async () => {
+      try {
+        const { data } = await getWishlist();
+        const ids = Array.isArray(data?.productIds) ? data.productIds : [];
+        setWishlistIds(new Set(ids.map(String)));
+      } catch (err) {
+        console.error("Failed to load wishlist", err);
+      }
+    })();
+  }, [user]);
 
   // load products from backend
   useEffect(() => {
@@ -167,7 +199,6 @@ export default function Shirts() {
   const filteredProducts = useMemo(() => {
     if (!products) return [];
 
-    // Attach helper fields for filter + sort + popularity + search
     const withMeta = products.map((p) => {
       const price = Number(
         p.basePrice ??
@@ -178,30 +209,22 @@ export default function Shirts() {
       const color =
         (p.variants && p.variants[0] && p.variants[0].color) || "";
 
-      // build sizeStock: size -> total stock
       const sizeStock = {};
       const sizeToSku = {};
       (p.variants || []).forEach((v) => {
         const sizeKey = v.size && v.size.trim();
         if (!sizeKey) return;
-        const stock =
-          typeof v.stock === "number" ? v.stock : Number(v.stock || 0);
+        const stock = typeof v.stock === "number" ? v.stock : Number(v.stock || 0);
         sizeStock[sizeKey] = (sizeStock[sizeKey] || 0) + stock;
 
-        if (v.sku) {
-          sizeToSku[sizeKey] = v.sku;
-        }
+        if (v.sku) sizeToSku[sizeKey] = v.sku;
       });
 
       const allSizes = Object.keys(sizeStock);
       const sizesInStock = allSizes.filter((s) => sizeStock[s] > 0);
 
-      // purchase-based popularity (kept in case you need it later)
-      const popularity = Number(
-        p.purchaseCount ?? p.totalPurchases ?? 0
-      );
+      const popularity = Number(p.purchaseCount ?? p.totalPurchases ?? 0);
 
-      // star rating helpers coming from backend
       const avg =
         typeof p.averageRating === "number"
           ? p.averageRating
@@ -238,8 +261,7 @@ export default function Shirts() {
 
     // FILTERS
     let list = withMeta.filter((p) => {
-      const priceOk =
-        p._price >= priceRange.min && p._price <= priceRange.max;
+      const priceOk = p._price >= priceRange.min && p._price <= priceRange.max;
 
       const colorOk =
         colorFilters.size === 0 ||
@@ -252,7 +274,7 @@ export default function Shirts() {
       return priceOk && colorOk && sizeOk;
     });
 
-    // 🔍 SEARCH (same logic as Search page)
+    // SEARCH
     const q = normalize(searchTerm);
     if (q) {
       const tokens = q.split(/\s+/).filter(Boolean);
@@ -273,59 +295,72 @@ export default function Shirts() {
     } else if (sortOption === "priceDesc") {
       list = [...list].sort((a, b) => b._price - a._price);
     } else if (sortOption === "popularity") {
-      // star Popularity = highest avg rating first, then most ratings
       list = [...list].sort((a, b) => {
         const ar = a._rating ?? 0;
         const br = b._rating ?? 0;
-
-        if (br !== ar) {
-          return br - ar; // higher average rating first
-        }
+        if (br !== ar) return br - ar;
 
         const ac = a._ratingCount ?? 0;
         const bc = b._ratingCount ?? 0;
-
-        if (bc !== ac) {
-          return bc - ac; // more ratings first
-        }
+        if (bc !== ac) return bc - ac;
 
         return 0;
       });
     }
 
     return list;
-  }, [
-    products,
-    priceRange,
-    colorFilters,
-    sizeFilters,
-    sortOption,
-    searchTerm,
-  ]);
+  }, [products, priceRange, colorFilters, sizeFilters, sortOption, searchTerm]);
 
-  // toast helpers
-  const scheduleMessageClear = () => {
-    if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = window.setTimeout(() => {
-      setNotification(null);
-      toastTimeoutRef.current = null;
-    }, 2400);
-  };
+  // ✅ wishlist toggle (backend)
+  const toggleFavorite = async (productId) => {
+    const pid = String(productId);
 
-  // favorites
-  const toggleFavorite = (id) => {
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        setNotification("Removed from favorites.");
-      } else {
-        next.add(id);
-        setNotification("Added to favorites.");
-      }
+    if (!user) {
+      setNotification("Please sign in to use wishlist.");
       scheduleMessageClear();
-      return next;
-    });
+      return;
+    }
+
+    const isAlready = wishlistIds.has(pid);
+
+    try {
+      if (isAlready) {
+        await removeWishlistItem(pid);
+        setWishlistIds((prev) => {
+          const next = new Set([...prev].map(String));
+          next.delete(pid);
+          return next;
+        });
+        setNotification("Removed from wishlist.");
+      } else {
+        await addWishlistItem(pid);
+        setWishlistIds((prev) => {
+          const next = new Set([...prev].map(String));
+          next.add(pid);
+          return next;
+        });
+        setNotification("Added to wishlist.");
+      }
+    } catch (err) {
+      console.error("Wishlist toggle failed", err);
+
+      const status = err?.response?.status;
+      const serverMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        (typeof err?.response?.data === "string" ? err.response.data : "") ||
+        err?.message;
+
+      if (status === 401 || status === 403) {
+        setNotification("Session expired. Please sign in again.");
+      } else if (status === 404) {
+        setNotification("Wishlist endpoint not found (route mismatch).");
+      } else {
+        setNotification(serverMsg || "Could not update wishlist.");
+      }
+    }
+
+    scheduleMessageClear();
   };
 
   // size + cart helpers
@@ -403,9 +438,7 @@ export default function Shirts() {
 
       updateCartQuantity(product.id, selectedSize, 1);
 
-      setNotification(
-        `${product.name} (Size: ${selectedSize}) added to basket.`
-      );
+      setNotification(`${product.name} (Size: ${selectedSize}) added to basket.`);
       scheduleMessageClear();
 
       setSelectedSizes((prev) => {
@@ -452,13 +485,14 @@ export default function Shirts() {
             SHOP THE LOOK
           </button>
         </nav>
+
         <div className="category-actions">
           <img
-          src={searchIcon}
-          alt="Search"
-          className="category-icon"
-          onClick={() => navigate("/search")}
-        />
+            src={searchIcon}
+            alt="Search"
+            className="category-icon"
+            onClick={() => navigate("/search")}
+          />
 
           {user ? (
             <span
@@ -476,6 +510,7 @@ export default function Shirts() {
               SIGN IN
             </span>
           )}
+
           {user && (
             <div
               className="home-menu"
@@ -490,10 +525,7 @@ export default function Shirts() {
                   <button className="details-menu-item" onClick={go("/profile")}>
                     Details
                   </button>
-                  <button
-                    className="details-menu-item"
-                    onClick={go("/wishlist")}
-                  >
+                  <button className="details-menu-item" onClick={go("/wishlist")}>
                     Wishlist
                   </button>
                   <button className="details-menu-item" onClick={handleLogout}>
@@ -503,19 +535,14 @@ export default function Shirts() {
               )}
             </div>
           )}
-          <img
-            src={bagIcon}
-            alt="Cart"
-            className="category-icon"
-            onClick={openCart}
-          />
+
+          <img src={bagIcon} alt="Cart" className="category-icon" onClick={openCart} />
         </div>
       </header>
 
       <main className="category-layout">
         {/* SIDEBAR */}
         <aside className="category-sidebar">
-          {/* 🔍 Sidebar search */}
           <input
             id="category-sidebar-search"
             type="text"
@@ -541,57 +568,34 @@ export default function Shirts() {
           <section className="category-filter">
             <h3 className="category-filter-title">SORT</h3>
 
-            {/* Low → High */}
             <button
               className={`category-filter-option${
-                sortOption === "priceAsc"
-                  ? " category-filter-option--active"
-                  : ""
+                sortOption === "priceAsc" ? " category-filter-option--active" : ""
               }`}
-              onClick={() =>
-                setSortOption((prev) => (prev === "priceAsc" ? null : "priceAsc"))
-              }
+              onClick={() => setSortOption((prev) => (prev === "priceAsc" ? null : "priceAsc"))}
             >
               Price: Low to High
             </button>
 
-            {/* High → Low */}
             <button
               className={`category-filter-option${
-                sortOption === "priceDesc"
-                  ? " category-filter-option--active"
-                  : ""
+                sortOption === "priceDesc" ? " category-filter-option--active" : ""
               }`}
-              onClick={() =>
-                setSortOption((prev) =>
-                  prev === "priceDesc" ? null : "priceDesc"
-                )
-              }
+              onClick={() => setSortOption((prev) => (prev === "priceDesc" ? null : "priceDesc"))}
             >
               Price: High to Low
             </button>
 
-            {/* Popularity sort */}
             <button
               className={`category-filter-option${
-                sortOption === "popularity"
-                  ? " category-filter-option--active"
-                  : ""
+                sortOption === "popularity" ? " category-filter-option--active" : ""
               }`}
-              onClick={() =>
-                setSortOption((prev) =>
-                  prev === "popularity" ? null : "popularity"
-                )
-              }
+              onClick={() => setSortOption((prev) => (prev === "popularity" ? null : "popularity"))}
             >
               Popularity
             </button>
 
-            {/* Reset sort */}
-            <button
-              className="category-filter-option"
-              onClick={() => setSortOption(null)}
-            >
+            <button className="category-filter-option" onClick={() => setSortOption(null)}>
               New Arrivals
             </button>
           </section>
@@ -604,9 +608,7 @@ export default function Shirts() {
                 return (
                   <button
                     key={c.id}
-                    className={
-                      "category-pill" + (active ? " category-pill--active" : "")
-                    }
+                    className={`category-pill${active ? " category-pill--active" : ""}`}
                     onClick={() => {
                       setColorFilters((prev) => {
                         const next = new Set(prev);
@@ -632,9 +634,7 @@ export default function Shirts() {
                 return (
                   <button
                     key={s}
-                    className={`category-pill${
-                      active ? " category-pill--active" : ""
-                    }`}
+                    className={`category-pill${active ? " category-pill--active" : ""}`}
                     onClick={() => {
                       setSizeFilters((prev) => {
                         const next = new Set(prev);
@@ -662,10 +662,7 @@ export default function Shirts() {
                   max={priceBounds.max}
                   value={priceRange.min}
                   onChange={(e) => {
-                    const newMin = Math.min(
-                      Number(e.target.value),
-                      priceRange.max - 1
-                    );
+                    const newMin = Math.min(Number(e.target.value), priceRange.max - 1);
                     setPriceRange((p) => ({ ...p, min: newMin }));
                   }}
                   className="price-slider price-slider--min"
@@ -676,10 +673,7 @@ export default function Shirts() {
                   max={priceBounds.max}
                   value={priceRange.max}
                   onChange={(e) => {
-                    const newMax = Math.max(
-                      Number(e.target.value),
-                      priceRange.min + 1
-                    );
+                    const newMax = Math.max(Number(e.target.value), priceRange.min + 1);
                     setPriceRange((p) => ({ ...p, max: newMax }));
                   }}
                   className="price-slider price-slider--max"
@@ -700,7 +694,9 @@ export default function Shirts() {
           {!loadingProducts &&
             !productError &&
             filteredProducts.map((product) => {
-              const isFavorite = favorites.has(product.id);
+              const pid = String(product.id);
+              const isFavorite = wishlistIds.has(pid);
+
               const allSizes =
                 product._sizesAll ||
                 Array.from(
@@ -716,9 +712,7 @@ export default function Shirts() {
                 product._price ??
                 Number(
                   product.basePrice ??
-                    (product.variants &&
-                      product.variants[0] &&
-                      product.variants[0].price) ??
+                    (product.variants && product.variants[0] && product.variants[0].price) ??
                     0
                 );
               const displayPrice = `$${priceNumber.toFixed(2)}`;
@@ -734,10 +728,7 @@ export default function Shirts() {
               const displayImage = isHovered ? secondaryImage : primaryImage;
 
               const colorText =
-                (product.variants &&
-                  product.variants[0] &&
-                  product.variants[0].color) ||
-                "-";
+                (product.variants && product.variants[0] && product.variants[0].color) || "-";
 
               const goDetail = () => navigate(`/product/${product.id}`);
 
@@ -755,11 +746,14 @@ export default function Shirts() {
                       onClick={goDetail}
                       style={{ cursor: "pointer" }}
                     />
+
                     <button
-                      className={`favorite-button${
-                        isFavorite ? " favorite-button--active" : ""
-                      }`}
-                      onClick={() => toggleFavorite(product.id)}
+                      className={`favorite-button${isFavorite ? " favorite-button--active" : ""}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleFavorite(pid);
+                      }}
                       aria-label="Add to favorites"
                     >
                       {isFavorite ? "♥" : "♡"}
@@ -767,11 +761,7 @@ export default function Shirts() {
                   </div>
 
                   <div className="product-info">
-                    <h3
-                      className="product-name"
-                      onClick={goDetail}
-                      style={{ cursor: "pointer" }}
-                    >
+                    <h3 className="product-name" onClick={goDetail} style={{ cursor: "pointer" }}>
                       {product.name}
                     </h3>
                     <p className="product-meta">
@@ -786,12 +776,8 @@ export default function Shirts() {
                           const stockForSize = sizeStock[size] ?? 0;
                           const isOutOfStock = stockForSize <= 0;
 
-                          const isSelected =
-                            selectedSizes.get(product.id) === size;
-                          const cartQuantity = getCartQuantity(
-                            product.id,
-                            size
-                          );
+                          const isSelected = selectedSizes.get(product.id) === size;
+                          const cartQuantity = getCartQuantity(product.id, size);
                           const isInCart = cartQuantity > 0;
 
                           return (
@@ -799,20 +785,11 @@ export default function Shirts() {
                               key={size}
                               className={
                                 "size-selector-button" +
-                                (isSelected
-                                  ? " size-selector-button--selected"
-                                  : "") +
-                                (isInCart
-                                  ? " size-selector-button--in-cart"
-                                  : "") +
-                                (isOutOfStock
-                                  ? " size-selector-button--oos"
-                                  : "")
+                                (isSelected ? " size-selector-button--selected" : "") +
+                                (isInCart ? " size-selector-button--in-cart" : "") +
+                                (isOutOfStock ? " size-selector-button--oos" : "")
                               }
-                              onClick={() =>
-                                !isOutOfStock &&
-                                handleSizeSelect(product.id, size)
-                              }
+                              onClick={() => !isOutOfStock && handleSizeSelect(product.id, size)}
                               aria-label={`Select size ${size}`}
                               disabled={isOutOfStock}
                             >
