@@ -239,9 +239,8 @@ export default function Wishlist() {
 
             {loading ? (
               <p style={{ color: "#666" }}>Loading your wishlist…</p>
-            ) : empty ? (
-              <p style={{ color: "#666" }}>You haven&apos;t added anything to your wishlist yet.</p>
-            ) : hasProducts ? (
+            ) 
+            : hasProducts ? (
               <div
                 style={{
                   display: "grid",
