@@ -1,7 +1,16 @@
 // src/pages/category/Sweatshirts.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { meRequest, logoutRequest, listProducts, addToBasket } from "../../lib/api";
+import {
+  meRequest,
+  logoutRequest,
+  listProducts,
+  addToBasket,
+  getWishlist,
+  addWishlistItem,
+  removeWishlistItem,
+} from "../../lib/api";
+
 import searchIcon from "../../assets/search.png";
 import bagIcon from "../../assets/bag.png";
 import { useCartDrawer } from "../../context/CartDrawerContext.jsx";
@@ -64,7 +73,9 @@ export default function Sweatshirts() {
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productError, setProductError] = useState("");
 
-  const [favorites, setFavorites] = useState(() => new Set());
+  // wishlist ids are stored as STRINGS to avoid Set mismatch bugs
+  const [wishlistIds, setWishlistIds] = useState(() => new Set());
+
   const [selectedSizes, setSelectedSizes] = useState(() => new Map());
   const [cartItems, setCartItems] = useState(() => new Map());
 
@@ -106,6 +117,15 @@ export default function Sweatshirts() {
   // 🔍 sidebar search state (same logic as Search.jsx)
   const [searchTerm, setSearchTerm] = useState("");
 
+  // toast helpers
+  const scheduleMessageClear = () => {
+    if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setNotification(null);
+      toastTimeoutRef.current = null;
+    }, 2400);
+  };
+
   // load current user
   useEffect(() => {
     (async () => {
@@ -123,6 +143,25 @@ export default function Sweatshirts() {
       }
     };
   }, []);
+
+  // load wishlist (backend) whenever user is present
+  useEffect(() => {
+    if (!user) {
+      // if user logs out, clear local wishlist view
+      setWishlistIds(new Set());
+      return;
+    }
+
+    (async () => {
+      try {
+        const { data } = await getWishlist();
+        const ids = Array.isArray(data?.productIds) ? data.productIds : [];
+        setWishlistIds(new Set(ids.map(String)));
+      } catch (err) {
+        console.error("Failed to load wishlist", err);
+      }
+    })();
+  }, [user]);
 
   // load products from backend
   useEffect(() => {
@@ -199,9 +238,7 @@ export default function Sweatshirts() {
       const sizesInStock = allSizes.filter((s) => sizeStock[s] > 0);
 
       // popularity = number of purchases for this product
-      const popularity = Number(
-        p.purchaseCount ?? p.totalPurchases ?? 0
-      );
+      const popularity = Number(p.purchaseCount ?? p.totalPurchases ?? 0);
 
       // star rating helpers from backend
       const avg =
@@ -241,16 +278,14 @@ export default function Sweatshirts() {
 
     // FILTERS (price/color/size)
     let list = withMeta.filter((p) => {
-      const priceOk =
-        p._price >= priceRange.min && p._price <= priceRange.max;
+      const priceOk = p._price >= priceRange.min && p._price <= priceRange.max;
 
       const colorOk =
         colorFilters.size === 0 ||
         colorFilters.has(String(p._color).toLowerCase());
 
       const sizeOk =
-        sizeFilters.size === 0 ||
-        p._sizesInStock.some((s) => sizeFilters.has(s));
+        sizeFilters.size === 0 || p._sizesInStock.some((s) => sizeFilters.has(s));
 
       return priceOk && colorOk && sizeOk;
     });
@@ -281,16 +316,12 @@ export default function Sweatshirts() {
         const ar = a._rating ?? 0;
         const br = b._rating ?? 0;
 
-        if (br !== ar) {
-          return br - ar; // higher average rating first
-        }
+        if (br !== ar) return br - ar;
 
         const ac = a._ratingCount ?? 0;
         const bc = b._ratingCount ?? 0;
 
-        if (bc !== ac) {
-          return bc - ac; // more ratings first
-        }
+        if (bc !== ac) return bc - ac;
 
         return 0;
       });
@@ -299,29 +330,56 @@ export default function Sweatshirts() {
     return list;
   }, [products, priceRange, colorFilters, sizeFilters, sortOption, searchTerm]);
 
-  // toast helpers
-  const scheduleMessageClear = () => {
-    if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = window.setTimeout(() => {
-      setNotification(null);
-      toastTimeoutRef.current = null;
-    }, 2400);
-  };
+  // wishlist toggle (backend)
+  const toggleFavorite = async (productId) => {
+    const pid = String(productId);
 
-  // favorites
-  const toggleFavorite = (id) => {
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        setNotification("Removed from favorites.");
-      } else {
-        next.add(id);
-        setNotification("Added to favorites.");
-      }
+    if (!user) {
+      setNotification("Please sign in to use wishlist.");
       scheduleMessageClear();
-      return next;
-    });
+      return;
+    }
+
+    const isAlreadyWishlisted = wishlistIds.has(pid);
+
+    try {
+      if (isAlreadyWishlisted) {
+        await removeWishlistItem(pid);
+        setWishlistIds((prev) => {
+          const next = new Set([...prev].map(String));
+          next.delete(pid);
+          return next;
+        });
+        setNotification("Removed from wishlist.");
+      } else {
+        await addWishlistItem(pid);
+        setWishlistIds((prev) => {
+          const next = new Set([...prev].map(String));
+          next.add(pid);
+          return next;
+        });
+        setNotification("Added to wishlist.");
+      }
+    } catch (err) {
+      console.error("Wishlist toggle failed", err);
+
+      const status = err?.response?.status;
+      const serverMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        (typeof err?.response?.data === "string" ? err.response.data : "") ||
+        err?.message;
+
+      if (status === 401 || status === 403) {
+        setNotification("Session expired. Please sign in again.");
+      } else if (status === 404) {
+        setNotification("Wishlist endpoint not found (route mismatch).");
+      } else {
+        setNotification(serverMsg || "Could not update wishlist.");
+      }
+    }
+
+    scheduleMessageClear();
   };
 
   // size + cart helpers
@@ -399,9 +457,7 @@ export default function Sweatshirts() {
 
       updateCartQuantity(product.id, selectedSize, 1);
 
-      setNotification(
-        `${product.name} (Size: ${selectedSize}) added to basket.`
-      );
+      setNotification(`${product.name} (Size: ${selectedSize}) added to basket.`);
       scheduleMessageClear();
 
       setSelectedSizes((prev) => {
@@ -452,11 +508,11 @@ export default function Sweatshirts() {
         <div className="category-actions">
           {/* keep icon, but category-wide search stays on this page */}
           <img
-          src={searchIcon}
-          alt="Search"
-          className="category-icon"
-          onClick={() => navigate("/search")}
-        />
+            src={searchIcon}
+            alt="Search"
+            className="category-icon"
+            onClick={() => navigate("/search")}
+          />
 
           {user ? (
             <span
@@ -498,12 +554,7 @@ export default function Sweatshirts() {
               )}
             </div>
           )}
-          <img
-            src={bagIcon}
-            alt="Cart"
-            className="category-icon"
-            onClick={openCart}
-          />
+          <img src={bagIcon} alt="Cart" className="category-icon" onClick={openCart} />
         </div>
       </header>
 
@@ -538,9 +589,7 @@ export default function Sweatshirts() {
 
             <button
               className={`category-filter-option${
-                sortOption === "priceAsc"
-                  ? " category-filter-option--active"
-                  : ""
+                sortOption === "priceAsc" ? " category-filter-option--active" : ""
               }`}
               onClick={() =>
                 setSortOption((prev) => (prev === "priceAsc" ? null : "priceAsc"))
@@ -551,14 +600,10 @@ export default function Sweatshirts() {
 
             <button
               className={`category-filter-option${
-                sortOption === "priceDesc"
-                  ? " category-filter-option--active"
-                  : ""
+                sortOption === "priceDesc" ? " category-filter-option--active" : ""
               }`}
               onClick={() =>
-                setSortOption((prev) =>
-                  prev === "priceDesc" ? null : "priceDesc"
-                )
+                setSortOption((prev) => (prev === "priceDesc" ? null : "priceDesc"))
               }
             >
               Price: High to Low
@@ -566,23 +611,16 @@ export default function Sweatshirts() {
 
             <button
               className={`category-filter-option${
-                sortOption === "popularity"
-                  ? " category-filter-option--active"
-                  : ""
+                sortOption === "popularity" ? " category-filter-option--active" : ""
               }`}
               onClick={() =>
-                setSortOption((prev) =>
-                  prev === "popularity" ? null : "popularity"
-                )
+                setSortOption((prev) => (prev === "popularity" ? null : "popularity"))
               }
             >
               Popularity
             </button>
 
-            <button
-              className="category-filter-option"
-              onClick={() => setSortOption(null)}
-            >
+            <button className="category-filter-option" onClick={() => setSortOption(null)}>
               New Arrivals
             </button>
           </section>
@@ -595,9 +633,7 @@ export default function Sweatshirts() {
                 return (
                   <button
                     key={c.id}
-                    className={`category-pill${
-                      active ? " category-pill--active" : ""
-                    }`}
+                    className={`category-pill${active ? " category-pill--active" : ""}`}
                     onClick={() => {
                       setColorFilters((prev) => {
                         const next = new Set(prev);
@@ -623,9 +659,7 @@ export default function Sweatshirts() {
                 return (
                   <button
                     key={s}
-                    className={`category-pill${
-                      active ? " category-pill--active" : ""
-                    }`}
+                    className={`category-pill${active ? " category-pill--active" : ""}`}
                     onClick={() => {
                       setSizeFilters((prev) => {
                         const next = new Set(prev);
@@ -653,10 +687,7 @@ export default function Sweatshirts() {
                   max={priceBounds.max}
                   value={priceRange.min}
                   onChange={(e) => {
-                    const newMin = Math.min(
-                      Number(e.target.value),
-                      priceRange.max - 1
-                    );
+                    const newMin = Math.min(Number(e.target.value), priceRange.max - 1);
                     setPriceRange((p) => ({ ...p, min: newMin }));
                   }}
                   className="price-slider price-slider--min"
@@ -667,10 +698,7 @@ export default function Sweatshirts() {
                   max={priceBounds.max}
                   value={priceRange.max}
                   onChange={(e) => {
-                    const newMax = Math.max(
-                      Number(e.target.value),
-                      priceRange.min + 1
-                    );
+                    const newMax = Math.max(Number(e.target.value), priceRange.min + 1);
                     setPriceRange((p) => ({ ...p, max: newMax }));
                   }}
                   className="price-slider price-slider--max"
@@ -691,7 +719,9 @@ export default function Sweatshirts() {
           {!loadingProducts &&
             !productError &&
             filteredProducts.map((product) => {
-              const isFavorite = favorites.has(product.id);
+              const pid = String(product.id);
+              const isFavorite = wishlistIds.has(pid);
+
               const allSizes =
                 product._sizesAll ||
                 Array.from(
@@ -707,22 +737,18 @@ export default function Sweatshirts() {
                 product._price ??
                 Number(
                   product.basePrice ??
-                    (product.variants &&
-                      product.variants[0] &&
-                      product.variants[0].price) ??
+                    (product.variants && product.variants[0] && product.variants[0].price) ??
                     0
                 );
               const displayPrice = `$${priceNumber.toFixed(2)}`;
 
               const totalStock = Object.values(sizeStock).reduce(
-                (sum, v) =>
-                  sum + (typeof v === "number" ? v : Number(v || 0)),
+                (sum, v) => sum + (typeof v === "number" ? v : Number(v || 0)),
                 0
               );
               const productOutOfStock = totalStock <= 0;
 
-              const primaryImage =
-                product.mainImageUrl || (product.imageUrls || [])[0] || "";
+              const primaryImage = product.mainImageUrl || (product.imageUrls || [])[0] || "";
               const secondaryImage =
                 product.imageUrls && product.imageUrls.length > 1
                   ? product.imageUrls[1]
@@ -732,10 +758,7 @@ export default function Sweatshirts() {
               const displayImage = isHovered ? secondaryImage : primaryImage;
 
               const colorText =
-                (product.variants &&
-                  product.variants[0] &&
-                  product.variants[0].color) ||
-                "-";
+                (product.variants && product.variants[0] && product.variants[0].color) || "-";
 
               const goDetail = () => navigate(`/product/${product.id}`);
 
@@ -753,15 +776,19 @@ export default function Sweatshirts() {
                       onClick={goDetail}
                       style={{ cursor: "pointer" }}
                     />
+
                     <button
-                      className={`favorite-button${
-                        isFavorite ? " favorite-button--active" : ""
-                      }`}
-                      onClick={() => toggleFavorite(product.id)}
+                      className={`favorite-button${isFavorite ? " favorite-button--active" : ""}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleFavorite(pid);
+                      }}
                       aria-label="Add to favorites"
                     >
                       {isFavorite ? "♥" : "♡"}
                     </button>
+
                     {productOutOfStock && (
                       <div
                         style={{
@@ -781,11 +808,7 @@ export default function Sweatshirts() {
                   </div>
 
                   <div className="product-info">
-                    <h3
-                      className="product-name"
-                      onClick={goDetail}
-                      style={{ cursor: "pointer" }}
-                    >
+                    <h3 className="product-name" onClick={goDetail} style={{ cursor: "pointer" }}>
                       {product.name}
                     </h3>
                     <p className="product-meta">
@@ -800,12 +823,8 @@ export default function Sweatshirts() {
                           const stockForSize = sizeStock[size] ?? 0;
                           const isOutOfStock = stockForSize <= 0;
 
-                          const isSelected =
-                            selectedSizes.get(product.id) === size;
-                          const cartQuantity = getCartQuantity(
-                            product.id,
-                            size
-                          );
+                          const isSelected = selectedSizes.get(product.id) === size;
+                          const cartQuantity = getCartQuantity(product.id, size);
                           const isInCart = cartQuantity > 0;
 
                           return (
@@ -813,20 +832,11 @@ export default function Sweatshirts() {
                               key={size}
                               className={
                                 "size-selector-button" +
-                                (isSelected
-                                  ? " size-selector-button--selected"
-                                  : "") +
-                                (isInCart
-                                  ? " size-selector-button--in-cart"
-                                  : "") +
-                                (isOutOfStock
-                                  ? " size-selector-button--oos"
-                                  : "")
+                                (isSelected ? " size-selector-button--selected" : "") +
+                                (isInCart ? " size-selector-button--in-cart" : "") +
+                                (isOutOfStock ? " size-selector-button--oos" : "")
                               }
-                              onClick={() =>
-                                !isOutOfStock &&
-                                handleSizeSelect(product.id, size)
-                              }
+                              onClick={() => !isOutOfStock && handleSizeSelect(product.id, size)}
                               aria-label={`Select size ${size}`}
                               disabled={isOutOfStock}
                             >
@@ -839,17 +849,13 @@ export default function Sweatshirts() {
 
                     <button
                       className="product-add-to-basket"
-                      onClick={() =>
-                        !productOutOfStock && handleAddToCart(product)
-                      }
+                      onClick={() => !productOutOfStock && handleAddToCart(product)}
                       disabled={productOutOfStock}
                       style={{
                         marginTop: "0.5rem",
                         width: "50%",
                         padding: "0.375rem 0.5rem",
-                        backgroundColor: productOutOfStock
-                          ? "#bbbbbb"
-                          : "#3d211c",
+                        backgroundColor: productOutOfStock ? "#bbbbbb" : "#3d211c",
                         color: "white",
                         border: "1px solid #3d211c",
                         borderRadius: "4px",
