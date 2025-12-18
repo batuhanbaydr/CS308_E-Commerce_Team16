@@ -262,5 +262,24 @@ export function checkout(cartId, shipping, billing, paymentDetails, useSameAddre
   });
 }
 
+// ---------------- WISHLIST ----------------
+
+export function getWishlist() {
+  return api.get("/wishlist");
+}
+
+export function addWishlistItem(productId) {
+  return api.post(`/wishlist/items/${productId}`);
+}
+
+export function removeWishlistItem(productId) {
+  return api.delete(`/wishlist/items/${productId}`);
+}
+
+export function clearWishlist() {
+  return api.delete("/wishlist");
+}
+
+
 
 export default api;

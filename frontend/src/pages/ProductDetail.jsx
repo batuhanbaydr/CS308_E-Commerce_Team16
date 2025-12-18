@@ -400,7 +400,7 @@ const handleSubmitReview = async (e) => {
       <nav className="category-nav">
         <button
           onClick={() => navigate("/category/sweatshirts")}
-          className="category-nav-item category-nav-item--active"
+          className="category-nav-item"
         >
           SWEATSHIRTS
         </button>

@@ -352,7 +352,7 @@ export default function Search() {
               </button>
 
               {showFilterMenu && (
-                <div className="filter-menu">
+                <div className="search-simple-filter-menu">
                   <button
                   type="button"
                   onClick={() => {
