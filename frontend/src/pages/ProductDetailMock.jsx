@@ -9,6 +9,14 @@ import sweatshirt3 from "../assets/productdetail_sweatshirt_mockup_3.jpg";
 import sweatshirt4 from "../assets/productdetail_sweatshirt_mockup_4.jpg";
 import sweatshirt5 from "../assets/productdetail_sweatshirt_mockup_5.jpg";
 
+const hasAdminAccess = (user) =>
+  user?.roles?.includes("SALES_MANAGER") ||
+  user?.roles?.includes("PRODUCT_MANAGER") ||
+  user?.roles?.includes("SUPPORT_AGENT") ||
+  user?.role === "SALES_MANAGER" ||
+  user?.role === "PRODUCT_MANAGER" ||
+  user?.role === "SUPPORT_AGENT";
+
 const MOCK_PRODUCT = {
   id: "mock-cream-hoodie",
   name: "Cream Zip Hoodie",

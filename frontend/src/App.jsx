@@ -15,7 +15,9 @@ import ProductDetail from "./pages/ProductDetail";
 import Search from "./pages/Search.jsx";
 import Checkout from "./pages/Checkout.jsx";
 import Invoice from "./pages/Invoice.jsx";
-import Wishlist from "./pages/Wishlist.jsx";  
+import Wishlist from "./pages/Wishlist.jsx";
+import AdminHome from "./pages/admin/AdminHome";
+import SalesManager from "./pages/admin/SalesManager";
 
 import { CartDrawerProvider } from "./context/CartDrawerContext.jsx";
 import "./index.css";
@@ -55,9 +57,8 @@ export default function App() {
                 <Profile />
               </RequireAuth>
             }
-      
           />
-          
+
           <Route
             path="/checkout"
             element={
@@ -66,11 +67,40 @@ export default function App() {
               </RequireAuth>
             }
           />
+
           <Route
             path="/invoice/:orderId"
             element={
               <RequireAuth>
                 <Invoice />
+              </RequireAuth>
+            }
+          />
+
+          {/* Admin home (for SALES_MANAGER / PRODUCT_MANAGER / SUPPORT_AGENT via menu) */}
+          <Route
+            path="/admin"
+            element={
+              <RequireAuth>
+                <AdminHome />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/admin"
+            element={
+              <RequireAuth>
+                <AdminHome />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/admin/sales"
+            element={
+              <RequireAuth>
+                <SalesManager />
               </RequireAuth>
             }
           />

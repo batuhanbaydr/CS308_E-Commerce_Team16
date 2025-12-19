@@ -14,6 +14,14 @@ import {
 } from "../lib/api";
 import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 
+const hasAdminAccess = (user) =>
+  user?.roles?.includes("SALES_MANAGER") ||
+  user?.roles?.includes("PRODUCT_MANAGER") ||
+  user?.roles?.includes("SUPPORT_AGENT") ||
+  user?.role === "SALES_MANAGER" ||
+  user?.role === "PRODUCT_MANAGER" ||
+  user?.role === "SUPPORT_AGENT";
+
 const CART_STORAGE_KEY = "tidl_cart_id";
 
 export default function ProductDetail() {

@@ -6,6 +6,14 @@ import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
 import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 
+const hasAdminAccess = (user) =>
+  user?.roles?.includes("SALES_MANAGER") ||
+  user?.roles?.includes("PRODUCT_MANAGER") ||
+  user?.roles?.includes("SUPPORT_AGENT") ||
+  user?.role === "SALES_MANAGER" ||
+  user?.role === "PRODUCT_MANAGER" ||
+  user?.role === "SUPPORT_AGENT";
+
 function normalize(x) {
   return String(x || "").trim().toLowerCase();
 }
@@ -300,9 +308,21 @@ export default function Search() {
                   <button className="details-menu-item" onClick={go("/profile")}>
                     Details
                   </button>
+
                   <button className="details-menu-item" onClick={go("/wishlist")}>
                     Wishlist
                   </button>
+
+                  {/* 🔐 Only for SALES_MANAGER / PRODUCT_MANAGER / SUPPORT_AGENT */}
+                  {hasAdminAccess(user) && (
+                    <button
+                      className="details-menu-item"
+                      onClick={go("/admin")}
+                    >
+                      Admin Panel
+                    </button>
+                  )}
+
                   <button className="details-menu-item" onClick={handleLogout}>
                     Log-out
                   </button>

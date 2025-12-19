@@ -16,6 +16,14 @@ import {
   updateProfile
 } from "../lib/api";
 
+const hasAdminAccess = (user) =>
+  user?.roles?.includes("SALES_MANAGER") ||
+  user?.roles?.includes("PRODUCT_MANAGER") ||
+  user?.roles?.includes("SUPPORT_AGENT") ||
+  user?.role === "SALES_MANAGER" ||
+  user?.role === "PRODUCT_MANAGER" ||
+  user?.role === "SUPPORT_AGENT";
+
 // Helper function to format date
 const formatDate = (dateString) => {
   if (!dateString) return "";
