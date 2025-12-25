@@ -2,3 +2,4 @@
 .vscode/
 backend/target/
 **/.DS_Store
+.idea/
