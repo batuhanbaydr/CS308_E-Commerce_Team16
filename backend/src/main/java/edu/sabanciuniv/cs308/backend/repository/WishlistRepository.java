@@ -14,4 +14,6 @@ public interface WishlistRepository extends MongoRepository<WishlistEntity, Stri
      * This avoids IncorrectResultSizeDataAccessException.
      */
     List<WishlistEntity> findAllByUserId(String userId);
+
+    List<WishlistEntity> findAllByProductIdsContaining(String productId);
 }

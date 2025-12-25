@@ -14,7 +14,7 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
-
+import edu.sabanciuniv.cs308.backend.entity.ProductEntity;
 import java.io.ByteArrayOutputStream;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
@@ -211,4 +211,45 @@ public class EmailService {
             return null;
         }
     }
+
+    // ===============================
+// ADMIN / SALES USE
+// ===============================
+    public byte[] generateInvoicePdfBytes(UserEntity user, OrderDetailDTO order) {
+        return generateInvoicePdf(user, order);
+    }
+
+    public void sendDiscountNotification(UserEntity user, ProductEntity product, double discountRate) {
+        if (user == null || product == null) return;
+
+        String to = user.getEmailAddress();
+        if (to == null || to.isBlank()) return;
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
+
+            helper.setTo(to);
+            helper.setFrom(fromAddress);
+            helper.setSubject("Discount alert: " + product.getName());
+
+            String percent = String.valueOf(Math.round(discountRate * 100));
+
+            String html = """
+            <html><body style="font-family: Arial, sans-serif;">
+              <h2>Good news!</h2>
+              <p>A product in your wishlist is now <strong>%s%% off</strong>:</p>
+              <p><strong>%s</strong></p>
+              <p>Visit TIDL to see the new price.</p>
+              <p>&mdash; TIDL</p>
+            </body></html>
+            """.formatted(escape(percent), escape(product.getName()));
+
+            helper.setText(html, true);
+            mailSender.send(message);
+        } catch (Exception e) {
+            log.warn("Failed to send discount notification to {}", user.getEmailAddress(), e);
+        }
+    }
+
 }
