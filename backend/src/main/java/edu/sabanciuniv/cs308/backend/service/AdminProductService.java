@@ -33,7 +33,38 @@ public class AdminProductService {
         existing.setBasePrice(newData.getBasePrice());
         existing.setMainImageUrl(newData.getMainImageUrl());
         existing.setImageUrls(newData.getImageUrls());
-        existing.setVariants(newData.getVariants());
+
+        // variants update: stock'u EZME, sadece diğer alanları güncelle
+        if (newData.getVariants() != null) {
+            var oldList = existing.getVariants();
+            java.util.Map<String, ProductEntity.Variant> oldBySku = new java.util.HashMap<>();
+            if (oldList != null) {
+                for (ProductEntity.Variant v : oldList) {
+                    if (v.getSku() != null) oldBySku.put(v.getSku(), v);
+                }
+            }
+
+            java.util.List<ProductEntity.Variant> merged = new java.util.ArrayList<>();
+            for (ProductEntity.Variant incoming : newData.getVariants()) {
+                if (incoming == null) continue;
+
+                ProductEntity.Variant old = (incoming.getSku() != null) ? oldBySku.get(incoming.getSku()) : null;
+
+                ProductEntity.Variant v = new ProductEntity.Variant();
+                v.setSku(incoming.getSku());
+                v.setSize(incoming.getSize());
+                v.setColor(incoming.getColor());
+                v.setPrice(incoming.getPrice());
+
+                // stock: eski varsa onu koru, yoksa incoming ya da 0
+                if (old != null) v.setStock(old.getStock());
+                else v.setStock(Math.max(0, incoming.getStock()));
+
+                merged.add(v);
+            }
+
+            existing.setVariants(merged);
+        }
 
         return productRepository.save(existing);
     }
@@ -43,5 +74,25 @@ public class AdminProductService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found");
         }
         productRepository.deleteById(id);
+    }
+    public ProductEntity updateVariantStock(String productId, String sku, int newStock) {
+        ProductEntity p = productRepository.findById(productId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
+
+        if (p.getVariants() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Product has no variants");
+        }
+
+        ProductEntity.Variant v = p.getVariants().stream()
+                .filter(var -> sku != null && sku.equals(var.getSku()))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Variant not found for sku=" + sku));
+
+        if (newStock < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Stock cannot be negative");
+        }
+
+        v.setStock(newStock);
+        return productRepository.save(p);
     }
 }
