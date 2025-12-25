@@ -1,11 +1,11 @@
-// src/main/java/edu/sabanciuniv/cs308/backend/controller/ReviewController.java
 package edu.sabanciuniv.cs308.backend.controller;
 
-import edu.sabanciuniv.cs308.backend.entity.ReviewEntity;
 import edu.sabanciuniv.cs308.backend.dto.CreateReviewRequest;
 import edu.sabanciuniv.cs308.backend.dto.UpdateCommentModerationRequest;
+import edu.sabanciuniv.cs308.backend.entity.ReviewEntity;
 import edu.sabanciuniv.cs308.backend.service.ReviewService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -51,16 +51,19 @@ public class ReviewController {
 
     // --- Product Manager moderasyon endpoint'leri ---
 
+    @PreAuthorize("hasRole('PRODUCT_MANAGER')")
     @GetMapping("/pending")
     public ResponseEntity<List<ReviewEntity>> listPending() {
         return ResponseEntity.ok(reviewService.listPendingComments());
     }
 
+    @PreAuthorize("hasRole('PRODUCT_MANAGER')")
     @PostMapping("/{id}/approve")
     public ResponseEntity<ReviewEntity> approve(@PathVariable String id) {
         return ResponseEntity.ok(reviewService.approveComment(id));
     }
 
+    @PreAuthorize("hasRole('PRODUCT_MANAGER')")
     @PostMapping("/{id}/reject")
     public ResponseEntity<ReviewEntity> reject(@PathVariable String id,
                                                @RequestBody(required = false) UpdateCommentModerationRequest body) {
