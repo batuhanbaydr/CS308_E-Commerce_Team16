@@ -29,13 +29,11 @@ public class SecurityConfig {
         this.customUserDetailsService = customUserDetailsService;
     }
 
-    // password encoder
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // use our userDetailsService + encoder
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
@@ -44,53 +42,79 @@ public class SecurityConfig {
         return provider;
     }
 
-    // expose auth manager
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 
-    // main security chain
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .cors(cors -> {})              // enable CORS (details below)
-            .csrf(csrf -> csrf.disable())  // we use session, frontend is separate
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                    "/api/auth/signup",
-                    "/api/auth/login",
-                    "/api/auth/logout",
-                    "/error"
-                ).permitAll()
-                .requestMatchers(
-                    "/api/users/me",
-                    "/api/account/**",
-                    "/api/orders/**",
-                    "/api/returns/**",
-                    "/api/users/me/payment-methods/**",
-                        "/api/reviews"
-                ).authenticated()
-                .requestMatchers("/api/admin/**").authenticated()
-                .anyRequest().permitAll()
-            )
-            .authenticationProvider(authenticationProvider())
-            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.ALWAYS))
-            .logout(logout -> logout
-                .logoutUrl("/api/auth/logout")
-                .logoutSuccessHandler((req, res, auth) -> res.setStatus(200))
-            );
+                .cors(cors -> {})
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth
+
+                        // public
+                        .requestMatchers(
+                                "/api/auth/signup",
+                                "/api/auth/login",
+                                "/api/auth/logout",
+                                "/error"
+                        ).permitAll()
+
+                        // me endpoint: any logged-in user (customer OR backoffice) can read role
+                        .requestMatchers("/api/users/me").authenticated()
+
+                        // ---- REVIEWS (split correctly) ----
+                        // everyone can view reviews for a product
+                        .requestMatchers("GET", "/api/reviews/product/**").permitAll()
+
+                        // PM moderation endpoints
+                        .requestMatchers("/api/reviews/pending",
+                                "/api/reviews/*/approve",
+                                "/api/reviews/*/reject")
+                        .hasRole("PRODUCT_MANAGER")
+
+                        // CUSTOMER can create review
+                        .requestMatchers("POST", "/api/reviews").hasRole("CUSTOMER")
+
+                        // -----------------------------------
+
+                        // customer-only endpoints (keep these)
+                        .requestMatchers(
+                                "/api/account/**",
+                                "/api/orders/**",
+                                "/api/returns/**",
+                                "/api/users/me/payment-methods/**"
+                        ).hasRole("CUSTOMER")
+
+                        // backoffice endpoints - separated by manager type
+                        .requestMatchers("/api/admin/product/**").hasRole("PRODUCT_MANAGER")
+                        .requestMatchers("/api/admin/sales/**").hasRole("SALES_MANAGER")
+                        .requestMatchers("/api/admin/support/**").hasRole("SUPPORT_AGENT")
+
+                        // (optional safety) anything else under /api/admin requires login at least
+                        .requestMatchers("/api/admin/**").authenticated()
+
+                        // everything else
+                        .anyRequest().permitAll()
+                )
+                .authenticationProvider(authenticationProvider())
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.ALWAYS))
+                .logout(logout -> logout
+                        .logoutUrl("/api/auth/logout")
+                        .logoutSuccessHandler((req, res, auth) -> res.setStatus(200))
+                );
 
         return http.build();
     }
 
-    // CORS config so React (5173) can send cookies
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
         config.setAllowedOrigins(List.of("http://localhost:5173"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
