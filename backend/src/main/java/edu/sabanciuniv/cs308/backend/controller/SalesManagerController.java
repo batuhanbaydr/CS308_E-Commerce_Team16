@@ -18,7 +18,8 @@ import java.util.stream.Collectors;
 import java.util.ArrayList;
 
 @RestController
-@RequestMapping("/api/sales")
+@RequestMapping("/api/admin/sales")
+
 public class SalesManagerController {
 
     private final ProductRepository productRepository;
@@ -111,13 +112,14 @@ public class SalesManagerController {
             }
         }
 
-        return ResponseEntity.ok(Map.of(
-                "updatedProducts", products.size(),
-                "notifiedUsers", notifiedUsers,
-                "discountPercent", dp,
-                "startAt", req.getStartAt(),
-                "endAt", req.getEndAt()
-        ));
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("updatedProducts", products.size());
+        resp.put("notifiedUsers", notifiedUsers);
+        resp.put("discountPercent", dp);
+        resp.put("startAt", req.getStartAt()); // null olabilir
+        resp.put("endAt", req.getEndAt());     // null olabilir
+        return ResponseEntity.ok(resp);
+
     }
 }
 
