@@ -312,5 +312,59 @@ export const pmSetVariantStock = (id, sku, stock) =>
     params: { stock },
   });
 
-// If your tabs import { api } (named), export it too:
+export function pmListCategories() {
+  return api.get("/admin/product/categories");
+}
+
+export function pmCreateCategory(name) {
+  return api.post("/admin/product/categories", { name });
+}
+
+export function pmDeleteCategory(id) {
+  return api.delete(`/admin/product/categories/${id}`);
+}
+export function pmListOrders() {
+  return api.get("/admin/product/orders");
+}
+
+export function pmUpdateOrderStatus(orderId, status) {
+  return api.patch(`/admin/product/orders/${orderId}/status`, null, {
+    params: { status },
+  });
+}
+
+
+// Reviews / Comments moderation (Product Manager)
+export function pmListPendingReviews() {
+  return api.get("/reviews/pending"); 
+
+}
+
+export function pmApproveReview(reviewId) {
+  return api.post(`/reviews/${reviewId}/approve`);
+
+}
+
+export function pmRejectReview(reviewId, moderationNote = null) {
+  return api.post(`/reviews/${reviewId}/reject`, moderationNote ? { moderationNote } : null);
+  
+}
+
+
+export function pmUpdateReviewStatus(reviewId, status) {
+  return api.patch(`/reviews/${reviewId}/status`, null, {
+    params: { status },
+  });
+}
+
+export function pmUpdateReviewStatusBody(reviewId, status) {
+  return api.patch(`/reviews/${reviewId}/status`, { status });
+}
+
+export function pmDeleteReview(reviewId) {
+  return api.delete(`/reviews/${reviewId}`);
+
+}
+
+
 export { api };

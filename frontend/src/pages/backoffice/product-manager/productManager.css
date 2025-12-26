@@ -106,7 +106,7 @@
 
 .pm-btn-primary {
   border: 1px solid #111;
-  background: #111;
+  background: #3d211c;
   color: #fff;
 }
 
@@ -136,6 +136,7 @@
 .pm-form {
   display: grid;
   gap: 12px;
+  background: #fef2f2;
   max-width: 900px;
 }
 
@@ -176,7 +177,7 @@
 
 .pm-label {
   font-size: 13px;
-  color: #222;
+  color: #3d211c;
 }
 
 .pm-input,
@@ -339,4 +340,17 @@
   font-size: 18px;
   color: #000;
   cursor: pointer;
+}
+.pm-expand-row td {
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.pm-expand-card {
+  margin-top: 0;
+  background: #fff;
+}
+.pm-variants-table {
+  margin-top: 10px;
 }

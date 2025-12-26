@@ -7,7 +7,7 @@ const items = [
   { label: "Categories", to: `${base}/categories` },
   { label: "Stock", to: `${base}/stock` },
   { label: "Orders", to: `${base}/orders` },
-  { label: "Deliveries", to: `${base}/deliveries` },
+
   { label: "Comments", to: `${base}/comments` },
 ];
 
