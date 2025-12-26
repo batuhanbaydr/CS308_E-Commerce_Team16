@@ -1,3 +1,4 @@
+// src/pages/backoffice/product-manager/tabs/OrdersTab.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { pmListOrders, pmUpdateOrderStatus } from "../../../../lib/api";
 
@@ -17,9 +18,101 @@ function money(n) {
   return `$${num.toFixed(2)}`;
 }
 
-// Try best-effort to show a “created at” if your entity has one
 function getCreatedAt(o) {
   return o?.createdAt ?? o?.createdDate ?? o?.createdOn ?? o?.timestamp ?? null;
+}
+
+// ---------- TOTAL HELPERS (robust) ----------
+function pickNumber(...vals) {
+  for (const v of vals) {
+    if (v == null) continue;
+
+    if (typeof v === "object") {
+      const maybe = v.amount ?? v.value ?? v.total ?? v.price ?? null;
+      const n = Number(maybe);
+      if (Number.isFinite(n)) return n;
+    }
+
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function computeTotalFromItems(o) {
+  const items =
+    o?.items ??
+    o?.orderItems ??
+    o?.lines ??
+    o?.lineItems ??
+    o?.details ??
+    o?.products ??
+    [];
+
+  if (!Array.isArray(items) || items.length === 0) return null;
+
+  let sum = 0;
+  let sawAnyPrice = false;
+
+  for (const it of items) {
+    const qty = pickNumber(it?.quantity, it?.qty, 1) ?? 1;
+
+    // sometimes line has subtotal already
+    const lineSubtotal = pickNumber(it?.subtotal, it?.lineTotal, it?.total);
+    if (lineSubtotal != null) {
+      sum += lineSubtotal;
+      sawAnyPrice = true;
+      continue;
+    }
+
+    // otherwise compute unitPrice * qty
+    const unit = pickNumber(
+      it?.unitPrice,
+      it?.price,
+      it?.salePrice,
+      it?.basePrice,
+      it?.productPrice,
+      it?.variantPrice
+    );
+
+    if (unit != null) {
+      sum += unit * qty;
+      sawAnyPrice = true;
+    }
+  }
+
+  if (!sawAnyPrice) return null;
+  return Number.isFinite(sum) ? sum : null;
+}
+
+function getTotal(o) {
+  // 1) BEST: backend totals object (your screenshot shows totals.grandTotal)
+  const fromTotalsObj = pickNumber(
+    o?.totals?.grandTotal,
+    o?.totals?.total,
+    o?.totals?.amount,
+    o?.totals?.subtotal
+  );
+  if (fromTotalsObj != null) return fromTotalsObj;
+
+  // 2) direct totals on root (older schema)
+  const direct = pickNumber(
+    o?.totalPrice,
+    o?.total,
+    o?.grandTotal,
+    o?.totalAmount,
+    o?.amount,
+    o?.pricing?.total,
+    o?.pricing?.grandTotal,
+    o?.payment?.total
+  );
+  if (direct != null) return direct;
+
+  // 3) last resort: compute from items (not invoice-accurate if tax/shipping exist)
+  const computed = computeTotalFromItems(o);
+  if (computed != null) return computed;
+
+  return null;
 }
 
 export default function OrdersTab() {
@@ -36,7 +129,8 @@ export default function OrdersTab() {
     setErrMsg("");
     try {
       const res = await pmListOrders();
-      setOrders(Array.isArray(res.data) ? res.data : []);
+      const list = Array.isArray(res.data) ? res.data : [];
+      setOrders(list);
     } catch (e) {
       setErrMsg(
         e?.response?.data?.message ||
@@ -52,13 +146,12 @@ export default function OrdersTab() {
     load();
   }, []);
 
-  // Build dropdown options from data so we don’t guess your enum values
+  // Build dropdown options from data so we don’t guess enum values
   const statusOptions = useMemo(() => {
     const set = new Set();
     for (const o of orders) {
       if (o?.status) set.add(String(o.status));
     }
-    // add common ones as extra convenience (won’t hurt)
     [
       "PENDING",
       "PROCESSING",
@@ -67,6 +160,7 @@ export default function OrdersTab() {
       "DELIVERED",
       "CANCELLED",
       "REFUNDED",
+      "CART",
     ].forEach((s) => set.add(s));
 
     return Array.from(set).sort((a, b) => a.localeCompare(b));
@@ -88,14 +182,8 @@ export default function OrdersTab() {
     const id = getId(o);
     const status = String(getDraft(o) || "").trim();
 
-    if (!id) {
-      setActionErr("Order id is missing.");
-      return;
-    }
-    if (!status) {
-      setActionErr("Status is required.");
-      return;
-    }
+    if (!id) return setActionErr("Order id is missing.");
+    if (!status) return setActionErr("Status is required.");
 
     setSavingId(id);
     try {
@@ -154,8 +242,12 @@ export default function OrdersTab() {
               const createdAt = getCreatedAt(o);
               const customer =
                 o?.customerId ?? o?.userId ?? o?.customer?.id ?? o?.user?.id ?? "—";
-              const total =
-                o?.totalPrice ?? o?.total ?? o?.grandTotal ?? o?.amount ?? null;
+
+              const status = String(o?.status ?? "").toUpperCase();
+              const isCart = status === "CART";
+
+              // CART: show subtotal from items if totals not present (more honest than $0)
+              const total = isCart ? computeTotalFromItems(o) : getTotal(o);
 
               return (
                 <tr key={id || Math.random()}>
@@ -170,7 +262,6 @@ export default function OrdersTab() {
                       value={getDraft(o)}
                       onChange={(e) => setDraft(o, e.target.value)}
                     >
-                      {/* allow current status even if not in list */}
                       {!statusOptions.includes(String(o?.status ?? "")) && (
                         <option value={String(o?.status ?? "")}>
                           {String(o?.status ?? "") || "—"}
@@ -182,8 +273,6 @@ export default function OrdersTab() {
                         </option>
                       ))}
                     </select>
-
-
                   </td>
 
                   <td>
