@@ -81,9 +81,7 @@ export default function ProductDetailMock() {
           <button className="home-nav-item" onClick={go("/category/pants")}>
             PANTS
           </button>
-          <button className="home-nav-item" onClick={go("/shop-the-look")}>
-            SHOP THE LOOK
-          </button>
+
         </nav>
 
         <div className="home-right">
