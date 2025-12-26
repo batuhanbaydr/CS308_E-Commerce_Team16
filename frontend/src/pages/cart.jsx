@@ -190,9 +190,13 @@ export default function Cart({ onClose }) {
   };
 
   // simple fake shipping
-  const estimatedShipping = 8.5;
+  const estimatedShipping =
+  basket && basket.items && basket.items.length > 0 ? 8.5 : 0;
+
   const subtotal = basket?.subtotal || 0;
   const estimatedTotal = subtotal + estimatedShipping;
+
+  
 
   const handleGoToCheckout = () => {
     // block if basket is empty
