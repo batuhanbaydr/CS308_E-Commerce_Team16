@@ -100,6 +100,7 @@ export default function App() {
 
             {/* ============================
                 Backoffice routes
+                (MATCH Login.jsx redirects)
                 ============================ */}
 
             {/* Product Manager backoffice */}
@@ -112,9 +113,9 @@ export default function App() {
               }
             />
 
-                {/* these should be replaced */}
+            {/* Sales Manager backoffice (placeholder for now) */}
             <Route
-              path="/backoffice/sales"
+              path="/backoffice/sales-manager/*"
               element={
                 <RequireAuth allowedRoles={["SALES_MANAGER"]}>
                   <Placeholder title="Sales Manager Backoffice" />
@@ -122,8 +123,9 @@ export default function App() {
               }
             />
 
+            {/* Support Agent backoffice (placeholder for now) */}
             <Route
-              path="/backoffice/support"
+              path="/backoffice/support-manager/*"
               element={
                 <RequireAuth allowedRoles={["SUPPORT_AGENT"]}>
                   <Placeholder title="Support Agent Backoffice" />
@@ -135,7 +137,9 @@ export default function App() {
             <Route
               path="/admin"
               element={
-                <RequireAuth allowedRoles={["PRODUCT_MANAGER", "SALES_MANAGER", "SUPPORT_AGENT"]}>
+                <RequireAuth
+                  allowedRoles={["PRODUCT_MANAGER", "SALES_MANAGER", "SUPPORT_AGENT"]}
+                >
                   <AdminHome />
                 </RequireAuth>
               }

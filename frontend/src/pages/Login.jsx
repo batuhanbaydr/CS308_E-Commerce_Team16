@@ -1,6 +1,6 @@
 // src/pages/Login.jsx
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { attachCartToUser } from "../lib/api";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
@@ -9,13 +9,24 @@ import { useAuth } from "../context/AuthContext.jsx";
 
 const CART_STORAGE_KEY = "tidl_cart_id";
 
-const hasAdminAccess = (user) =>
-  user?.roles?.includes("SALES_MANAGER") ||
-  user?.roles?.includes("PRODUCT_MANAGER") ||
-  user?.roles?.includes("SUPPORT_AGENT") ||
-  user?.role === "SALES_MANAGER" ||
-  user?.role === "PRODUCT_MANAGER" ||
-  user?.role === "SUPPORT_AGENT";
+// ---- role helpers -------------------------------------------------
+const hasRole = (u, role) =>
+  u?.roles?.includes(role) || u?.role === role || u?.userRole === role;
+
+const isProductManager = (u) => hasRole(u, "PRODUCT_MANAGER");
+const isSalesManager = (u) => hasRole(u, "SALES_MANAGER");
+const isSupportManager = (u) => hasRole(u, "SUPPORT_AGENT");
+
+const hasAdminAccess = (u) =>
+  isSalesManager(u) || isProductManager(u) || isSupportManager(u);
+
+// Decide where the user should land after login (and for "Admin Panel" button)
+const getDefaultRouteForUser = (u) => {
+  if (isProductManager(u)) return "/backoffice/product-manager";
+  if (isSalesManager(u)) return "/backoffice/sales-manager";
+  if (isSupportManager(u)) return "/backoffice/support-manager";
+  return "/home"; // normal customer
+};
 
 function safeDecodeNext(nextParam) {
   if (!nextParam) return null;
@@ -33,7 +44,6 @@ export default function Login() {
 
   const { openCart } = useCartDrawer();
   const navigate = useNavigate();
-  const go = (path) => () => navigate(path);
 
   const [showMenu, setShowMenu] = useState(false);
 
@@ -45,10 +55,15 @@ export default function Login() {
     [searchParams]
   );
 
-  // If user is already logged in and they visit /login, do nothing (allow re-login).
+  // If user is already logged in and they visit /login, allow re-login (no auto redirect).
   useEffect(() => {
-    // intentionally empty behavior
+    // intentionally empty
   }, [user]);
+
+  const go = (path) => () => {
+    setShowMenu(false);
+    navigate(path);
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -63,6 +78,11 @@ export default function Login() {
     try {
       // 1) login through AuthContext
       const meData = await login(emailAddress, password);
+      console.log("LOGIN meData =", meData);
+      console.log("LOGIN meData.roles =", meData?.roles);
+      console.log("LOGIN meData.role =", meData?.role);
+      console.log("LOGIN meData.userRole =", meData?.userRole);
+
 
       // 2) attach guest cart
       if (typeof window !== "undefined" && meData?.id) {
@@ -81,12 +101,11 @@ export default function Login() {
         }
       }
 
-      // 3) redirect: respect ?next=..., else go HOME (your desired behavior)
-      if (next) {
-        navigate(next, { replace: true });
-      } else {
-        navigate("/home", { replace: true });
-      }
+      // 3) redirect:
+      // - if ?next= is provided, respect it (deep-link)
+      // - otherwise send managers to their backoffice landing page
+      const destination = next || getDefaultRouteForUser(meData);
+      navigate(destination, { replace: true });
     } catch (err) {
       const msg =
         err?.response?.data?.message || "Login failed. Check e-mail or password.";
@@ -163,7 +182,10 @@ export default function Login() {
                     Details
                   </button>
 
-                  <button className="details-menu-item" onClick={go("/wishlist")}>
+                  <button
+                    className="details-menu-item"
+                    onClick={go("/wishlist")}
+                  >
                     Wishlist
                   </button>
 
@@ -172,7 +194,7 @@ export default function Login() {
                       className="details-menu-item"
                       onClick={() => {
                         setShowMenu(false);
-                        navigate("/admin");
+                        navigate(getDefaultRouteForUser(user));
                       }}
                     >
                       Admin Panel
@@ -226,7 +248,8 @@ export default function Login() {
           </form>
 
           <p className="login-footer-text">
-            Don’t have an account? <a href="/signup">Click here to create one.</a>
+            Don’t have an account?{" "}
+            <Link to="/signup">Click here to create one.</Link>
           </p>
 
           {user && (

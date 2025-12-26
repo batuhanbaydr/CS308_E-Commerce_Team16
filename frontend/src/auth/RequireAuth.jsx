@@ -9,19 +9,6 @@ function getUserRole(user) {
   return null;
 }
 
-function getRoleHome(role) {
-  switch (role) {
-    case "PRODUCT_MANAGER":
-      return "/backoffice/product";
-    case "SALES_MANAGER":
-      return "/backoffice/sales";
-    case "SUPPORT_AGENT":
-      return "/backoffice/support";
-    default:
-      return "/home";
-  }
-}
-
 export default function RequireAuth({ allowedRoles, children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -34,6 +21,7 @@ export default function RequireAuth({ allowedRoles, children }) {
     );
   }
 
+  // Not logged in -> go to login and preserve destination
   if (!user) {
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
@@ -41,8 +29,9 @@ export default function RequireAuth({ allowedRoles, children }) {
 
   const role = getUserRole(user);
 
+  // Logged in but role not allowed -> send to /home (or create a /403 page)
   if (allowedRoles?.length && (!role || !allowedRoles.includes(role))) {
-    return <Navigate to={getRoleHome(role)} replace />;
+    return <Navigate to="/home" replace />;
   }
 
   return children;
