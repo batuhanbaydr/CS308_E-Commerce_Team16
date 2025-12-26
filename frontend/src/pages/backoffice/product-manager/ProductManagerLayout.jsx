@@ -8,6 +8,7 @@ import StockTab from "./tabs/StockTab";
 import OrdersTab from "./tabs/OrdersTab";
 import Invoice from "./tabs/InvoiceTab";
 import CommentsTab from "./tabs/CommentsTab";
+import DelivieriesTab from "./tabs/Deliveries";
 import "./productManager.css";
 
 
@@ -27,6 +28,7 @@ export default function ProductManagerLayout() {
             <Route index element={<Navigate to="products" replace />} />
             <Route path="products" element={<ProductsTab />} />
             <Route path="categories" element={<CategoriesTab />} />
+            <Route path="deliveries" element={<DelivieriesTab />} />
             <Route path="stock" element={<StockTab />} />
             <Route path="orders" element={<OrdersTab />} />
             <Route path="invoice" element={<Invoice />} />

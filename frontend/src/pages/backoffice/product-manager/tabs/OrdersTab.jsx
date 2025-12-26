@@ -230,7 +230,7 @@ export default function OrdersTab() {
               <th align="left">Order ID</th>
               <th align="left">Created</th>
               <th align="left">Customer</th>
-              <th align="left">Total</th>
+              <th align="left">Grand Total</th>
               <th align="left">Status</th>
               <th align="left">Actions</th>
             </tr>
