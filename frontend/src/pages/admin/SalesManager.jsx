@@ -1,13 +1,15 @@
 // src/pages/admin/SalesManager.jsx
 
-// BU SAYFA EKSİK!!! -> backend yazıldıktan sonra fakeFetchInvoices düzeltilecek, print invoice kısmı düzeltilecek, indirimli ürün ui'ı yapılıp eklenecek
-
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   meRequest,
   logoutRequest,
   listProducts,
+  applyDiscount,
+  listInvoicesByDateRange,
+  getRevenueProfit,
+  downloadInvoicePdf,
 } from "../../lib/api";
 import searchIcon from "../../assets/search.png";
 import bagIcon from "../../assets/bag.png";
@@ -24,29 +26,6 @@ const hasAdminAccess = (user) =>
 
 const isSalesManager = (user) =>
   user?.roles?.includes("SALES_MANAGER") || user?.role === "SALES_MANAGER";
-
-// 🔸 TEMP: fake invoice fetch so UI works immediately.
-// Replace this later with a real backend call.
-async function fakeFetchInvoices(startDate, endDate) {
-  // Just a tiny demo dataset so you can see the chart + summary.
-  // Replace this with: const { data } = await listInvoicesByDateRange(...)
-  return [
-    {
-      id: "inv-1001",
-      date: startDate,
-      customerName: "Demo Customer A",
-      totalAmount: 120,
-      totalCost: 60, // if missing, we’ll default to 50%
-    },
-    {
-      id: "inv-1002",
-      date: endDate,
-      customerName: "Demo Customer B",
-      totalAmount: 200,
-      // no totalCost -> we’ll use 50% of sale (100)
-    },
-  ];
-}
 
 export default function SalesManager() {
   const navigate = useNavigate();
@@ -75,6 +54,39 @@ export default function SalesManager() {
   const [invoices, setInvoices] = useState([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [invoiceError, setInvoiceError] = useState("");
+  const [revenueData, setRevenueData] = useState(null);
+  const [loadingRevenue, setLoadingRevenue] = useState(false);
+
+  // Helper function to format date for input (YYYY-MM-DD)
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return "";
+    // If already in YYYY-MM-DD format, return as is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return dateString;
+    // Try to parse and format
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  // Handle date input with validation
+  const handleStartDateChange = (e) => {
+    const value = e.target.value;
+    // Allow manual typing - accept YYYY-MM-DD format
+    if (value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      setStartDate(value);
+    }
+  };
+
+  const handleEndDateChange = (e) => {
+    const value = e.target.value;
+    // Allow manual typing - accept YYYY-MM-DD format
+    if (value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      setEndDate(value);
+    }
+  };
 
   // ===== user load =====
   useEffect(() => {
@@ -278,7 +290,7 @@ export default function SalesManager() {
     setSelectedIds(new Set(filteredProducts.map((p) => p.id)));
   };
 
-  const handleApplyDiscount = () => {
+  const handleApplyDiscount = async () => {
     const d = Number(discountPercent);
     if (!d || d <= 0 || d > 90) {
       setStatusKind("error");
@@ -291,22 +303,40 @@ export default function SalesManager() {
       return;
     }
 
-    const payload = {
-      discountPercent: d,
-      productIds: Array.from(selectedIds),
-      notifyWishlist,
-    };
+    try {
+      setStatusMessage(null);
+      const { data } = await applyDiscount(
+        d,
+        Array.from(selectedIds),
+        notifyWishlist
+      );
 
-    // FRONTEND-ONLY for now: just log + show confirmation
-    // Later you can call your backend here (e.g. adminApplyDiscounts(payload))
-    console.log("[SalesManager] Apply discount payload:", payload);
+      setStatusKind("success");
+      const message = notifyWishlist
+        ? `Discount applied to ${data.updatedProducts} products. ${data.notifiedUsers} wishlist users notified.`
+        : `Discount applied to ${data.updatedProducts} products.`;
+      setStatusMessage(message);
 
-    setStatusKind("success");
-    setStatusMessage(
-      notifyWishlist
-        ? "Discount campaign created. Wishlist users for these products will be notified."
-        : "Discount campaign created (wishlist notifications disabled)."
-    );
+      // Clear selection and reload products to show updated prices
+      setSelectedIds(new Set());
+      const [sweatRes, shirtRes, pantsRes] = await Promise.all([
+        listProducts("Sweatshirt"),
+        listProducts("Shirt"),
+        listProducts("Pant"),
+      ]);
+      const merged = [
+        ...(sweatRes?.data || []),
+        ...(shirtRes?.data || []),
+        ...(pantsRes?.data || []),
+      ];
+      setProducts(merged);
+    } catch (err) {
+      console.error("Error applying discount", err);
+      setStatusKind("error");
+      setStatusMessage(
+        err.response?.data?.message || "Failed to apply discount. Please try again."
+      );
+    }
   };
 
   // ===== Invoices: fetch + summary + chart =====
@@ -322,28 +352,79 @@ export default function SalesManager() {
     }
 
     setLoadingInvoices(true);
+    setLoadingRevenue(true);
     setInvoiceError("");
 
     try {
-      // 🔸 replace fakeFetchInvoices with real backend call later
-      const data = await fakeFetchInvoices(startDate, endDate);
+      // Fetch invoices
+      const invoicesResponse = await listInvoicesByDateRange(startDate, endDate);
+      const invoicesData = invoicesResponse.data || [];
+      
+      // Transform backend data to frontend format
+      const transformedInvoices = invoicesData.map((inv) => ({
+        id: inv.orderId,
+        date: inv.createdAt ? new Date(inv.createdAt).toISOString().split("T")[0] : "",
+        customerName: inv.userId || "Unknown",
+        totalAmount: inv.grandTotal ? Number(inv.grandTotal) : 0,
+        status: inv.status || "UNKNOWN",
+      }));
 
-      setInvoices(data || []);
+      setInvoices(transformedInvoices);
+
+      // Fetch revenue/profit data for charts
+      const revenueResponse = await getRevenueProfit(startDate, endDate, "day");
+      setRevenueData(revenueResponse.data);
     } catch (err) {
       console.error("Error fetching invoices", err);
-      setInvoiceError("Could not load invoices.");
+      setInvoiceError(
+        err.response?.data?.message || "Could not load invoices."
+      );
     } finally {
       setLoadingInvoices(false);
+      setLoadingRevenue(false);
     }
   };
 
-  const handlePrintInvoices = () => {
-    // Browser print dialog – user can choose "Save as PDF"
-    window.print();
+  const handlePrintInvoices = async () => {
+    if (invoices.length === 0) {
+      setInvoiceError("No invoices to print. Please fetch invoices first.");
+      return;
+    }
+
+    try {
+      // Download all invoices as PDFs
+      for (const inv of invoices) {
+        try {
+          const response = await downloadInvoicePdf(inv.id);
+          const blob = new Blob([response.data], { type: "application/pdf" });
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `invoice-${inv.id}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+        } catch (err) {
+          console.error(`Error downloading invoice ${inv.id}:`, err);
+        }
+      }
+    } catch (err) {
+      console.error("Error printing invoices", err);
+      setInvoiceError("Could not download invoices.");
+    }
   };
 
-  // revenue / cost / profit summary
+  // revenue / cost / profit summary (from backend if available, otherwise calculate)
   const revenueSummary = useMemo(() => {
+    if (revenueData) {
+      return {
+        totalRevenue: Number(revenueData.revenue || 0),
+        totalCost: Number(revenueData.cost || 0),
+        profit: Number(revenueData.profit || 0),
+      };
+    }
+
     if (!invoices.length) {
       return {
         totalRevenue: 0,
@@ -361,23 +442,25 @@ export default function SalesManager() {
       );
 
       totalRevenue += invoiceTotal;
-
-      // If backend provides a totalCost, use it. Otherwise default cost = 50% of sale price
-      const explicitCost = Number(inv.totalCost ?? NaN);
-      if (!Number.isNaN(explicitCost) && explicitCost > 0) {
-        totalCost += explicitCost;
-      } else {
-        totalCost += invoiceTotal * 0.5;
-      }
+      // Default cost = 50% of sale price
+      totalCost += invoiceTotal * 0.5;
     });
 
     const profit = totalRevenue - totalCost;
 
     return { totalRevenue, totalCost, profit };
-  }, [invoices]);
+  }, [invoices, revenueData]);
 
-  // simple chart data: revenue per date
-  const revenueChartPoints = useMemo(() => {
+  // Chart data: use backend series if available, otherwise calculate from invoices
+  const chartData = useMemo(() => {
+    if (revenueData && revenueData.series && revenueData.series.length > 0) {
+      return revenueData.series.map((point) => ({
+        date: point.bucket,
+        revenue: Number(point.revenue || 0),
+        profit: Number(point.profit || 0),
+      }));
+    }
+
     if (!invoices.length) return [];
 
     const byDate = {};
@@ -388,22 +471,65 @@ export default function SalesManager() {
         inv.totalAmount ?? inv.total ?? inv.totalPrice ?? 0
       );
       if (!day) return;
-      byDate[day] = (byDate[day] || 0) + invoiceTotal;
+      if (!byDate[day]) {
+        byDate[day] = { revenue: 0, profit: 0 };
+      }
+      byDate[day].revenue += invoiceTotal;
+      byDate[day].profit += invoiceTotal * 0.5; // 50% profit assumption
     });
 
-    const entries = Object.entries(byDate).sort(([d1], [d2]) =>
-      d1.localeCompare(d2)
-    );
-    if (!entries.length) return [];
+    return Object.entries(byDate)
+      .sort(([d1], [d2]) => d1.localeCompare(d2))
+      .map(([date, data]) => ({
+        date,
+        revenue: data.revenue,
+        profit: data.revenue - data.profit,
+      }));
+  }, [invoices, revenueData]);
 
-    const maxVal = Math.max(...entries.map(([, v]) => v));
+  // Box plot data: revenue distribution
+  const boxPlotData = useMemo(() => {
+    if (!chartData.length) return null;
 
-    return entries.map(([date, value]) => ({
-      date,
-      value,
-      height: maxVal ? (value / maxVal) * 100 : 0,
-    }));
-  }, [invoices]);
+    const revenues = chartData.map((d) => d.revenue).sort((a, b) => a - b);
+    if (revenues.length === 0) return null;
+
+    const q1Index = Math.floor(revenues.length * 0.25);
+    const medianIndex = Math.floor(revenues.length * 0.5);
+    const q3Index = Math.floor(revenues.length * 0.75);
+
+    return {
+      min: revenues[0],
+      q1: revenues[q1Index],
+      median: revenues[medianIndex],
+      q3: revenues[q3Index],
+      max: revenues[revenues.length - 1],
+      mean: revenues.reduce((a, b) => a + b, 0) / revenues.length,
+    };
+  }, [chartData]);
+
+  // Pie chart data: revenue breakdown
+  const pieChartData = useMemo(() => {
+    if (!revenueSummary || revenueSummary.totalRevenue === 0) return null;
+
+    return [
+      {
+        label: "Revenue",
+        value: revenueSummary.totalRevenue,
+        color: "#3d211c",
+      },
+      {
+        label: "Cost",
+        value: revenueSummary.totalCost,
+        color: "#b91c1c",
+      },
+      {
+        label: "Profit",
+        value: Math.max(0, revenueSummary.profit),
+        color: "#166534",
+      },
+    ];
+  }, [revenueSummary]);
 
   // ===== loading / guard states =====
   if (loadingUser) {
@@ -442,7 +568,7 @@ export default function SalesManager() {
 
   // ===== main UI =====
   return (
-    <div className="category-page">
+    <div className="category-page" lang="en">
       {renderHeader()}
 
       <main className="profile-wrapper">
@@ -681,9 +807,23 @@ export default function SalesManager() {
                 <input
                   id="inv-start"
                   type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  lang="en-US"
+                  value={formatDateForInput(startDate)}
+                  onChange={handleStartDateChange}
+                  placeholder="YYYY-MM-DD"
+                  pattern="\d{4}-\d{2}-\d{2}"
+                  style={{ 
+                    fontFamily: 'inherit',
+                    padding: '8px 12px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    width: '100%'
+                  }}
                 />
+                <span style={{ fontSize: 12, color: "#7a7a7a", marginTop: 4, display: 'block' }}>
+                  Format: YYYY-MM-DD (e.g., 2025-01-01) - You can type manually or use the calendar
+                </span>
               </div>
 
               <div className="profile-field">
@@ -691,9 +831,23 @@ export default function SalesManager() {
                 <input
                   id="inv-end"
                   type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  lang="en-US"
+                  value={formatDateForInput(endDate)}
+                  onChange={handleEndDateChange}
+                  placeholder="YYYY-MM-DD"
+                  pattern="\d{4}-\d{2}-\d{2}"
+                  style={{ 
+                    fontFamily: 'inherit',
+                    padding: '8px 12px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    width: '100%'
+                  }}
                 />
+                <span style={{ fontSize: 12, color: "#7a7a7a", marginTop: 4, display: 'block' }}>
+                  Format: YYYY-MM-DD (e.g., 2025-12-31) - You can type manually or use the calendar
+                </span>
               </div>
 
               <div className="profile-form-actions">
@@ -778,8 +932,8 @@ export default function SalesManager() {
                   </div>
                 </div>
 
-                {/* chart */}
-                {revenueChartPoints.length > 0 && (
+                {/* Charts: Box Plot and Pie Chart */}
+                {chartData.length > 0 && (
                   <div
                     style={{
                       marginTop: 4,
@@ -788,67 +942,257 @@ export default function SalesManager() {
                       paddingTop: 12,
                     }}
                   >
-                    <p
-                      style={{
-                        fontSize: 13,
-                        color: "#555",
-                        marginBottom: 8,
-                      }}
-                    >
-                      Revenue chart (per day)
-                    </p>
                     <div
                       style={{
-                        display: "flex",
-                        alignItems: "flex-end",
-                        gap: 12,
-                        minHeight: 140,
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 24,
+                        marginBottom: 20,
                       }}
                     >
-                      {revenueChartPoints.map((pt) => (
-                        <div
-                          key={pt.date}
-                          style={{
-                            flex: 1,
-                            minWidth: 48,
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            fontSize: 11,
-                          }}
-                        >
+                      {/* Box Plot */}
+                      {boxPlotData && (
+                        <div>
+                          <p
+                            style={{
+                              fontSize: 13,
+                              color: "#555",
+                              marginBottom: 12,
+                              fontWeight: 500,
+                            }}
+                          >
+                            Revenue Distribution (Box Plot)
+                          </p>
                           <div
                             style={{
-                              height: 100,
-                              display: "flex",
-                              alignItems: "flex-end",
-                              width: "100%",
+                              position: "relative",
+                              height: 200,
+                              border: "1px solid #e5e5e5",
+                              borderRadius: 6,
+                              padding: 16,
+                              background: "#fafafa",
                             }}
                           >
+                            <svg
+                              width="100%"
+                              height="100%"
+                              style={{ overflow: "visible" }}
+                            >
+                              {/* Y-axis */}
+                              <line
+                                x1="40"
+                                y1="20"
+                                x2="40"
+                                y2="160"
+                                stroke="#ccc"
+                                strokeWidth="1"
+                              />
+                              {/* Box */}
+                              <rect
+                                x="60"
+                                y={160 - (boxPlotData.q3 / boxPlotData.max) * 120}
+                                width="80"
+                                height={
+                                  ((boxPlotData.q3 - boxPlotData.q1) /
+                                    boxPlotData.max) *
+                                  120
+                                }
+                                fill="#3d211c"
+                                opacity="0.3"
+                                stroke="#3d211c"
+                                strokeWidth="2"
+                              />
+                              {/* Median line */}
+                              <line
+                                x1="60"
+                                y1={160 - (boxPlotData.median / boxPlotData.max) * 120}
+                                x2="140"
+                                y2={160 - (boxPlotData.median / boxPlotData.max) * 120}
+                                stroke="#3d211c"
+                                strokeWidth="2"
+                              />
+                              {/* Whiskers */}
+                              <line
+                                x1="100"
+                                y1={160 - (boxPlotData.min / boxPlotData.max) * 120}
+                                x2="100"
+                                y2={160 - (boxPlotData.q1 / boxPlotData.max) * 120}
+                                stroke="#3d211c"
+                                strokeWidth="2"
+                              />
+                              <line
+                                x1="100"
+                                y1={160 - (boxPlotData.q3 / boxPlotData.max) * 120}
+                                x2="100"
+                                y2={160 - (boxPlotData.max / boxPlotData.max) * 120}
+                                stroke="#3d211c"
+                                strokeWidth="2"
+                              />
+                              {/* Min/Max markers */}
+                              <line
+                                x1="90"
+                                y1={160 - (boxPlotData.min / boxPlotData.max) * 120}
+                                x2="110"
+                                y2={160 - (boxPlotData.min / boxPlotData.max) * 120}
+                                stroke="#3d211c"
+                                strokeWidth="2"
+                              />
+                              <line
+                                x1="90"
+                                y1={160 - (boxPlotData.max / boxPlotData.max) * 120}
+                                x2="110"
+                                y2={160 - (boxPlotData.max / boxPlotData.max) * 120}
+                                stroke="#3d211c"
+                                strokeWidth="2"
+                              />
+                            </svg>
                             <div
                               style={{
-                                width: "60%",
-                                height: `${pt.height}%`,
-                                margin: "0 auto",
-                                borderRadius: 4,
-                                backgroundColor: "#3d211c",
+                                marginTop: 8,
+                                fontSize: 11,
+                                color: "#666",
                               }}
-                            />
+                            >
+                              <div>
+                                Min: ${boxPlotData.min.toFixed(2)} | Q1: $
+                                {boxPlotData.q1.toFixed(2)} | Median: $
+                                {boxPlotData.median.toFixed(2)}
+                              </div>
+                              <div>
+                                Q3: ${boxPlotData.q3.toFixed(2)} | Max: $
+                                {boxPlotData.max.toFixed(2)} | Mean: $
+                                {boxPlotData.mean.toFixed(2)}
+                              </div>
+                            </div>
                           </div>
-                          <span
+                        </div>
+                      )}
+
+                      {/* Pie Chart */}
+                      {pieChartData && (
+                        <div>
+                          <p
                             style={{
-                              marginTop: 4,
+                              fontSize: 13,
                               color: "#555",
-                              whiteSpace: "nowrap",
+                              marginBottom: 12,
+                              fontWeight: 500,
                             }}
                           >
-                            {pt.date.slice(5)} {/* MM-DD */}
-                          </span>
-                          <span style={{ color: "#777" }}>
-                            ${pt.value.toFixed(0)}
-                          </span>
+                            Revenue Breakdown (Pie Chart)
+                          </p>
+                          <div
+                            style={{
+                              position: "relative",
+                              height: 200,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <svg width="180" height="180" viewBox="0 0 200 200">
+                              {(() => {
+                                const total = pieChartData.reduce(
+                                  (sum, item) => sum + item.value,
+                                  0
+                                );
+                                let currentAngle = -90;
+                                const radius = 70;
+                                const centerX = 100;
+                                const centerY = 100;
+
+                                return pieChartData.map((item, index) => {
+                                  const percentage =
+                                    total > 0 ? (item.value / total) * 100 : 0;
+                                  const angle = (percentage / 100) * 360;
+                                  const startAngle = currentAngle;
+                                  const endAngle = currentAngle + angle;
+
+                                  const x1 =
+                                    centerX +
+                                    radius *
+                                      Math.cos((startAngle * Math.PI) / 180);
+                                  const y1 =
+                                    centerY +
+                                    radius *
+                                      Math.sin((startAngle * Math.PI) / 180);
+                                  const x2 =
+                                    centerX +
+                                    radius * Math.cos((endAngle * Math.PI) / 180);
+                                  const y2 =
+                                    centerY +
+                                    radius * Math.sin((endAngle * Math.PI) / 180);
+
+                                  const largeArcFlag = angle > 180 ? 1 : 0;
+
+                                  const pathData = [
+                                    `M ${centerX} ${centerY}`,
+                                    `L ${x1} ${y1}`,
+                                    `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+                                    "Z",
+                                  ].join(" ");
+
+                                  currentAngle += angle;
+
+                                  return (
+                                    <path
+                                      key={index}
+                                      d={pathData}
+                                      fill={item.color}
+                                      stroke="#fff"
+                                      strokeWidth="2"
+                                    />
+                                  );
+                                });
+                              })()}
+                            </svg>
+                            <div
+                              style={{
+                                position: "absolute",
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 4,
+                                fontSize: 11,
+                              }}
+                            >
+                              {pieChartData.map((item, index) => (
+                                <div
+                                  key={index}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 6,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      width: 12,
+                                      height: 12,
+                                      backgroundColor: item.color,
+                                      borderRadius: 2,
+                                    }}
+                                  />
+                                  <span style={{ color: "#666" }}>
+                                    {item.label}: $
+                                    {item.value.toFixed(2)} (
+                                    {revenueSummary.totalRevenue > 0
+                                      ? (
+                                          (item.value /
+                                            revenueSummary.totalRevenue) *
+                                          100
+                                        ).toFixed(1)
+                                      : 0}
+                                    %)
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                 )}
