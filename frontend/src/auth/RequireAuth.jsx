@@ -1,28 +1,38 @@
-// src/auth/RequireAuth.jsx
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { meRequest } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
-export default function RequireAuth({ children }) {
-  const [state, setState] = useState({ loading: true, user: null });
+function getUserRole(user) {
+  if (!user) return null;
+  if (user.role) return user.role;
+  if (Array.isArray(user.roles) && user.roles.length > 0) return user.roles[0];
+  return null;
+}
+
+export default function RequireAuth({ allowedRoles, children }) {
+  const { user, loading } = useAuth();
   const location = useLocation();
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await meRequest();
-        setState({ loading: false, user: data });
-      } catch {
-        setState({ loading: false, user: null });
-      }
-    })();
-  }, []);
-
-  if (state.loading) return null; // or a spinner
-
-  if (!state.user) {
-    // not logged in → send to login, but remember where the user wanted to go
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  if (loading) {
+    return (
+      <div style={{ padding: 24, fontFamily: "system-ui" }}>
+        Loading...
+      </div>
+    );
   }
+
+  // Not logged in -> go to login and preserve destination
+  if (!user) {
+    const next = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?next=${next}`} replace />;
+  }
+
+  const role = getUserRole(user);
+
+  // Logged in but role not allowed -> send to /home (or create a /403 page)
+  if (allowedRoles?.length && (!role || !allowedRoles.includes(role))) {
+    return <Navigate to="/home" replace />;
+  }
+
   return children;
 }

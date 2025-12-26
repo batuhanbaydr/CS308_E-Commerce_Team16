@@ -506,12 +506,7 @@ export default function Sweatshirts() {
           >
             PANTS
           </button>
-          <button
-            onClick={() => navigate("/shop-the-look")}
-            className="category-nav-item"
-          >
-            SHOP THE LOOK
-          </button>
+
         </nav>
         <div className="category-actions">
           {/* keep icon, but category-wide search stays on this page */}
