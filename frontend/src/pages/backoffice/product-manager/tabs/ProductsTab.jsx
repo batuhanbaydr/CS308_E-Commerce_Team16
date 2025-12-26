@@ -1,6 +1,15 @@
 // src/pages/backoffice/product-manager/tabs/ProductsTab.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { pmListProducts, pmCreateProduct } from "../../../../lib/api";
+import {
+  pmListProducts,
+  pmCreateProduct,
+  pmUpdateProduct,
+  pmDeleteProduct,
+} from "../../../../lib/api";
+
+function getId(p) {
+  return p?.id ?? p?._id ?? "";
+}
 
 function getPriceNumber(p) {
   const raw = p?.basePrice ?? p?.price ?? p?.unitPrice ?? 0;
@@ -8,16 +17,6 @@ function getPriceNumber(p) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function getActiveLabel(p) {
-  if (typeof p?.active === "boolean") return p.active ? "Yes" : "No";
-  if (p?.status) {
-    const s = String(p.status).toUpperCase();
-    if (s === "ACTIVE") return "Yes";
-    if (s === "INACTIVE" || s === "ARCHIVED") return "No";
-  }
-  if (typeof p?.visible === "boolean") return p.visible ? "Yes" : "No";
-  return "—";
-}
 
 function splitCsvToArray(s) {
   return String(s || "")
@@ -26,25 +25,37 @@ function splitCsvToArray(s) {
     .filter(Boolean);
 }
 
+function arrayToCsv(arr) {
+  if (!Array.isArray(arr)) return "";
+  return arr.filter(Boolean).join(", ");
+}
+
+function safeStringifyJson(val, fallback = "[]") {
+  try {
+    return JSON.stringify(val ?? [], null, 2);
+  } catch {
+    return fallback;
+  }
+}
+
 export default function ProductsTab() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
 
-  // add form
+  // Create form
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState("");
   const [saveOk, setSaveOk] = useState("");
 
-  // Based on backend fields you showed
   const [newProduct, setNewProduct] = useState({
     name: "",
     description: "",
     category: "",
-    basePrice: "", // keep as string; backend screenshot shows "35.00"
+    basePrice: "",
     mainImageUrl: "",
-    imageUrlsCsv: "", // UI helper, will convert -> imageUrls[]
+    imageUrlsCsv: "",
     fabric: "",
     madeIn: "",
     warrantyStatus: "",
@@ -52,17 +63,15 @@ export default function ProductsTab() {
     variantsJson: `[
   { "sku": "SKU-RED-S", "color": "red", "size": "S", "stock": 10 },
   { "sku": "SKU-RED-M", "color": "red", "size": "M", "stock": 10 }
-]`, // UI helper, will parse -> variants[]
+]`,
   });
 
-  const canSubmit = useMemo(() => {
-    const nameOk = String(newProduct.name || "").trim().length > 0;
-    const catOk = String(newProduct.category || "").trim().length > 0;
-    const priceN = Number(newProduct.basePrice);
-    const priceOk = Number.isFinite(priceN) && priceN >= 0;
-    const mainImgOk = String(newProduct.mainImageUrl || "").trim().length > 0;
-    return nameOk && catOk && priceOk && mainImgOk && !saving;
-  }, [newProduct, saving]);
+  // Edit form
+  const [editingId, setEditingId] = useState("");
+  const [editForm, setEditForm] = useState(null); // same shape as payload + helpers
+  const [editSaving, setEditSaving] = useState(false);
+  const [editErr, setEditErr] = useState("");
+  const [editOk, setEditOk] = useState("");
 
   async function loadProducts() {
     setLoading(true);
@@ -83,7 +92,6 @@ export default function ProductsTab() {
 
   useEffect(() => {
     let mounted = true;
-
     (async () => {
       try {
         setErrMsg("");
@@ -101,47 +109,92 @@ export default function ProductsTab() {
         if (mounted) setLoading(false);
       }
     })();
-
     return () => {
       mounted = false;
     };
   }, []);
 
-  const onChange = (key) => (e) => {
-    const value = e?.target?.value;
-    setNewProduct((prev) => ({ ...prev, [key]: value }));
+  const canCreate = useMemo(() => {
+    const nameOk = String(newProduct.name || "").trim().length > 0;
+    const catOk = String(newProduct.category || "").trim().length > 0;
+    const priceN = Number(newProduct.basePrice);
+    const priceOk = Number.isFinite(priceN) && priceN >= 0;
+    const mainImgOk = String(newProduct.mainImageUrl || "").trim().length > 0;
+    return nameOk && catOk && priceOk && mainImgOk && !saving;
+  }, [newProduct, saving]);
+
+  const canEdit = useMemo(() => {
+    if (!editForm) return false;
+    const nameOk = String(editForm.name || "").trim().length > 0;
+    const catOk = String(editForm.category || "").trim().length > 0;
+    const priceN = Number(editForm.basePrice);
+    const priceOk =
+      (typeof editForm.basePrice === "string" && editForm.basePrice.trim() !== "")
+        ? Number.isFinite(priceN) && priceN >= 0
+        : true; // allow string basePrice, but must be number-like if provided
+    const mainImgOk = String(editForm.mainImageUrl || "").trim().length > 0;
+    return nameOk && catOk && priceOk && mainImgOk && !editSaving;
+  }, [editForm, editSaving]);
+
+  const onChangeNew = (key) => (e) => {
+    setNewProduct((prev) => ({ ...prev, [key]: e.target.value }));
   };
 
-  const submitNewProduct = async (e) => {
+  const onChangeEdit = (key) => (e) => {
+    setEditForm((prev) => ({ ...prev, [key]: e.target.value }));
+  };
+
+  function openEdit(p) {
+    const id = getId(p);
+    setEditingId(id);
+    setEditErr("");
+    setEditOk("");
+    setEditForm({
+      name: p?.name ?? "",
+      description: p?.description ?? "",
+      category: p?.category ?? "",
+      basePrice: String(p?.basePrice ?? ""),
+      mainImageUrl: p?.mainImageUrl ?? "",
+      imageUrlsCsv: arrayToCsv(p?.imageUrls),
+      fabric: p?.fabric ?? "",
+      madeIn: p?.madeIn ?? "",
+      warrantyStatus: p?.warrantyStatus ?? "",
+      distributorInfo: p?.distributorInfo ?? "",
+      variantsJson: safeStringifyJson(p?.variants, "[]"),
+  
+    });
+  }
+
+  function closeEdit() {
+    setEditingId("");
+    setEditForm(null);
+    setEditErr("");
+    setEditOk("");
+  }
+
+  async function submitCreate(e) {
     e.preventDefault();
     setSaveErr("");
     setSaveOk("");
+    if (!canCreate) return;
 
-    if (!canSubmit) return;
-
-    // Parse arrays from UI helper fields
     let variants = [];
     try {
       const parsed = JSON.parse(newProduct.variantsJson || "[]");
-      if (!Array.isArray(parsed)) {
-        throw new Error("variants must be a JSON array");
-      }
+      if (!Array.isArray(parsed)) throw new Error("variants must be a JSON array");
       variants = parsed;
     } catch (err) {
       setSaveErr(`Variants JSON invalid: ${err.message}`);
       return;
     }
 
-    const imageUrls = splitCsvToArray(newProduct.imageUrlsCsv);
-
-    // Build payload matching ProductEntity fields
     const payload = {
       name: String(newProduct.name).trim(),
       description: String(newProduct.description || "").trim(),
       category: String(newProduct.category).trim(),
-      basePrice: String(newProduct.basePrice).trim(), // matches "35.00" style
+      basePrice: String(newProduct.basePrice).trim(),
       mainImageUrl: String(newProduct.mainImageUrl).trim(),
-      imageUrls,
+      imageUrls: splitCsvToArray(newProduct.imageUrlsCsv),
       variants,
       fabric: String(newProduct.fabric || "").trim(),
       madeIn: String(newProduct.madeIn || "").trim(),
@@ -153,17 +206,11 @@ export default function ProductsTab() {
     try {
       const res = await pmCreateProduct(payload);
       const created = res?.data;
-
-      if (created) {
-        setProducts((prev) => [created, ...prev]);
-      } else {
-        await loadProducts();
-      }
+      if (created) setProducts((prev) => [created, ...prev]);
+      else await loadProducts();
 
       setSaveOk("Product created.");
       setShowAdd(false);
-
-      // reset form
       setNewProduct((prev) => ({
         ...prev,
         name: "",
@@ -185,260 +232,361 @@ export default function ProductsTab() {
     } finally {
       setSaving(false);
     }
-  };
+  }
+
+  async function submitEdit(e) {
+    e.preventDefault();
+    setEditErr("");
+    setEditOk("");
+    if (!canEdit || !editingId || !editForm) return;
+
+    let variants = [];
+    try {
+      const parsed = JSON.parse(editForm.variantsJson || "[]");
+      if (!Array.isArray(parsed)) throw new Error("variants must be a JSON array");
+      variants = parsed;
+    } catch (err) {
+      setEditErr(`Variants JSON invalid: ${err.message}`);
+      return;
+    }
+
+    const payload = {
+      name: String(editForm.name).trim(),
+      description: String(editForm.description || "").trim(),
+      category: String(editForm.category).trim(),
+      basePrice: String(editForm.basePrice ?? "").trim(),
+      mainImageUrl: String(editForm.mainImageUrl).trim(),
+      imageUrls: splitCsvToArray(editForm.imageUrlsCsv),
+      variants,
+      fabric: String(editForm.fabric || "").trim(),
+      madeIn: String(editForm.madeIn || "").trim(),
+      warrantyStatus: String(editForm.warrantyStatus || "").trim(),
+      distributorInfo: String(editForm.distributorInfo || "").trim(),
+    };
+
+    setEditSaving(true);
+    try {
+      const res = await pmUpdateProduct(editingId, payload);
+      const updated = res?.data;
+
+      if (updated) {
+        setProducts((prev) =>
+          prev.map((p) => (getId(p) === editingId ? updated : p))
+        );
+      } else {
+        await loadProducts();
+      }
+
+      setEditOk("Saved.");
+      // keep edit open, or close:
+      closeEdit();
+    } catch (e2) {
+      setEditErr(
+        e2?.response?.data?.message ||
+          `Failed to update product (status ${e2?.response?.status || "?"})`
+      );
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function handleDelete(p) {
+    const id = getId(p);
+    const name = p?.name || id;
+    const ok = window.confirm(`Delete product "${name}"?\nThis cannot be undone.`);
+    if (!ok) return;
+
+    try {
+      await pmDeleteProduct(id);
+      setProducts((prev) => prev.filter((x) => getId(x) !== id));
+      if (editingId === id) closeEdit();
+    } catch (e) {
+      alert(
+        e?.response?.data?.message ||
+          `Failed to delete product (status ${e?.response?.status || "?"})`
+      );
+    }
+  }
 
   if (loading) return <div>Loading products…</div>;
   if (errMsg) return <div>⚠️ {errMsg}</div>;
 
   return (
-    <div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          justifyContent: "space-between",
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Products</h2>
+  <div className="pm-tab">
+    <div className="pm-tab-header">
+      <h2 className="pm-tab-title">Products</h2>
 
-        <div style={{ display: "flex", gap: 10 }}>
-          <button
-            type="button"
-            onClick={() => loadProducts()}
-            style={{
-              padding: "8px 12px",
-              border: "1px solid #ccc",
-              background: "#fff",
-              cursor: "pointer",
-            }}
-          >
-            Refresh
-          </button>
+      <div className="pm-tab-actions">
+        <button type="button" className="pm-btn pm-btn-secondary" onClick={loadProducts}>
+          Refresh
+        </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setSaveErr("");
-              setSaveOk("");
-              setShowAdd((s) => !s);
-            }}
-            style={{
-              padding: "8px 12px",
-              border: "1px solid #ccc",
-              background: "#fff",
-              cursor: "pointer",
-            }}
-          >
-            {showAdd ? "Close" : "Add Product"}
+        <button
+          type="button"
+          className="pm-btn pm-btn-secondary"
+          onClick={() => {
+            setSaveErr("");
+            setSaveOk("");
+            setShowAdd((s) => !s);
+          }}
+        >
+          {showAdd ? "Close" : "Add Product"}
+        </button>
+      </div>
+    </div>
+
+    {/* CREATE */}
+    {showAdd && (
+      <form className="pm-card pm-form" onSubmit={submitCreate}>
+        <div className="pm-form-field">
+          <label className="pm-label">Name *</label>
+          <input className="pm-input" value={newProduct.name} onChange={onChangeNew("name")} />
+        </div>
+
+        <div className="pm-form-field">
+          <label className="pm-label">Description</label>
+          <textarea
+            className="pm-textarea"
+            value={newProduct.description}
+            onChange={onChangeNew("description")}
+            rows={3}
+          />
+        </div>
+
+        <div className="pm-form-grid-2">
+          <div className="pm-form-field">
+            <label className="pm-label">Category *</label>
+            <input className="pm-input" value={newProduct.category} onChange={onChangeNew("category")} />
+          </div>
+
+          <div className="pm-form-field">
+            <label className="pm-label">Base Price *</label>
+            <input
+              className="pm-input"
+              value={newProduct.basePrice}
+              onChange={onChangeNew("basePrice")}
+              placeholder="35.00"
+            />
+          </div>
+        </div>
+
+        <div className="pm-form-field">
+          <label className="pm-label">Main Image URL *</label>
+          <input
+            className="pm-input"
+            value={newProduct.mainImageUrl}
+            onChange={onChangeNew("mainImageUrl")}
+            placeholder="/products/x.jpg"
+          />
+        </div>
+
+        <div className="pm-form-field">
+          <label className="pm-label">Image URLs (comma-separated)</label>
+          <input
+            className="pm-input"
+            value={newProduct.imageUrlsCsv}
+            onChange={onChangeNew("imageUrlsCsv")}
+            placeholder="/products/a.jpg, /products/b.jpg"
+          />
+        </div>
+
+        <div className="pm-form-grid-2">
+          <div className="pm-form-field">
+            <label className="pm-label">Fabric</label>
+            <input className="pm-input" value={newProduct.fabric} onChange={onChangeNew("fabric")} />
+          </div>
+
+          <div className="pm-form-field">
+            <label className="pm-label">Made In</label>
+            <input className="pm-input" value={newProduct.madeIn} onChange={onChangeNew("madeIn")} />
+          </div>
+        </div>
+
+        <div className="pm-form-grid-2">
+          <div className="pm-form-field">
+            <label className="pm-label">Warranty Status</label>
+            <input
+              className="pm-input"
+              value={newProduct.warrantyStatus}
+              onChange={onChangeNew("warrantyStatus")}
+            />
+          </div>
+
+          <div className="pm-form-field">
+            <label className="pm-label">Distributor Info</label>
+            <input
+              className="pm-input"
+              value={newProduct.distributorInfo}
+              onChange={onChangeNew("distributorInfo")}
+            />
+          </div>
+        </div>
+
+        <div className="pm-form-field">
+          <label className="pm-label">Variants (JSON array) *</label>
+          <textarea
+            className="pm-textarea pm-mono"
+            value={newProduct.variantsJson}
+            onChange={onChangeNew("variantsJson")}
+            rows={10}
+          />
+        </div>
+
+        {saveErr && <div className="pm-alert pm-alert-error">⚠️ {saveErr}</div>}
+        {saveOk && <div className="pm-alert pm-alert-success">{saveOk}</div>}
+
+        <button type="submit" disabled={!canCreate} className="pm-btn pm-btn-primary">
+          {saving ? "Saving…" : "Create"}
+        </button>
+      </form>
+    )}
+
+    {/* EDIT */}
+    {editForm && (
+      <form className="pm-card pm-form pm-form-edit" onSubmit={submitEdit}>
+        <div className="pm-edit-top">
+          <div className="pm-edit-title">Editing: {editingId}</div>
+          <button type="button" className="pm-btn pm-btn-secondary" onClick={closeEdit}>
+            Cancel
           </button>
         </div>
-      </div>
 
-      {showAdd && (
-        <form
-          onSubmit={submitNewProduct}
-          style={{
-            marginTop: 12,
-            padding: 12,
-            border: "1px solid #e5e5e5",
-            borderRadius: 6,
-            background: "#fafafa",
-            display: "grid",
-            gap: 10,
-            maxWidth: 820,
-          }}
-        >
-          <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontSize: 13 }}>Name *</label>
+        <div className="pm-form-field">
+          <label className="pm-label">Name *</label>
+          <input className="pm-input" value={editForm.name} onChange={onChangeEdit("name")} />
+        </div>
+
+        <div className="pm-form-field">
+          <label className="pm-label">Description</label>
+          <textarea
+            className="pm-textarea"
+            value={editForm.description}
+            onChange={onChangeEdit("description")}
+            rows={3}
+          />
+        </div>
+
+        <div className="pm-form-grid-2">
+          <div className="pm-form-field">
+            <label className="pm-label">Category *</label>
+            <input className="pm-input" value={editForm.category} onChange={onChangeEdit("category")} />
+          </div>
+
+          <div className="pm-form-field">
+            <label className="pm-label">Base Price *</label>
+            <input className="pm-input" value={editForm.basePrice} onChange={onChangeEdit("basePrice")} />
+          </div>
+        </div>
+
+        <div className="pm-form-field">
+          <label className="pm-label">Main Image URL *</label>
+          <input
+            className="pm-input"
+            value={editForm.mainImageUrl}
+            onChange={onChangeEdit("mainImageUrl")}
+          />
+        </div>
+
+        <div className="pm-form-field">
+          <label className="pm-label">Image URLs (comma-separated)</label>
+          <input
+            className="pm-input"
+            value={editForm.imageUrlsCsv}
+            onChange={onChangeEdit("imageUrlsCsv")}
+          />
+        </div>
+
+        <div className="pm-form-grid-2">
+          <div className="pm-form-field">
+            <label className="pm-label">Fabric</label>
+            <input className="pm-input" value={editForm.fabric} onChange={onChangeEdit("fabric")} />
+          </div>
+
+          <div className="pm-form-field">
+            <label className="pm-label">Made In</label>
+            <input className="pm-input" value={editForm.madeIn} onChange={onChangeEdit("madeIn")} />
+          </div>
+        </div>
+
+        <div className="pm-form-grid-2">
+          <div className="pm-form-field">
+            <label className="pm-label">Warranty Status</label>
             <input
-              value={newProduct.name}
-              onChange={onChange("name")}
-              placeholder='e.g. "COTTON MODAL RUCHED T-SHIRT"'
-              style={{ padding: 8, border: "1px solid #ccc" }}
-              required
+              className="pm-input"
+              value={editForm.warrantyStatus}
+              onChange={onChangeEdit("warrantyStatus")}
             />
           </div>
 
-          <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontSize: 13 }}>Description</label>
-            <textarea
-              value={newProduct.description}
-              onChange={onChange("description")}
-              placeholder="Short product description..."
-              rows={3}
-              style={{ padding: 8, border: "1px solid #ccc" }}
-            />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div style={{ display: "grid", gap: 6 }}>
-              <label style={{ fontSize: 13 }}>Category *</label>
-              <input
-                value={newProduct.category}
-                onChange={onChange("category")}
-                placeholder='e.g. "Shirt"'
-                style={{ padding: 8, border: "1px solid #ccc" }}
-                required
-              />
-            </div>
-
-            <div style={{ display: "grid", gap: 6 }}>
-              <label style={{ fontSize: 13 }}>Base Price *</label>
-              <input
-                value={newProduct.basePrice}
-                onChange={onChange("basePrice")}
-                placeholder='e.g. "35.00"'
-                inputMode="decimal"
-                style={{ padding: 8, border: "1px solid #ccc" }}
-                required
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontSize: 13 }}>Main Image URL *</label>
+          <div className="pm-form-field">
+            <label className="pm-label">Distributor Info</label>
             <input
-              value={newProduct.mainImageUrl}
-              onChange={onChange("mainImageUrl")}
-              placeholder='/products/cotton-modal-ruched-tshirt-1.jpg'
-              style={{ padding: 8, border: "1px solid #ccc" }}
-              required
+              className="pm-input"
+              value={editForm.distributorInfo}
+              onChange={onChangeEdit("distributorInfo")}
             />
           </div>
+        </div>
 
-          <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontSize: 13 }}>
-              Image URLs (comma-separated)
-            </label>
-            <input
-              value={newProduct.imageUrlsCsv}
-              onChange={onChange("imageUrlsCsv")}
-              placeholder="/products/a.jpg, /products/b.jpg, /products/c.jpg"
-              style={{ padding: 8, border: "1px solid #ccc" }}
-            />
-          </div>
+        <div className="pm-form-field">
+          <label className="pm-label">Variants (JSON array) *</label>
+          <textarea
+            className="pm-textarea pm-mono"
+            value={editForm.variantsJson}
+            onChange={onChangeEdit("variantsJson")}
+            rows={10}
+          />
+        </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div style={{ display: "grid", gap: 6 }}>
-              <label style={{ fontSize: 13 }}>Fabric</label>
-              <input
-                value={newProduct.fabric}
-                onChange={onChange("fabric")}
-                placeholder='e.g. "50% cotton, 45% modal, 5% elastane"'
-                style={{ padding: 8, border: "1px solid #ccc" }}
-              />
-            </div>
+        {editErr && <div className="pm-alert pm-alert-error">⚠️ {editErr}</div>}
+        {editOk && <div className="pm-alert pm-alert-success">{editOk}</div>}
 
-            <div style={{ display: "grid", gap: 6 }}>
-              <label style={{ fontSize: 13 }}>Made In</label>
-              <input
-                value={newProduct.madeIn}
-                onChange={onChange("madeIn")}
-                placeholder='e.g. "India"'
-                style={{ padding: 8, border: "1px solid #ccc" }}
-              />
-            </div>
-          </div>
+        <button type="submit" disabled={!canEdit} className="pm-btn pm-btn-primary">
+          {editSaving ? "Saving…" : "Save Changes"}
+        </button>
+      </form>
+    )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div style={{ display: "grid", gap: 6 }}>
-              <label style={{ fontSize: 13 }}>Warranty Status</label>
-              <input
-                value={newProduct.warrantyStatus}
-                onChange={onChange("warrantyStatus")}
-                placeholder='e.g. "24 months"'
-                style={{ padding: 8, border: "1px solid #ccc" }}
-              />
-            </div>
+    {/* TABLE */}
+    {!products.length ? (
+      <div className="pm-empty">No products found.</div>
+    ) : (
+      <table className="pm-table">
+        <thead>
+          <tr>
+            <th align="left">ID</th>
+            <th align="left">Name</th>
+            <th align="left">Price</th>
+            <th align="left">Actions</th>
+          </tr>
+        </thead>
 
-            <div style={{ display: "grid", gap: 6 }}>
-              <label style={{ fontSize: 13 }}>Distributor Info</label>
-              <input
-                value={newProduct.distributorInfo}
-                onChange={onChange("distributorInfo")}
-                placeholder='e.g. "TIDL Online Shopping"'
-                style={{ padding: 8, border: "1px solid #ccc" }}
-              />
-            </div>
-          </div>
+        <tbody>
+          {products.map((p) => {
+            const id = getId(p);
+            const price = getPriceNumber(p);
+            return (
+              <tr key={id}>
+                <td className="pm-td-mono">{id}</td>
+                <td>{p.name}</td>
+                <td>${price.toFixed(2)}</td>
+                <td>
+                  <div className="pm-row-actions">
+                    <button type="button" className="pm-btn pm-btn-secondary" onClick={() => openEdit(p)}>
+                      Edit
+                    </button>
+                    <button type="button" className="pm-btn pm-btn-danger" onClick={() => handleDelete(p)}>
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    )}
+  </div>
+);
 
-          <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontSize: 13 }}>
-              Variants (JSON array) *
-            </label>
-            <textarea
-              value={newProduct.variantsJson}
-              onChange={onChange("variantsJson")}
-              rows={10}
-              style={{
-                padding: 8,
-                border: "1px solid #ccc",
-                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                fontSize: 12,
-              }}
-            />
-            <div style={{ fontSize: 12, color: "#666" }}>
-              Backend’in <code>PATCH /{`{id}`}/variants/{`{sku}`}/stock</code> endpoint’i olduğuna göre
-              her variant içinde genelde <code>sku</code> alanı beklenir.
-            </div>
-          </div>
-
-          {saveErr && <div style={{ color: "#b91c1c" }}>⚠️ {saveErr}</div>}
-          {saveOk && <div style={{ color: "#065f46" }}>{saveOk}</div>}
-
-          <div style={{ display: "flex", gap: 10 }}>
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              style={{
-                padding: "10px 12px",
-                border: "1px solid #111",
-                background: canSubmit ? "#111" : "#999",
-                color: "#fff",
-                cursor: canSubmit ? "pointer" : "not-allowed",
-              }}
-            >
-              {saving ? "Saving…" : "Create"}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {!products.length ? (
-        <div style={{ marginTop: 12 }}>No products found.</div>
-      ) : (
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            marginTop: 16,
-          }}
-        >
-          <thead>
-            <tr>
-              <th align="left">ID</th>
-              <th align="left">Name</th>
-              <th align="left">Price</th>
-              <th align="left">Active</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {products.map((p) => {
-              const price = getPriceNumber(p);
-              return (
-                <tr key={p.id || p._id}>
-                  <td>{p.id || p._id}</td>
-                  <td>{p.name}</td>
-                  <td>${price.toFixed(2)}</td>
-                  <td>{getActiveLabel(p)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
 }

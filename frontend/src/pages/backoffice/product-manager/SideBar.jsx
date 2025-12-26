@@ -14,7 +14,7 @@ const items = [
 export default function Sidebar() {
   return (
     <aside className="pm-sidebar">
-      <h2 className="pm-sidebar-title">Product Manager</h2>
+      <h2 className="pm-sidebar-title">Product Manager Dashboard</h2>
 
       <nav className="pm-nav">
         {items.map((item) => (
