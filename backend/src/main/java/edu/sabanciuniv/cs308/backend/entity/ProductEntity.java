@@ -7,6 +7,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.time.Instant;
 
 @Data
 @Document("products")
@@ -28,12 +29,29 @@ public class ProductEntity {
     private String fabric;
     private String madeIn;
 
+
+    // Discount metadata (DB'ye yazılır)
+    // 0-100 arası; null veya 0 ise indirim yok
+    private BigDecimal discountPercent;
+    private Instant discountStartAt;
+    private Instant discountEndAt;
+
+
     // DB'ye yazılmayacak, sadece response'ta dönecek
     @Transient
     private Double averageRating;
 
     @Transient
     private Long ratingCount;
+
+
+    // Response için opsiyonel alanlar (istersen kullan)
+    @Transient
+    private Boolean discountActive;
+
+    @Transient
+    private BigDecimal effectiveBasePrice;
+
 
     private String warrantyStatus;
     private String distributorInfo;

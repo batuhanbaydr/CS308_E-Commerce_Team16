@@ -3,6 +3,7 @@ package edu.sabanciuniv.cs308.backend.repository;
 import edu.sabanciuniv.cs308.backend.entity.WishlistEntity;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface WishlistRepository extends MongoRepository<WishlistEntity, String> {
@@ -16,4 +17,6 @@ public interface WishlistRepository extends MongoRepository<WishlistEntity, Stri
     List<WishlistEntity> findAllByUserId(String userId);
 
     List<WishlistEntity> findAllByProductIdsContaining(String productId);
+    List<WishlistEntity> findByProductIdsIn(Collection<String> productIds);
+
 }

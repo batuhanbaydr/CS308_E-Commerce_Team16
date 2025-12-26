@@ -37,6 +37,7 @@ public class CheckoutService {
         this.emailService = emailService;
     }
 
+
     @Transactional
     public OrderDetailDTO checkout(String userEmail, CheckoutRequest req) {
 
@@ -89,6 +90,10 @@ public class CheckoutService {
         );
         cart.setPaymentMethodRef(paymentRef);
 
+        // 6** yeni ) Line item fiyatlarını (discount dahil) güncelle
+        applyEffectivePricing(cart);
+
+
         // 6) Toplamları hesapla
         Money totals = computeTotals(cart);
         cart.setTotals(totals);
@@ -120,6 +125,20 @@ public class CheckoutService {
     // --------------------------------------------------------
     // Helper metodlar
     // --------------------------------------------------------
+    private void applyEffectivePricing(OrderEntity cart) {
+        Instant now = Instant.now();
+
+        cart.getItems().forEach(item -> {
+            ProductEntity product = productRepository.findById(item.getProductId())
+                    .orElseThrow(() -> new RuntimeException("Product not found: " + item.getProductId()));
+
+            BigDecimal unit = ProductPricing.effectiveUnitPrice(product, item.getSku(), now);
+            if (unit == null) unit = BigDecimal.ZERO;
+
+            item.setUnitPrice(unit);
+            item.setLineTotal(unit.multiply(BigDecimal.valueOf(item.getQuantity())));
+        });
+    }
 
     private OrderEntity findCartOrder(UserEntity user, String cartId) {
         OrderEntity cart;
@@ -193,4 +212,5 @@ public class CheckoutService {
             productRepository.save(product);
         });
     }
+
 }
