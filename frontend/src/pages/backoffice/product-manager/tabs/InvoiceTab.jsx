@@ -6,12 +6,22 @@ import { pmListOrders } from "../../../../lib/api";
  * Uses existing backend:
  *   GET /api/admin/product/orders
  *
- * We treat each order as an invoice row.
- * No backend changes.
+ * IMPORTANT:
+ * - Real invoice totals after checkout live under: order.totals.grandTotal
+ *   (based on your backend screenshot)
+ * - CART rows may not have totals (or may be partial), so we exclude them.
  */
 
 function getId(o) {
-  return o?.id ?? o?._id ?? "";
+  const raw = o?.id ?? o?._id ?? "";
+  if (typeof raw === "string") return raw;
+
+  // sometimes Mongo-like object
+  if (raw && typeof raw === "object") {
+    if (typeof raw.$oid === "string") return raw.$oid;
+    if (typeof raw.toString === "function") return raw.toString();
+  }
+  return "";
 }
 
 function getCustomerId(o) {
@@ -25,29 +35,121 @@ function getCustomerId(o) {
 }
 
 function getCreatedAt(o) {
-  // backend might use createdAt / created / createdDate / date
   return (
     o?.createdAt ??
     o?.created ??
     o?.createdDate ??
+    o?.createdOn ??
+    o?.timestamp ??
     o?.date ??
     null
   );
 }
 
-function getTotal(o) {
-  const raw =
-    o?.totalPrice ??
-    o?.total ??
-    o?.totalAmount ??
-    o?.amount ??
-    0;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : 0;
+function getStatus(o) {
+  return String(o?.status ?? o?.orderStatus ?? "—").toUpperCase();
 }
 
-function getStatus(o) {
-  return String(o?.status ?? o?.orderStatus ?? "—");
+function pickNumber(...vals) {
+  for (const v of vals) {
+    if (v == null) continue;
+
+    // totals could be strings like "51.8400"
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+
+    // object case
+    if (typeof v === "object") {
+      const maybe =
+        v.amount ?? v.value ?? v.total ?? v.price ?? v.grandTotal ?? null;
+      const nn = Number(maybe);
+      if (Number.isFinite(nn)) return nn;
+    }
+  }
+  return null;
+}
+
+function computeSubtotalFromItems(o) {
+  const items =
+    o?.items ??
+    o?.orderItems ??
+    o?.lines ??
+    o?.lineItems ??
+    o?.products ??
+    o?.details ??
+    [];
+
+  if (!Array.isArray(items) || items.length === 0) return null;
+
+  let sum = 0;
+  let sawAny = false;
+
+  for (const it of items) {
+    const qty = pickNumber(it?.quantity, it?.qty, 1) ?? 1;
+
+    // best: lineTotal if exists
+    const lineTotal = pickNumber(it?.lineTotal, it?.total, it?.subtotal);
+    if (lineTotal != null) {
+      sum += lineTotal;
+      sawAny = true;
+      continue;
+    }
+
+    // else unitPrice * qty
+    const unit = pickNumber(
+      it?.unitPrice,
+      it?.price,
+      it?.salePrice,
+      it?.basePrice,
+      it?.productPrice,
+      it?.variantPrice
+    );
+
+    if (unit != null) {
+      sum += unit * qty;
+      sawAny = true;
+    }
+  }
+
+  if (!sawAny) return null;
+  return Number.isFinite(sum) ? sum : null;
+}
+
+/**
+ * Real invoice total logic:
+ * 1) totals.grandTotal (BEST / real invoice)
+ * 2) totals.total
+ * 3) root-level legacy fields
+ * 4) last resort: computed subtotal from items (not perfect if tax/shipping exist)
+ */
+function getInvoiceTotal(o) {
+  const fromTotals = pickNumber(
+    o?.totals?.grandTotal,
+    o?.totals?.total,
+    o?.totals?.amount,
+    o?.totals?.subtotal // fallback
+  );
+  if (fromTotals != null) return fromTotals;
+
+  const legacy = pickNumber(
+    o?.grandTotal,
+    o?.totalPrice,
+    o?.totalAmount,
+    o?.orderTotal,
+    o?.finalTotal,
+    o?.paidTotal,
+    o?.amount,
+    o?.total,
+    o?.pricing?.total,
+    o?.pricing?.grandTotal,
+    o?.payment?.total
+  );
+  if (legacy != null) return legacy;
+
+  const computed = computeSubtotalFromItems(o);
+  if (computed != null) return computed;
+
+  return 0;
 }
 
 function invoiceIdFromOrderId(orderId) {
@@ -57,7 +159,6 @@ function invoiceIdFromOrderId(orderId) {
 }
 
 function toDateInputValue(d) {
-  // returns yyyy-mm-dd
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
@@ -66,6 +167,7 @@ function toDateInputValue(d) {
 
 function inRange(createdAtIso, from, to) {
   if (!createdAtIso) return false;
+
   const t = Date.parse(createdAtIso);
   if (!Number.isFinite(t)) return false;
 
@@ -78,7 +180,6 @@ function inRange(createdAtIso, from, to) {
 }
 
 function printInvoiceRow(row) {
-  // simplest robust “PDF”: browser print -> user chooses “Save as PDF”
   const html = `
   <html>
     <head>
@@ -123,8 +224,8 @@ function printInvoiceRow(row) {
             <div class="val">${row.createdAtText}</div>
           </div>
           <div>
-            <div class="label">Total</div>
-            <div class="val">$${row.total.toFixed(2)}</div>
+            <div class="label">Grand Total</div>
+            <div class="val">$${Number(row.total || 0).toFixed(2)}</div>
           </div>
         </div>
 
@@ -153,7 +254,6 @@ export default function InvoiceTab() {
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
 
-  // default date range: last 30 days
   const [from, setFrom] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -184,41 +284,34 @@ export default function InvoiceTab() {
   }, []);
 
   const invoiceRows = useMemo(() => {
-  return orders
-    .map((o) => {
-      const orderId = getId(o);
-      const createdAt = getCreatedAt(o);
-      const total = getTotal(o);
-      const customerId = getCustomerId(o);
-      const status = getStatus(o);
+    return orders
+      .map((o) => {
+        const orderId = getId(o);
+        const createdAt = getCreatedAt(o);
+        const status = getStatus(o);
 
-      return {
-        invoiceId: invoiceIdFromOrderId(orderId),
-        orderId: orderId || "—",
-        customerId,
-        createdAt,
-        createdAtText: createdAt
-          ? new Date(createdAt).toLocaleString()
-          : "—",
-        total,
-        status,
-      };
-    })
-    
-    .filter((r) => r.status !== "CART")
-    
-    .filter((r) => {
-      if (!from && !to) return true;
-      if (!r.createdAt) return false;
-      return inRange(r.createdAt, from, to);
-    })
-    .sort((a, b) => {
-      const ta = a.createdAt ? Date.parse(a.createdAt) : 0;
-      const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
-      return tb - ta;
-    });
-}, [orders, from, to]);
-
+        return {
+          invoiceId: invoiceIdFromOrderId(orderId),
+          orderId: orderId || "—",
+          customerId: getCustomerId(o),
+          createdAt,
+          createdAtText: createdAt ? new Date(createdAt).toLocaleString() : "—",
+          total: getInvoiceTotal(o), // ✅ uses totals.grandTotal first
+          status,
+        };
+      })
+      .filter((r) => r.status !== "CART") // ✅ invoices only
+      .filter((r) => {
+        if (!from && !to) return true;
+        if (!r.createdAt) return false;
+        return inRange(r.createdAt, from, to);
+      })
+      .sort((a, b) => {
+        const ta = a.createdAt ? Date.parse(a.createdAt) : 0;
+        const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
+        return tb - ta;
+      });
+  }, [orders, from, to]);
 
   const totalSum = useMemo(
     () => invoiceRows.reduce((acc, r) => acc + (Number(r.total) || 0), 0),
@@ -273,14 +366,6 @@ export default function InvoiceTab() {
               }}
             >
               Clear
-            </button>
-
-            <button
-              type="button"
-              className="pm-btn pm-btn-primary"
-              onClick={() => window.print()}
-            >
-              Print Page
             </button>
           </div>
         </div>
