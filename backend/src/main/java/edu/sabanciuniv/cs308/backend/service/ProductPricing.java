@@ -5,6 +5,7 @@ import edu.sabanciuniv.cs308.backend.entity.ProductEntity;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.Objects;
 
 public final class ProductPricing {
 
@@ -26,36 +27,46 @@ public final class ProductPricing {
         return true;
     }
 
-    public static BigDecimal applyDiscount(BigDecimal base, BigDecimal discountPercent) {
-        if (base == null) return null;
-        if (discountPercent == null) return base;
+    public static BigDecimal applyDiscount(BigDecimal price, BigDecimal discountPercent) {
+        if (price == null) return null;
+        if (discountPercent == null) return price;
 
-        if (discountPercent.compareTo(BigDecimal.ZERO) <= 0) return base;
-
-        // multiplier = (100 - dp) / 100
+        // price * (100 - dp) / 100
         BigDecimal hundred = new BigDecimal("100");
         BigDecimal multiplier = hundred.subtract(discountPercent).divide(hundred, 6, RoundingMode.HALF_UP);
 
-        // 2 decimal para yuvarlama
-        return base.multiply(multiplier).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal discounted = price.multiply(multiplier);
+        return discounted.setScale(2, RoundingMode.HALF_UP);
     }
 
-    public static BigDecimal effectiveUnitPrice(ProductEntity p, String sku, Instant now) {
+    public static BigDecimal effectiveBasePrice(ProductEntity p, Instant now) {
+        if (p == null) return null;
+        BigDecimal base = p.getBasePrice();
+        if (!isDiscountActive(p, now)) return base;
+        return applyDiscount(base, p.getDiscountPercent());
+    }
+
+    public static BigDecimal effectiveVariantPrice(ProductEntity p, String sku, Instant now) {
         if (p == null) return null;
 
-        BigDecimal base = p.getBasePrice();
-
-        // Variant price varsa onu baz al (sku ile)
+        BigDecimal variantPrice = null;
         if (sku != null && p.getVariants() != null) {
             for (ProductEntity.Variant v : p.getVariants()) {
-                if (v != null && sku.equals(v.getSku()) && v.getPrice() != null) {
-                    base = v.getPrice();
+                if (Objects.equals(v.getSku(), sku)) {
+                    variantPrice = v.getPrice();
                     break;
                 }
             }
         }
 
-        if (!isDiscountActive(p, now)) return base;
-        return applyDiscount(base, p.getDiscountPercent());
+        // Variant price yoksa basePrice fallback
+        BigDecimal raw = (variantPrice != null) ? variantPrice : p.getBasePrice();
+
+        if (!isDiscountActive(p, now)) return raw;
+        return applyDiscount(raw, p.getDiscountPercent());
+    }
+
+    public static BigDecimal effectiveUnitPrice(ProductEntity p, String sku, Instant now) {
+        return effectiveVariantPrice(p, sku, now);
     }
 }

@@ -4,3 +4,5 @@ backend/target/
 **/.DS_Store
 .idea/
 cookies.txt
+salescookies.txt
+usercookies.txt

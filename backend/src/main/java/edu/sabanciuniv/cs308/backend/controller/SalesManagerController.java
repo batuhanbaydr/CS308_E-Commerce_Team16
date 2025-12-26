@@ -15,11 +15,9 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.ArrayList;
 
 @RestController
 @RequestMapping("/api/admin/sales")
-
 public class SalesManagerController {
 
     private final ProductRepository productRepository;
@@ -73,53 +71,72 @@ public class SalesManagerController {
         if (req.isNotifyWishlistUsers()) {
 
             Map<String, ProductEntity> productsById = products.stream()
-                    .collect(Collectors.toMap(ProductEntity::getId, x -> x));
+                    .filter(p -> p != null && p.getId() != null)
+                    .collect(Collectors.toMap(ProductEntity::getId, x -> x, (a, b) -> a));
 
+            // Collect all wishlists containing any of the discounted productIds
             List<WishlistEntity> wishlists = new ArrayList<>();
             for (String pid : req.getProductIds()) {
                 wishlists.addAll(wishlistRepository.findAllByProductIdsContaining(pid));
             }
-            // userId -> productIds (unique)
-            Map<String, Set<String>> userToProductIds = new HashMap<>();
+
+            // userKey (email or id) -> productIds (unique)
+            Map<String, Set<String>> userKeyToProductIds = new HashMap<>();
 
             for (WishlistEntity w : wishlists) {
-                if (w.getUserId() == null) continue;
+                if (w == null) continue;
+                if (w.getUserId() == null || w.getUserId().isBlank()) continue;
+                if (w.getProductIds() == null || w.getProductIds().isEmpty()) continue;
 
                 for (String pid : w.getProductIds()) {
+                    if (pid == null || pid.isBlank()) continue;
+
                     if (productsById.containsKey(pid)) {
-                        userToProductIds
+                        userKeyToProductIds
                                 .computeIfAbsent(w.getUserId(), k -> new HashSet<>())
                                 .add(pid);
                     }
                 }
             }
 
-            List<UserEntity> users = userRepository.findAllById(userToProductIds.keySet());
-
-            // quick version: product-by-product mail using your existing method
             double rate = dp.doubleValue() / 100.0;
 
-            for (UserEntity u : users) {
-                Set<String> pids = userToProductIds.get(u.getId());
+            for (Map.Entry<String, Set<String>> entry : userKeyToProductIds.entrySet()) {
+                String userKey = entry.getKey();   // WishlistController uses auth.getName() -> usually email
+                Set<String> pids = entry.getValue();
+
+                if (userKey == null || userKey.isBlank()) continue;
                 if (pids == null || pids.isEmpty()) continue;
+
+                UserEntity u;
+
+                // If it looks like an email, resolve via email. Otherwise treat it as DB id.
+                if (userKey.contains("@")) {
+                    u = userRepository.findByEmailAddress(userKey).orElse(null);
+                } else {
+                    u = userRepository.findById(userKey).orElse(null);
+                }
+
+                if (u == null) continue;
 
                 for (String pid : pids) {
                     ProductEntity p = productsById.get(pid);
                     if (p == null) continue;
                     emailService.sendDiscountNotification(u, p, rate);
                 }
+
                 notifiedUsers++;
             }
         }
 
-        Map<String, Object> resp = new HashMap<>();
+        // IMPORTANT: Map.of(...) does NOT allow null values (startAt/endAt can be null)
+        Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("updatedProducts", products.size());
         resp.put("notifiedUsers", notifiedUsers);
         resp.put("discountPercent", dp);
-        resp.put("startAt", req.getStartAt()); // null olabilir
-        resp.put("endAt", req.getEndAt());     // null olabilir
-        return ResponseEntity.ok(resp);
+        resp.put("startAt", req.getStartAt());
+        resp.put("endAt", req.getEndAt());
 
+        return ResponseEntity.ok(resp);
     }
 }
-

@@ -6,6 +6,7 @@ import edu.sabanciuniv.cs308.backend.repository.ProductRepository;
 import edu.sabanciuniv.cs308.backend.repository.ReviewRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -55,13 +56,35 @@ public class ProductService {
             }
         }
 
+        Instant now = Instant.now();
+        for (ProductEntity p : products) {
+            p.setEffectiveBasePrice(ProductPricing.effectiveBasePrice(p, now));
+
+            if (p.getVariants() != null) {
+                for (ProductEntity.Variant v : p.getVariants()) {
+                    v.setEffectivePrice(ProductPricing.effectiveVariantPrice(p, v.getSku(), now));
+                }
+            }
+        }
+
         // 3) döndür
         return products;
     }
 
     public ProductEntity getById(String id) {
-        return productRepo.findById(id)
+        ProductEntity p = productRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Product not found: " + id));
+
+        Instant now = Instant.now();
+        p.setEffectiveBasePrice(ProductPricing.effectiveBasePrice(p, now));
+
+        if (p.getVariants() != null) {
+            for (ProductEntity.Variant v : p.getVariants()) {
+                v.setEffectivePrice(ProductPricing.effectiveVariantPrice(p, v.getSku(), now));
+            }
+        }
+
+        return p;
     }
 
     public ProductEntity create(ProductEntity product) {
