@@ -1,9 +1,13 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { loginRequest, meRequest, attachCartToUser } from "../lib/api";
+// src/pages/Login.jsx
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { attachCartToUser } from "../lib/api";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
 import { useCartDrawer } from "../context/CartDrawerContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+
+const CART_STORAGE_KEY = "tidl_cart_id";
 
 const hasAdminAccess = (user) =>
   user?.roles?.includes("SALES_MANAGER") ||
@@ -13,24 +17,43 @@ const hasAdminAccess = (user) =>
   user?.role === "PRODUCT_MANAGER" ||
   user?.role === "SUPPORT_AGENT";
 
-const CART_STORAGE_KEY = "tidl_cart_id";
+function safeDecodeNext(nextParam) {
+  if (!nextParam) return null;
+  try {
+    return decodeURIComponent(nextParam);
+  } catch {
+    return null;
+  }
+}
 
 export default function Login() {
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [userInfo, setUserInfo] = useState(null);
-  const { openCart } = useCartDrawer();
 
-  // 🔧 ADDED (to fix crash in topbar):
-  const [user, setUser] = useState(null);
-  const [showMenu, setShowMenu] = useState(false);
+  const { openCart } = useCartDrawer();
   const navigate = useNavigate();
   const go = (path) => () => navigate(path);
-  const handleLogout = () => {
-    // keep it simple here; your existing page already navigates after login
-    setUser(null);
-    navigate("/login");
+
+  const [showMenu, setShowMenu] = useState(false);
+
+  const { user, login, logout } = useAuth();
+
+  const [searchParams] = useSearchParams();
+  const next = useMemo(
+    () => safeDecodeNext(searchParams.get("next")),
+    [searchParams]
+  );
+
+  // If user is already logged in and they visit /login, do nothing (allow re-login).
+  useEffect(() => {
+    // intentionally empty behavior
+  }, [user]);
+
+  const handleLogout = async () => {
+    await logout();
+    setShowMenu(false);
+    navigate("/login", { replace: true });
   };
 
   const handleSubmit = async (e) => {
@@ -38,41 +61,35 @@ export default function Login() {
     setErrorMsg("");
 
     try {
-      // ⛔️ keeping your original call (no logic change)
-      await loginRequest(emailAddress, password);
+      // 1) login through AuthContext
+      const meData = await login(emailAddress, password);
 
-      let meData = null;
-      try {
-        const { data } = await meRequest();
-        setUserInfo(data);
-        setUser(data); // 🔧 reflect greeting in the header if it stays on this page
-        meData = data;
-      } catch (inner) {
-        console.log("could not load /users/me", inner);
-      }
-
-      // If there's a guest cart in localStorage, attach it to the logged-in user
+      // 2) attach guest cart
       if (typeof window !== "undefined" && meData?.id) {
         const guestCartId = window.localStorage.getItem(CART_STORAGE_KEY);
         if (guestCartId) {
           try {
-            // Attach guest cart to user account
             await attachCartToUser(guestCartId);
-            // Clear guest cartId from localStorage after successful attach
-            window.localStorage.removeItem(CART_STORAGE_KEY);
           } catch (attachError) {
-            // If attach fails (e.g., cart is empty or already attached), just clear localStorage
-            console.log("Could not attach cart (may be empty or already attached):", attachError);
+            console.log(
+              "Could not attach cart (may be empty or already attached):",
+              attachError
+            );
+          } finally {
             window.localStorage.removeItem(CART_STORAGE_KEY);
           }
         }
       }
 
-      navigate("/home", { state: { user: meData } });
+      // 3) redirect: respect ?next=..., else go HOME (your desired behavior)
+      if (next) {
+        navigate(next, { replace: true });
+      } else {
+        navigate("/home", { replace: true });
+      }
     } catch (err) {
       const msg =
-        err?.response?.data?.message ||
-        "Login failed. Check e-mail or password.";
+        err?.response?.data?.message || "Login failed. Check e-mail or password.";
       setErrorMsg(msg);
     }
   };
@@ -83,6 +100,7 @@ export default function Login() {
         <button className="category-brand" onClick={() => navigate("/home")}>
           TIDL
         </button>
+
         <nav className="category-nav">
           <button
             onClick={() => navigate("/category/sweatshirts")}
@@ -102,8 +120,8 @@ export default function Login() {
           >
             PANTS
           </button>
-  
         </nav>
+
         <div className="category-actions">
           <img
             src={searchIcon}
@@ -111,6 +129,7 @@ export default function Login() {
             className="category-icon"
             onClick={() => navigate("/search")}
           />
+
           {user ? (
             <span
               className="login-topbar-link"
@@ -127,6 +146,7 @@ export default function Login() {
               SIGN IN
             </span>
           )}
+
           {user && (
             <div
               className="home-menu"
@@ -136,6 +156,7 @@ export default function Login() {
               <span />
               <span />
               <span />
+
               {showMenu && (
                 <div className="details-menu">
                   <button className="details-menu-item" onClick={go("/profile")}>
@@ -146,11 +167,13 @@ export default function Login() {
                     Wishlist
                   </button>
 
-                  {/* 🔐 Only for SALES_MANAGER / PRODUCT_MANAGER / SUPPORT_AGENT */}
                   {hasAdminAccess(user) && (
                     <button
                       className="details-menu-item"
-                      onClick={go("/admin")}
+                      onClick={() => {
+                        setShowMenu(false);
+                        navigate("/admin");
+                      }}
                     >
                       Admin Panel
                     </button>
@@ -163,16 +186,16 @@ export default function Login() {
               )}
             </div>
           )}
+
           <img
             src={bagIcon}
             alt="Cart"
             className="category-icon"
-            onClick={openCart} 
+            onClick={openCart}
           />
         </div>
       </header>
 
-      {/* main content */}
       <main className="login-wrapper">
         <div className="login-card">
           <h1 className="login-title">LOGIN</h1>
@@ -197,16 +220,18 @@ export default function Login() {
               placeholder="Password"
               required
             />
-            <button type="submit" className="login-button">SIGN IN</button>
+            <button type="submit" className="login-button">
+              SIGN IN
+            </button>
           </form>
 
           <p className="login-footer-text">
             Don’t have an account? <a href="/signup">Click here to create one.</a>
           </p>
 
-          {userInfo && (
+          {user && (
             <p className="login-footer-text">
-              Logged in as <strong>{userInfo.emailAddress}</strong>
+              Logged in as <strong>{user.emailAddress}</strong>
             </p>
           )}
         </div>

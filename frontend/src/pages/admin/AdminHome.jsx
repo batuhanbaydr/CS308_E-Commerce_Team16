@@ -1,10 +1,11 @@
 // src/pages/admin/AdminHome.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { meRequest, logoutRequest } from "../../lib/api";
+import { meRequest } from "../../lib/api";
 import searchIcon from "../../assets/search.png";
 import bagIcon from "../../assets/bag.png";
 import { useCartDrawer } from "../../context/CartDrawerContext.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 const hasAdminAccess = (user) =>
   user?.roles?.includes("SALES_MANAGER") ||
@@ -17,6 +18,7 @@ const hasAdminAccess = (user) =>
 export default function AdminHome() {
   const navigate = useNavigate();
   const { openCart } = useCartDrawer();
+  const { logout } = useAuth();
 
   const [user, setUser] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
@@ -36,22 +38,22 @@ export default function AdminHome() {
   }, []);
 
   const handleLogout = async () => {
-    try {
-      await logoutRequest();
-    } catch {}
-    setUser(null);
-    navigate("/home");
+    // IMPORTANT: use AuthContext logout so every page is consistent
+    await logout();
+    setShowMenu(false);
+    navigate("/home", { replace: true });
   };
 
-  const go = (path) => () => navigate(path);
+  const go = (path) => () => {
+    setShowMenu(false);
+    navigate(path);
+  };
 
   const renderHeader = () => (
     <header className="category-topbar">
       <button className="category-brand" onClick={() => navigate("/home")}>
         TIDL
       </button>
-
-      {/* no category nav on admin pages */}
 
       <div className="category-actions">
         <img
@@ -89,33 +91,21 @@ export default function AdminHome() {
             <span />
             {showMenu && (
               <div className="details-menu">
-                <button
-                  className="details-menu-item"
-                  onClick={go("/profile")}
-                >
+                <button className="details-menu-item" onClick={go("/profile")}>
                   Details
                 </button>
 
-                <button
-                  className="details-menu-item"
-                  onClick={go("/wishlist")}
-                >
+                <button className="details-menu-item" onClick={go("/wishlist")}>
                   Wishlist
                 </button>
 
                 {hasAdminAccess(user) && (
-                  <button
-                    className="details-menu-item"
-                    onClick={go("/admin")}
-                  >
+                  <button className="details-menu-item" onClick={go("/admin")}>
                     Admin Panel
                   </button>
                 )}
 
-                <button
-                  className="details-menu-item"
-                  onClick={handleLogout}
-                >
+                <button className="details-menu-item" onClick={handleLogout}>
                   Log-out
                 </button>
               </div>
@@ -193,7 +183,7 @@ export default function AdminHome() {
               <button
                 type="button"
                 className="admin-panel-card"
-                onClick={() => navigate("/admin/sales")}
+                onClick={() => navigate("/backoffice/sales")}
               >
                 <span className="admin-panel-title">Sales Manager</span>
                 <span className="admin-panel-subtitle">
@@ -204,7 +194,7 @@ export default function AdminHome() {
               <button
                 type="button"
                 className="admin-panel-card"
-                onClick={() => navigate("/admin/products")}
+                onClick={() => navigate("/backoffice/product-manager/products")}
               >
                 <span className="admin-panel-title">Product Manager</span>
                 <span className="admin-panel-subtitle">
@@ -215,7 +205,7 @@ export default function AdminHome() {
               <button
                 type="button"
                 className="admin-panel-card"
-                onClick={() => navigate("/admin/support")}
+                onClick={() => navigate("/backoffice/support")}
               >
                 <span className="admin-panel-title">Support Agent</span>
                 <span className="admin-panel-subtitle">
