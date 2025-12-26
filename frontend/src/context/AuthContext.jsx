@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { loginRequest, logoutRequest, meRequest } from "../lib/api";
 
 const AuthContext = createContext(null);
@@ -8,11 +15,11 @@ const FORCED_LOGOUT_KEY = "tidl_forced_logout";
 function getRoleHome(role) {
   switch (role) {
     case "PRODUCT_MANAGER":
-      return "/backoffice/product";
+      return "/backoffice/product-manager";
     case "SALES_MANAGER":
-      return "/backoffice/sales";
+      return "/backoffice/sales-manager";
     case "SUPPORT_AGENT":
-      return "/backoffice/support";
+      return "/backoffice/support-manager";
     case "CUSTOMER":
     default:
       return "/home";
@@ -31,9 +38,25 @@ export function AuthProvider({ children }) {
     }
   });
 
-  const refreshMe = async () => {
-    // 🔒 if user clicked logout, NEVER rehydrate until next login
-    if (forcedLoggedOut) {
+  // ✅ refs to avoid stale state + prevent race during login
+  const forcedLoggedOutRef = useRef(forcedLoggedOut);
+  const loginInProgressRef = useRef(false);
+
+  useEffect(() => {
+    forcedLoggedOutRef.current = forcedLoggedOut;
+  }, [forcedLoggedOut]);
+
+  /**
+   * refreshMe:
+   * - if forcedLoggedOut: do nothing (unless ignoreForced=true)
+   * - if /me fails:
+   *    - if a login is in progress, DO NOT set user to null (prevents alternating redirects)
+   *    - otherwise set user null (normal behavior)
+   */
+  const refreshMe = async ({ ignoreForced = false } = {}) => {
+    const forced = forcedLoggedOutRef.current;
+
+    if (!ignoreForced && forced) {
       setUser(null);
       return null;
     }
@@ -42,43 +65,66 @@ export function AuthProvider({ children }) {
       const { data } = await meRequest();
       setUser(data);
       return data;
-    } catch {
+    } catch (err) {
+     
+      if (loginInProgressRef.current) {
+        return null;
+      }
       setUser(null);
       return null;
     }
   };
 
+  // Initial hydration + rerun when forcedLoggedOut changes,
+  // but avoid racing during explicit login.
   useEffect(() => {
     (async () => {
+      // If we are mid-login, skip this run entirely
+      if (loginInProgressRef.current) return;
+
       setLoading(true);
-      await refreshMe();
+      await refreshMe(); // respects forcedLoggedOut
       setLoading(false);
     })();
-  }, [forcedLoggedOut]); // rerun if the flag changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forcedLoggedOut]);
 
   const login = async (emailAddress, password) => {
+    loginInProgressRef.current = true;
+
     // user explicitly logs in -> allow rehydrate again
     try {
       sessionStorage.removeItem(FORCED_LOGOUT_KEY);
     } catch {}
     setForcedLoggedOut(false);
 
-    await loginRequest(emailAddress, password);
+    try {
+      // server sets cookie
+      await loginRequest(emailAddress, password);
 
-    // now get real user
-    const me = await refreshMe();
-    return me;
+      // now fetch /me (bypass forced gate)
+      const me = await refreshMe({ ignoreForced: true });
+
+      // if still null, treat as real login failure for UI (instead of random redirect)
+      if (!me) {
+        throw new Error("Login succeeded but /users/me did not return a user.");
+      }
+
+      return me;
+    } finally {
+      loginInProgressRef.current = false;
+      setLoading(false);
+    }
   };
 
   const logout = async () => {
-    // ✅ make logout immediate + authoritative in UI
+    // make logout immediate + authoritative
     try {
       sessionStorage.setItem(FORCED_LOGOUT_KEY, "1");
     } catch {}
     setForcedLoggedOut(true);
     setUser(null);
 
-    // fire request but do not allow it to rehydrate anything
     try {
       await logoutRequest();
     } catch {
