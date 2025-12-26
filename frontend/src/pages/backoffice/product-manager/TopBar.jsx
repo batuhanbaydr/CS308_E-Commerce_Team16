@@ -12,12 +12,16 @@ export default function TopBar() {
 
   return (
     <header className="pm-topbar">
-      <span className="pm-brand">TIDL</span>
+      <span className="category-brand">TIDL</span>
 
-      <div className="pm-user">
+      <div className="home-signin">
         <span>{user?.name}</span>
-        <button onClick={handleLogout}>Log out</button>
       </div>
+    <span className="home-signin" onClick={handleLogout}>
+      LOG OUT
+    </span>
+
+
     </header>
   );
 }
