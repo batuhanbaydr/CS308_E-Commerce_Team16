@@ -1,0 +1,62 @@
+.pm-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    font-family: system-ui;
+  }
+  
+  .pm-topbar {
+    height: 56px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+  }
+  
+  .pm-body {
+    display: flex;
+    flex: 1;
+  }
+  
+  .pm-sidebar {
+    width: 220px;
+    border-right: 1px solid #eee;
+    padding: 24px;
+  }
+  
+  .pm-sidebar-title {
+    margin-bottom: 24px;
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  
+  .pm-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .pm-nav-item {
+    text-decoration: none;
+    color: #444;
+    padding: 8px 12px;
+    border-radius: 6px;
+  }
+  
+  .pm-nav-item.active {
+    background: #111;
+    color: #fff;
+  }
+  
+  .pm-content {
+    flex: 1;
+    padding: 32px;
+    overflow-y: auto;
+  }
+  
+  .pm-tab h1 {
+    margin-bottom: 8px;
+  }
+  

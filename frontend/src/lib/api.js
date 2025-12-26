@@ -11,9 +11,14 @@ const api = axios.create({
 
 // ---------------- AUTH ----------------
 
+
 export function loginRequest(emailAddress, password) {
-  // backend expects { emailAddress, password }
   return api.post("/auth/login", { emailAddress, password });
+}
+
+export function logoutRequest() {
+
+  return api.post("/auth/logout");
 }
 
 export function signupRequest(data) {
@@ -30,9 +35,6 @@ export function updateProfile(profile) {
   return api.put("/users/me", profile);
 }
 
-export function logoutRequest() {
-  return api.post("/auth/logout");
-}
 
 // ---------------- ACCOUNT ----------------
 
@@ -282,4 +284,33 @@ export function clearWishlist() {
 
 
 
-export default api;
+
+
+// =======================
+// PRODUCT MANAGER (ADMIN)
+// =======================
+
+// IMPORTANT:
+// baseURL is already "http://localhost:8080/api"
+// so you must NOT add another "/api" here.
+
+export const pmListProducts = () =>
+  api.get("/admin/product/products");
+
+export const pmCreateProduct = (payload) =>
+  api.post("/admin/product/products", payload);
+
+export const pmUpdateProduct = (id, payload) =>
+  api.put(`/admin/product/products/${id}`, payload);
+
+export const pmDeleteProduct = (id) =>
+  api.delete(`/admin/product/products/${id}`);
+
+
+export const pmSetVariantStock = (id, sku, stock) =>
+  api.patch(`/admin/product/products/${id}/variants/${sku}/stock`, null, {
+    params: { stock },
+  });
+
+// If your tabs import { api } (named), export it too:
+export { api };
