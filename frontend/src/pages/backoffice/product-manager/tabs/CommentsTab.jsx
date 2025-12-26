@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  pmListProducts,
   pmListPendingReviews,
   pmApproveReview,
   pmRejectReview,
+  getReviewsForProduct,
 } from "../../../../lib/api";
 
 function getId(r) {
@@ -23,25 +25,66 @@ function stars(n) {
 }
 
 export default function CommentsTab() {
-  const [reviews, setReviews] = useState([]);
+  const [mode, setMode] = useState("pending"); // "pending" | "approved"
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
 
-  const [savingId, setSavingId] = useState("");
+  const [workingId, setWorkingId] = useState("");
   const [actionErr, setActionErr] = useState("");
+
+  const title = useMemo(
+    () => (mode === "pending" ? "Comments (Pending)" : "Comments (Approved)"),
+    [mode]
+  );
+
+  async function loadPending() {
+    const res = await pmListPendingReviews();
+    const data = Array.isArray(res.data) ? res.data : [];
+    setRows(data);
+  }
+
+  async function loadApproved() {
+    // 1) get all products
+    const pRes = await pmListProducts();
+    const products = Array.isArray(pRes.data) ? pRes.data : [];
+    const productIds = products
+      .map((p) => p?.id ?? p?._id)
+      .filter(Boolean)
+      .map((x) => (typeof x === "string" ? x : x?.$oid ?? String(x)));
+
+    // 2) fetch reviews per product (sequential to be safe; you can parallelize later)
+    const approved = [];
+    for (const pid of productIds) {
+      try {
+        const rRes = await getReviewsForProduct(pid);
+        const list = Array.isArray(rRes.data) ? rRes.data : [];
+        // Backend already nulled comment for non-approved, so comment!=null => approved comment
+        for (const r of list) {
+          const c = (r?.comment ?? "").trim();
+          if (c) approved.push(r);
+        }
+      } catch {
+        // ignore one product failure; keeps page usable
+      }
+    }
+
+    setRows(approved);
+  }
 
   async function load() {
     setLoading(true);
     setErrMsg("");
+    setActionErr("");
     try {
-      const res = await pmListPendingReviews();
-      setReviews(Array.isArray(res.data) ? res.data : []);
+      if (mode === "pending") await loadPending();
+      else await loadApproved();
     } catch (e) {
       setErrMsg(
         e?.response?.data?.message ||
-          `Failed to load pending reviews (status ${e?.response?.status || "?"})`
+          `Failed to load reviews (status ${e?.response?.status || "?"})`
       );
-      setReviews([]);
+      setRows([]);
     } finally {
       setLoading(false);
     }
@@ -49,25 +92,26 @@ export default function CommentsTab() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   async function approve(r) {
     setActionErr("");
     const id = getId(r);
     if (!id) return;
 
-    setSavingId(id);
+    setWorkingId(id);
     try {
       await pmApproveReview(id);
-      // remove from pending list
-      setReviews((prev) => prev.filter((x) => getId(x) !== id));
+      // remove from pending list instantly
+      setRows((prev) => prev.filter((x) => getId(x) !== id));
     } catch (e) {
       setActionErr(
         e?.response?.data?.message ||
           `Failed to approve (status ${e?.response?.status || "?"})`
       );
     } finally {
-      setSavingId("");
+      setWorkingId("");
     }
   }
 
@@ -76,29 +120,67 @@ export default function CommentsTab() {
     const id = getId(r);
     if (!id) return;
 
-    const note = window.prompt("Optional moderation note (leave empty for none):", "") || "";
-    setSavingId(id);
+    setWorkingId(id);
     try {
-      await pmRejectReview(id, note.trim() ? note.trim() : null);
-      setReviews((prev) => prev.filter((x) => getId(x) !== id));
+      await pmRejectReview(id);
+      setRows((prev) => prev.filter((x) => getId(x) !== id));
     } catch (e) {
       setActionErr(
         e?.response?.data?.message ||
           `Failed to reject (status ${e?.response?.status || "?"})`
       );
     } finally {
-      setSavingId("");
+      setWorkingId("");
     }
   }
 
-  if (loading) return <div>Loading pending comments…</div>;
+  // "Delete" approved comment (no backend delete) => reject it (removes it from product pages)
+  async function removeApproved(r) {
+    setActionErr("");
+    const id = getId(r);
+    if (!id) return;
+
+    const ok = window.confirm("Remove this approved comment from the site?");
+    if (!ok) return;
+
+    setWorkingId(id);
+    try {
+      await pmRejectReview(id);
+      setRows((prev) => prev.filter((x) => getId(x) !== id));
+    } catch (e) {
+      setActionErr(
+        e?.response?.data?.message ||
+          `Failed to remove (status ${e?.response?.status || "?"})`
+      );
+    } finally {
+      setWorkingId("");
+    }
+  }
+
+  if (loading) return <div>Loading…</div>;
   if (errMsg) return <div>⚠️ {errMsg}</div>;
 
   return (
     <div className="pm-tab">
       <div className="pm-tab-header">
-        <h2 className="pm-tab-title">Comments (Pending)</h2>
+        <h2 className="pm-tab-title">{title}</h2>
+
         <div className="pm-tab-actions">
+          <button
+            type="button"
+            className={`pm-btn ${mode === "pending" ? "pm-btn-primary" : "pm-btn-secondary"}`}
+            onClick={() => setMode("pending")}
+          >
+            Pending
+          </button>
+          <button
+            type="button"
+            className={`pm-btn ${mode === "approved" ? "pm-btn-primary" : "pm-btn-secondary"}`}
+            onClick={() => setMode("approved")}
+          >
+            Approved
+          </button>
+
           <button type="button" className="pm-btn pm-btn-secondary" onClick={load}>
             Refresh
           </button>
@@ -107,8 +189,8 @@ export default function CommentsTab() {
 
       {actionErr && <div className="pm-alert pm-alert-error">⚠️ {actionErr}</div>}
 
-      {!reviews.length ? (
-        <div className="pm-empty">No pending comments.</div>
+      {!rows.length ? (
+        <div className="pm-empty">No reviews found.</div>
       ) : (
         <table className="pm-table">
           <thead>
@@ -123,14 +205,14 @@ export default function CommentsTab() {
           </thead>
 
           <tbody>
-            {reviews.map((r) => {
+            {rows.map((r) => {
               const id = getId(r);
               const productId = r?.productId ?? r?.product?.id ?? r?.product?._id ?? "—";
               const userId = r?.userId ?? r?.customerId ?? r?.user?.id ?? r?.user?._id ?? "—";
-              const rating = r?.rating ?? r?.stars ?? r?.score ?? null;
-              const comment = r?.comment ?? r?.text ?? r?.content ?? "";
+              const rating = r?.rating ?? null;
+              const comment = (r?.comment ?? "").trim();
 
-              const isSaving = savingId === id;
+              const busy = workingId === id;
 
               return (
                 <tr key={id}>
@@ -138,28 +220,39 @@ export default function CommentsTab() {
                   <td className="pm-td-mono">{String(productId)}</td>
                   <td className="pm-td-mono">{String(userId)}</td>
                   <td>{rating != null ? stars(rating) : "—"}</td>
-                  <td style={{ maxWidth: 520, whiteSpace: "pre-wrap" }}>
-                    {comment || "—"}
-                  </td>
+                  <td style={{ maxWidth: 520, whiteSpace: "pre-wrap" }}>{comment || "—"}</td>
+
                   <td>
                     <div className="pm-row-actions">
-                      <button
-                        type="button"
-                        className="pm-btn pm-btn-primary"
-                        onClick={() => approve(r)}
-                        disabled={isSaving}
-                      >
-                        {isSaving ? "Working…" : "Approve"}
-                      </button>
-
-                      <button
-                        type="button"
-                        className="pm-btn pm-btn-danger"
-                        onClick={() => reject(r)}
-                        disabled={isSaving}
-                      >
-                        {isSaving ? "Working…" : "Reject"}
-                      </button>
+                      {mode === "pending" ? (
+                        <>
+                          <button
+                            type="button"
+                            className="pm-btn pm-btn-primary"
+                            disabled={busy}
+                            onClick={() => approve(r)}
+                          >
+                            {busy ? "Working…" : "Approve"}
+                          </button>
+                          <button
+                            type="button"
+                            className="pm-btn pm-btn-danger"
+                            disabled={busy}
+                            onClick={() => reject(r)}
+                          >
+                            {busy ? "Working…" : "Reject"}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="pm-btn pm-btn-danger"
+                          disabled={busy}
+                          onClick={() => removeApproved(r)}
+                        >
+                          {busy ? "Working…" : "Remove"}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
