@@ -371,4 +371,60 @@ export function pmDeleteReview(reviewId) {
   return api.delete(`/reviews/${reviewId}`);
 }
 
+// ---------------- SALES ADMIN ----------------
+
+/**
+ * Apply discount to selected products
+ * @param {number} discountPercent - Discount percentage (e.g., 10 for 10%)
+ * @param {string[]} productIds - Array of product IDs
+ * @param {boolean} notifyWishlist - Whether to notify wishlist users
+ */
+export function applyDiscount(discountPercent, productIds, notifyWishlist = true) {
+  // Backend expects discountRate as decimal (0.15 = 15%)
+  const discountRate = discountPercent / 100;
+  return api.post("/admin/sales/discount", {
+    productIds,
+    discountRate,
+    notifyWishlist, // Backend may use this to conditionally send emails
+  });
+}
+
+/**
+ * Get invoices by date range
+ * @param {string} startDate - ISO date string (e.g., "2025-12-01")
+ * @param {string} endDate - ISO date string (e.g., "2025-12-31")
+ */
+export function listInvoicesByDateRange(startDate, endDate) {
+  // Convert to ISO instant format
+  const start = new Date(startDate + "T00:00:00Z").toISOString();
+  const end = new Date(endDate + "T23:59:59Z").toISOString();
+  return api.get("/admin/sales/invoices", {
+    params: { start, end },
+  });
+}
+
+/**
+ * Get revenue and profit summary with time series
+ * @param {string} startDate - ISO date string
+ * @param {string} endDate - ISO date string
+ * @param {string} groupBy - "day" | "week" | "month" (default: "day")
+ */
+export function getRevenueProfit(startDate, endDate, groupBy = "day") {
+  const start = new Date(startDate + "T00:00:00Z").toISOString();
+  const end = new Date(endDate + "T23:59:59Z").toISOString();
+  return api.get("/admin/sales/revenue-profit", {
+    params: { start, end, groupBy },
+  });
+}
+
+/**
+ * Download invoice PDF
+ * @param {string} orderId - Order ID
+ */
+export function downloadInvoicePdf(orderId) {
+  return api.get(`/admin/sales/invoices/${orderId}/pdf`, {
+    responseType: "blob", // Important for binary data
+  });
+}
+
 export { api };

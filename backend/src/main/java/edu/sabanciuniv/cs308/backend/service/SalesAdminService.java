@@ -75,23 +75,27 @@ public class SalesAdminService {
         }
         productRepository.saveAll(products);
 
-        // notify users who have product in wishlist
+        // notify users who have product in wishlist (if notifyWishlist is true or not specified)
         // (duplicate wishlist docs olabilir diye user cache kullandım)
         int notifiedEmails = 0;
-        Map<String, UserEntity> userCache = new HashMap<>();
+        boolean shouldNotify = req.getNotifyWishlist() == null || req.getNotifyWishlist();
+        
+        if (shouldNotify) {
+            Map<String, UserEntity> userCache = new HashMap<>();
 
-        for (ProductEntity p : products) {
-            List<WishlistEntity> wishlists = wishlistRepository.findAllByProductIdsContaining(p.getId());
-            for (WishlistEntity w : wishlists) {
-                String uid = w.getUserId();
-                if (uid == null) continue;
+            for (ProductEntity p : products) {
+                List<WishlistEntity> wishlists = wishlistRepository.findAllByProductIdsContaining(p.getId());
+                for (WishlistEntity w : wishlists) {
+                    String uid = w.getUserId();
+                    if (uid == null) continue;
 
-                UserEntity u = userCache.computeIfAbsent(uid,
-                        k -> userRepository.findById(k).orElse(null));
+                    UserEntity u = userCache.computeIfAbsent(uid,
+                            k -> userRepository.findById(k).orElse(null));
 
-                if (u != null) {
-                    emailService.sendDiscountNotification(u, p, rate);
-                    notifiedEmails++;
+                    if (u != null) {
+                        emailService.sendDiscountNotification(u, p, rate);
+                        notifiedEmails++;
+                    }
                 }
             }
         }
