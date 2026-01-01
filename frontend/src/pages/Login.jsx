@@ -22,9 +22,28 @@ const hasAdminAccess = (u) =>
 
 // Decide where the user should land after login (and for "Admin Panel" button)
 const getDefaultRouteForUser = (u) => {
-  if (isProductManager(u)) return "/backoffice/product-manager";
-  if (isSalesManager(u)) return "/backoffice/sales-manager";
-  if (isSupportManager(u)) return "/backoffice/support-manager";
+  if (!u) {
+    console.warn("getDefaultRouteForUser: user is null/undefined");
+    return "/home";
+  }
+  
+  console.log("getDefaultRouteForUser - user:", u);
+  console.log("getDefaultRouteForUser - user.role:", u.role);
+  console.log("getDefaultRouteForUser - user.roles:", u.roles);
+  
+  if (isProductManager(u)) {
+    console.log("getDefaultRouteForUser: Product Manager detected");
+    return "/backoffice/product-manager";
+  }
+  if (isSalesManager(u)) {
+    console.log("getDefaultRouteForUser: Sales Manager detected");
+    return "/backoffice/sales-manager";
+  }
+  if (isSupportManager(u)) {
+    console.log("getDefaultRouteForUser: Support Agent detected");
+    return "/backoffice/support-manager";
+  }
+  console.log("getDefaultRouteForUser: Normal customer, going to /home");
   return "/home"; // normal customer
 };
 
@@ -105,6 +124,10 @@ export default function Login() {
       // - if ?next= is provided, respect it (deep-link)
       // - otherwise send managers to their backoffice landing page
       const destination = next || getDefaultRouteForUser(meData);
+      console.log("LOGIN destination:", destination);
+      console.log("LOGIN isSalesManager check:", isSalesManager(meData));
+      console.log("LOGIN meData.role:", meData?.role);
+      console.log("LOGIN meData.roles:", meData?.roles);
       navigate(destination, { replace: true });
     } catch (err) {
       const msg =

@@ -1,4 +1,7 @@
 import React from "react";
+// src/__tests__/Wishlist.test.jsx
+
+// Goal: removes a product from wishlist when remove button is clicked
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -51,6 +54,8 @@ describe("Wishlist page", () => {
             name: "Test Shirt",
             basePrice: "30.00",
             mainImageUrl: "",
+            imageUrls: [],
+            variants: [],
           },
         ],
       },

@@ -1,5 +1,6 @@
 // src/__tests__/Login.test.jsx
 
+// Goal: when I fill email+password and click "LOG IN", we send the login request and navigate to /home.
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -17,6 +18,7 @@ const mockNavigate = vi.fn();
 vi.mock("../lib/api", () => ({
   loginRequest: (...args) => mockLoginRequest(...args),
   meRequest: (...args) => mockMeRequest(...args),
+  logoutRequest: vi.fn(),
 }));
 
 vi.mock("../context/CartDrawerContext.jsx", () => ({

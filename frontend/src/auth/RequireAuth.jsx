@@ -29,8 +29,18 @@ export default function RequireAuth({ allowedRoles, children }) {
 
   const role = getUserRole(user);
 
+  // Check if user has any of the allowed roles
+  // Check both user.role and user.roles array
+  const hasAllowedRole = allowedRoles?.length
+    ? allowedRoles.some(
+        (allowedRole) =>
+          user.role === allowedRole ||
+          (Array.isArray(user.roles) && user.roles.includes(allowedRole))
+      )
+    : true; // If no allowedRoles specified, allow all authenticated users
+
   // Logged in but role not allowed -> send to /home (or create a /403 page)
-  if (allowedRoles?.length && (!role || !allowedRoles.includes(role))) {
+  if (allowedRoles?.length && !hasAllowedRole) {
     return <Navigate to="/home" replace />;
   }
 

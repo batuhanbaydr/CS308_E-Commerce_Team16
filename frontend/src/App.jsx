@@ -20,9 +20,7 @@ import Invoice from "./pages/Invoice.jsx";
 import Wishlist from "./pages/Wishlist.jsx";
 
 import ProductManagerLayout from "./pages/backoffice/product-manager/ProductManagerLayout";
-
-import AdminHome from "./pages/admin/AdminHome";
-import SalesManager from "./pages/admin/SalesManager";
+import SalesManagerLayout from "./pages/backoffice/sales-manager/SalesManagerLayout";
 
 import { CartDrawerProvider } from "./context/CartDrawerContext.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
@@ -113,12 +111,12 @@ export default function App() {
               }
             />
 
-            {/* Sales Manager backoffice (placeholder for now) */}
+            {/* Sales Manager backoffice */}
             <Route
               path="/backoffice/sales-manager/*"
               element={
                 <RequireAuth allowedRoles={["SALES_MANAGER"]}>
-                  <Placeholder title="Sales Manager Backoffice" />
+                  <SalesManagerLayout />
                 </RequireAuth>
               }
             />
@@ -133,14 +131,14 @@ export default function App() {
               }
             />
 
-            {/* Legacy admin routes (keep so old links don't break) */}
+            {/* Legacy admin routes - redirect to appropriate backoffice */}
             <Route
               path="/admin"
               element={
                 <RequireAuth
                   allowedRoles={["PRODUCT_MANAGER", "SALES_MANAGER", "SUPPORT_AGENT"]}
                 >
-                  <AdminHome />
+                  <Navigate to="/backoffice/sales-manager" replace />
                 </RequireAuth>
               }
             />
@@ -149,7 +147,7 @@ export default function App() {
               path="/admin/sales"
               element={
                 <RequireAuth allowedRoles={["SALES_MANAGER"]}>
-                  <SalesManager />
+                  <Navigate to="/backoffice/sales-manager" replace />
                 </RequireAuth>
               }
             />

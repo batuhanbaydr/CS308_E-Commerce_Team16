@@ -18,6 +18,19 @@ const hasAdminAccess = (user) =>
   user?.role === "PRODUCT_MANAGER" ||
   user?.role === "SUPPORT_AGENT";
 
+const getAdminRoute = (user) => {
+  if (user?.roles?.includes("SALES_MANAGER") || user?.role === "SALES_MANAGER") {
+    return "/backoffice/sales-manager";
+  }
+  if (user?.roles?.includes("PRODUCT_MANAGER") || user?.role === "PRODUCT_MANAGER") {
+    return "/backoffice/product-manager";
+  }
+  if (user?.roles?.includes("SUPPORT_AGENT") || user?.role === "SUPPORT_AGENT") {
+    return "/backoffice/support-manager";
+  }
+  return "/admin"; // fallback
+};
+
 
 export default function Home() {
   const [user, setUser] = useState(null);
@@ -122,7 +135,7 @@ export default function Home() {
                   {hasAdminAccess(user) && (
                     <button
                       className="details-menu-item"
-                      onClick={go("/admin")}
+                      onClick={go(getAdminRoute(user))}
                     >
                       Admin Panel
                     </button>

@@ -24,6 +24,19 @@ const hasAdminAccess = (user) =>
   user?.role === "PRODUCT_MANAGER" ||
   user?.role === "SUPPORT_AGENT";
 
+const getAdminRoute = (user) => {
+  if (user?.roles?.includes("SALES_MANAGER") || user?.role === "SALES_MANAGER") {
+    return "/backoffice/sales-manager";
+  }
+  if (user?.roles?.includes("PRODUCT_MANAGER") || user?.role === "PRODUCT_MANAGER") {
+    return "/backoffice/product-manager";
+  }
+  if (user?.roles?.includes("SUPPORT_AGENT") || user?.role === "SUPPORT_AGENT") {
+    return "/backoffice/support-manager";
+  }
+  return "/admin"; // fallback
+};
+
 // Helper function to format date
 const formatDate = (dateString) => {
   if (!dateString) return "";
@@ -129,19 +142,50 @@ export default function Profile() {
         // Fetch orders (with error handling)
         try {
           const ordersRes = await getOrders(0, 100);
-          const ordersData = ordersRes.data?.content || [];
+          console.log("Orders API response:", ordersRes.data); // Debug log
+          
+          // Handle different response formats: content array or direct array
+          let ordersData = [];
+          if (Array.isArray(ordersRes.data)) {
+            ordersData = ordersRes.data;
+          } else if (Array.isArray(ordersRes.data?.content)) {
+            ordersData = ordersRes.data.content;
+          } else if (ordersRes.data?.data && Array.isArray(ordersRes.data.data)) {
+            ordersData = ordersRes.data.data;
+          }
+          
+          console.log("Parsed orders data:", ordersData); // Debug log
+          
           setOrders(
               ordersData.map((order) => ({
-                id: order.id,
-                date: formatDate(order.createdAt),
+                id: order.id || order._id || "UNKNOWN",
+                date: formatDate(order.createdAt || order.createdDate || order.date),
                 status: order.status || "UNKNOWN",
-                total: formatCurrency(order.grandTotal),
-                items: [],
+                total: formatCurrency(
+                  order.grandTotal || 
+                  order.totals?.grandTotal || 
+                  order.total || 
+                  0
+                ),
+                items: order.items || order.orderItems || [],
               }))
           );
+          
+          console.log("Final orders state:", ordersData.length, "orders"); // Debug log
         } catch (err) {
           console.error("Error fetching orders:", err);
+          console.error("Error details:", {
+            message: err.message,
+            status: err.response?.status,
+            data: err.response?.data,
+          });
           setOrders([]);
+          // Show user-friendly error message
+          if (err.response?.status === 401 || err.response?.status === 403) {
+            console.warn("Authentication error while fetching orders");
+          } else {
+            console.warn("Failed to load orders. Please try refreshing the page.");
+          }
         }
 
         // Fetch returns (with error handling)
@@ -575,10 +619,15 @@ export default function Profile() {
               ) : (
                   <ul className="profile-list">
                     {orders.map((order) => (
-                        <li key={order.id} className="profile-list-item">
+                        <li 
+                          key={order.id} 
+                          className="profile-list-item"
+                          style={{ cursor: "pointer" }}
+                          onClick={() => navigate(`/invoice/${order.id}`)}
+                        >
                           <div className="profile-list-item-header">
                             <span className="profile-pill">{order.status}</span>
-                            <strong>{order.id}</strong>
+                            <strong>Order #{order.id}</strong>
                           </div>
                           <div className="profile-list-item-meta">
                             <span>{order.date}</span>
@@ -586,7 +635,14 @@ export default function Profile() {
                           </div>
                           {order.items && order.items.length > 0 && (
                               <p className="profile-list-item-description">
-                                {order.items.join(", ")}
+                                {Array.isArray(order.items) 
+                                  ? order.items.map(item => 
+                                      typeof item === 'string' 
+                                        ? item 
+                                        : item.name || item.productName || `Item (${item.quantity || 1}x)`
+                                    ).join(", ")
+                                  : String(order.items)
+                                }
                               </p>
                           )}
                         </li>
