@@ -1,4 +1,6 @@
 package edu.sabanciuniv.cs308.backend.enums;
 
-public class MessageSenderType {
+public enum MessageSenderType {
+    CUSTOMER,
+    AGENT
 }
