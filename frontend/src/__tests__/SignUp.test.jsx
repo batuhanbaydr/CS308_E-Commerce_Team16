@@ -1,7 +1,8 @@
 // src/__tests__/SignUp.test.jsx
-
 // Goal: If passwords don’t match, we don’t call backend; instead we show an error.
+
 import React from "react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -31,25 +32,17 @@ describe("SignUp page", () => {
       </MemoryRouter>
     );
 
+    // Fill only the fields needed to trigger the mismatch check.
+    // IMPORTANT: We intentionally do NOT fill Home Address in this test,
+    // because the component returns early on password mismatch.
     await user.type(screen.getByPlaceholderText(/your name/i), "New User");
     await user.type(screen.getByPlaceholderText(/^e-mail$/i), "new@example.com");
     await user.type(screen.getByPlaceholderText(/^password$/i), "secret123");
-    await user.type(
-      screen.getByPlaceholderText(/confirm password/i),
-      "different"
-    );
-    await user.type(
-      screen.getByPlaceholderText(/home address/i),
-      "Random Street 12"
-    );
+    await user.type(screen.getByPlaceholderText(/confirm password/i), "different");
 
-    await user.click(
-      screen.getByRole("button", { name: /sign up/i })
-    );
+    await user.click(screen.getByRole("button", { name: /sign up/i }));
 
     expect(mockSignupRequest).not.toHaveBeenCalled();
-    expect(
-      screen.getByText(/passwords do not match/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument();
   });
 });
