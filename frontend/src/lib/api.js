@@ -427,4 +427,47 @@ export function downloadInvoicePdf(orderId) {
   });
 }
 
+// =======================
+// SUPPORT / CHAT
+// =======================
+
+// (Optional) customer/guest side – can be used later on storefront
+export function startConversation(guestSessionId) {
+  // body is optional; if guestSessionId is null/undefined, backend uses HttpSession ID.
+  const body = guestSessionId ? { guestSessionId } : null;
+  return api.post("/chat/start", body);
+}
+
+// Active conversations for support agents
+export function supportListActiveConversations() {
+  return api.get("/chat/active");
+}
+
+// Claim a conversation as the current agent (uses auth principal email)
+export function supportClaimConversation(conversationId) {
+  return api.post(`/chat/${conversationId}/claim`);
+}
+
+// Full message history for a conversation
+export function supportGetConversationMessages(conversationId) {
+  return api.get(`/chat/${conversationId}/messages`);
+}
+
+// Customer context (profile, cart, orders, wishlist, ...)
+export function supportGetConversationContext(conversationId) {
+  return api.get(`/chat/${conversationId}/context`);
+}
+
+// Upload attachment and get back an attachmentUrl
+export function supportUploadChatAttachment(conversationId, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return api.post(`/chat/${conversationId}/attachment`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+}
+
+
 export { api };

@@ -21,6 +21,7 @@ import Wishlist from "./pages/Wishlist.jsx";
 
 import ProductManagerLayout from "./pages/backoffice/product-manager/ProductManagerLayout";
 import SalesManagerLayout from "./pages/backoffice/sales-manager/SalesManagerLayout";
+import SupportManagerLayout from "./pages/backoffice/support-manager/SupportManagerLayout";
 
 import { CartDrawerProvider } from "./context/CartDrawerContext.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
@@ -121,12 +122,12 @@ export default function App() {
               }
             />
 
-            {/* Support Agent backoffice (placeholder for now) */}
+            {/* Support Agent backoffice */}
             <Route
               path="/backoffice/support-manager/*"
               element={
                 <RequireAuth allowedRoles={["SUPPORT_AGENT"]}>
-                  <Placeholder title="Support Agent Backoffice" />
+                  <SupportManagerLayout />
                 </RequireAuth>
               }
             />
