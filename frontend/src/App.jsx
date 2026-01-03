@@ -23,6 +23,9 @@ import ProductManagerLayout from "./pages/backoffice/product-manager/ProductMana
 import SalesManagerLayout from "./pages/backoffice/sales-manager/SalesManagerLayout";
 import SupportManagerLayout from "./pages/backoffice/support-manager/SupportManagerLayout";
 
+import SupportFab from "./components/SupportFab.jsx";
+import SupportChat from "./pages/SupportChat.jsx";
+
 import { CartDrawerProvider } from "./context/CartDrawerContext.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
 
@@ -45,6 +48,7 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <CartDrawerProvider>
+          <SupportFab />
           <Routes>
             {/* Default */}
             <Route path="/" element={<Navigate to="/home" replace />} />
@@ -53,6 +57,9 @@ export default function App() {
             <Route path="/home" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignUp />} />
+
+            {/* Customer support chat (customer side) */}
+            <Route path="/support/chat" element={<SupportChat />} />
 
             {/* Browsing */}
             <Route path="/category/sweatshirts" element={<Sweatshirts />} />
