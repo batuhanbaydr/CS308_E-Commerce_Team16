@@ -431,9 +431,8 @@ export function downloadInvoicePdf(orderId) {
 // SUPPORT / CHAT
 // =======================
 
-// (Optional) customer/guest side – can be used later on storefront
+// customer or guest: start a conversation
 export function startConversation(guestSessionId) {
-  // body is optional; if guestSessionId is null/undefined, backend uses HttpSession ID.
   const body = guestSessionId ? { guestSessionId } : null;
   return api.post("/chat/start", body);
 }
@@ -467,6 +466,47 @@ export function supportUploadChatAttachment(conversationId, file) {
       "Content-Type": "multipart/form-data",
     },
   });
+}
+
+// Added by Batu (not working currently)
+
+// Send a new message in a conversation
+export function supportSendMessage(conversationId, body) {
+  // body: { text?: string, attachmentUrl?: string, attachmentName?: string }
+  return api.post(`/chat/${conversationId}/messages`, body);
+}
+
+// ------- optional customer-specific helpers (if your backend has them) -----
+
+export function supportEnsureCustomerConversation() {
+  return api.post("/support/customer/conversation");
+}
+
+export function supportCustomerGetMessages(conversationId) {
+  return api.get(`/support/customer/conversations/${conversationId}/messages`);
+}
+
+export function supportCustomerGetConversation(conversationId) {
+  return api.get(`/support/customer/conversations/${conversationId}`);
+}
+
+export function supportCustomerUploadAttachment(conversationId, file) {
+  const form = new FormData();
+  form.append("file", file);
+  return api.post(
+    `/support/conversations/${conversationId}/attachments`,
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+}
+
+// Customer sends a message ***
+export function supportCustomerSendMessage(conversationId, body) {
+  // body: { text?: string, attachmentUrl?: string, attachmentName?: string }
+  return api.post(
+    `/support/customer/conversations/${conversationId}/messages`,
+    body
+  );
 }
 
 
