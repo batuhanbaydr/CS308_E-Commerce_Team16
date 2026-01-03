@@ -1,6 +1,12 @@
 // src/App.jsx
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 
 import Home from "./pages/Home";
 import Profile from "./pages/Profile";
@@ -43,127 +49,145 @@ function Placeholder({ title }) {
   );
 }
 
+/**
+ * Inner shell that has access to `useLocation`.
+ * We use this to hide SupportFab on admin/backoffice routes.
+ */
+function AppShell() {
+  const location = useLocation();
+
+  const isAdminRoute =
+    location.pathname.startsWith("/backoffice") ||
+    location.pathname.startsWith("/admin");
+
+  return (
+    <CartDrawerProvider>
+      {/* Show FAB only on non-admin pages */}
+      {!isAdminRoute && <SupportFab />}
+
+      <Routes>
+        {/* Default */}
+        <Route path="/" element={<Navigate to="/home" replace />} />
+
+        {/* Public */}
+        <Route path="/home" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<SignUp />} />
+
+        {/* Customer support chat (customer side) */}
+        <Route path="/support/chat" element={<SupportChat />} />
+
+        {/* Browsing */}
+        <Route path="/category/sweatshirts" element={<Sweatshirts />} />
+        <Route path="/category/shirts" element={<Shirts />} />
+        <Route path="/category/pants" element={<Pants />} />
+        <Route path="/shop-the-look" element={<div>TODO: Shop The Look</div>} />
+        <Route path="/search" element={<Search />} />
+        <Route path="/product/mock" element={<ProductDetailMock />} />
+        <Route path="/product/:productId" element={<ProductDetail />} />
+
+        {/* Private (customer) pages */}
+        <Route
+          path="/profile"
+          element={
+            <RequireAuth>
+              <Profile />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/wishlist"
+          element={
+            <RequireAuth>
+              <Wishlist />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/checkout"
+          element={
+            <RequireAuth>
+              <Checkout />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/invoice/:orderId"
+          element={
+            <RequireAuth>
+              <Invoice />
+            </RequireAuth>
+          }
+        />
+
+        {/* ============================
+            Backoffice routes
+            (MATCH Login.jsx redirects)
+            ============================ */}
+
+        {/* Product Manager backoffice */}
+        <Route
+          path="/backoffice/product-manager/*"
+          element={
+            <RequireAuth allowedRoles={["PRODUCT_MANAGER"]}>
+              <ProductManagerLayout />
+            </RequireAuth>
+          }
+        />
+
+        {/* Sales Manager backoffice */}
+        <Route
+          path="/backoffice/sales-manager/*"
+          element={
+            <RequireAuth allowedRoles={["SALES_MANAGER"]}>
+              <SalesManagerLayout />
+            </RequireAuth>
+          }
+        />
+
+        {/* Support Agent backoffice */}
+        <Route
+          path="/backoffice/support-manager/*"
+          element={
+            <RequireAuth allowedRoles={["SUPPORT_AGENT"]}>
+              <SupportManagerLayout />
+            </RequireAuth>
+          }
+        />
+
+        {/* Legacy admin routes - redirect to appropriate backoffice */}
+        <Route
+          path="/admin"
+          element={
+            <RequireAuth
+              allowedRoles={["PRODUCT_MANAGER", "SALES_MANAGER", "SUPPORT_AGENT"]}
+            >
+              <Navigate to="/backoffice/sales-manager" replace />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/admin/sales"
+          element={
+            <RequireAuth allowedRoles={["SALES_MANAGER"]}>
+              <Navigate to="/backoffice/sales-manager" replace />
+            </RequireAuth>
+          }
+        />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/home" replace />} />
+      </Routes>
+    </CartDrawerProvider>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <CartDrawerProvider>
-          <SupportFab />
-          <Routes>
-            {/* Default */}
-            <Route path="/" element={<Navigate to="/home" replace />} />
-
-            {/* Public */}
-            <Route path="/home" element={<Home />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<SignUp />} />
-
-            {/* Customer support chat (customer side) */}
-            <Route path="/support/chat" element={<SupportChat />} />
-
-            {/* Browsing */}
-            <Route path="/category/sweatshirts" element={<Sweatshirts />} />
-            <Route path="/category/shirts" element={<Shirts />} />
-            <Route path="/category/pants" element={<Pants />} />
-            <Route path="/shop-the-look" element={<div>TODO: Shop The Look</div>} />
-            <Route path="/search" element={<Search />} />
-            <Route path="/product/mock" element={<ProductDetailMock />} />
-            <Route path="/product/:productId" element={<ProductDetail />} />
-
-            {/* Private (customer) pages */}
-            <Route
-              path="/profile"
-              element={
-                <RequireAuth>
-                  <Profile />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/wishlist"
-              element={
-                <RequireAuth>
-                  <Wishlist />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/checkout"
-              element={
-                <RequireAuth>
-                  <Checkout />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/invoice/:orderId"
-              element={
-                <RequireAuth>
-                  <Invoice />
-                </RequireAuth>
-              }
-            />
-
-            {/* ============================
-                Backoffice routes
-                (MATCH Login.jsx redirects)
-                ============================ */}
-
-            {/* Product Manager backoffice */}
-            <Route
-              path="/backoffice/product-manager/*"
-              element={
-                <RequireAuth allowedRoles={["PRODUCT_MANAGER"]}>
-                  <ProductManagerLayout />
-                </RequireAuth>
-              }
-            />
-
-            {/* Sales Manager backoffice */}
-            <Route
-              path="/backoffice/sales-manager/*"
-              element={
-                <RequireAuth allowedRoles={["SALES_MANAGER"]}>
-                  <SalesManagerLayout />
-                </RequireAuth>
-              }
-            />
-
-            {/* Support Agent backoffice */}
-            <Route
-              path="/backoffice/support-manager/*"
-              element={
-                <RequireAuth allowedRoles={["SUPPORT_AGENT"]}>
-                  <SupportManagerLayout />
-                </RequireAuth>
-              }
-            />
-
-            {/* Legacy admin routes - redirect to appropriate backoffice */}
-            <Route
-              path="/admin"
-              element={
-                <RequireAuth
-                  allowedRoles={["PRODUCT_MANAGER", "SALES_MANAGER", "SUPPORT_AGENT"]}
-                >
-                  <Navigate to="/backoffice/sales-manager" replace />
-                </RequireAuth>
-              }
-            />
-
-            <Route
-              path="/admin/sales"
-              element={
-                <RequireAuth allowedRoles={["SALES_MANAGER"]}>
-                  <Navigate to="/backoffice/sales-manager" replace />
-                </RequireAuth>
-              }
-            />
-
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/home" replace />} />
-          </Routes>
-        </CartDrawerProvider>
+        <AppShell />
       </BrowserRouter>
     </AuthProvider>
   );

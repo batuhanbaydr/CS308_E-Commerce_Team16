@@ -1,4 +1,4 @@
-// src/pages/SupportChatPage.jsx
+// src/pages/SupportChat.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -7,15 +7,16 @@ import {
   startConversation,
   supportGetConversationMessages,
   supportUploadChatAttachment,
-  supportSendMessage,
 } from "../lib/api";
+import SockJS from "sockjs-client";
+import { Client as StompClient } from "@stomp/stompjs";
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
 import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 
 // ---- helpers ---------------------------------------------------------
 
-// Turn backend messages into a uniform shape for the UI
+// Turn backend messages/events into a uniform shape for the UI
 function normalizeMessages(list) {
   if (!Array.isArray(list)) return [];
   return list.map((m, idx) => {
@@ -50,12 +51,27 @@ function normalizeMessages(list) {
 // Make attachment URL safe to open directly in a new tab
 function resolveAttachmentUrl(url) {
   if (!url) return "#";
+
+  // absolute URL already → just use it
   if (/^https?:\/\//i.test(url)) return url;
-  // If backend returns a relative path like "/api/…", prefix current origin.
+
+  // backend origin: try env, fall back to localhost:8080 in dev
+  const apiOrigin =
+    import.meta.env.VITE_API_ORIGIN || "http://localhost:8080";
+
+  // backend returns paths like "/api/chat/files/…"
   if (url.startsWith("/")) {
-    return `${window.location.origin}${url}`;
+    return `${apiOrigin}${url}`;
   }
+
   return url;
+}
+
+// Build SockJS URL that actually hits the Spring backend,
+// NOT the Vite dev server.
+function buildSockJsUrl() {
+  // change port if your backend is different
+  return "http://localhost:8080/ws";
 }
 
 // ---- component -------------------------------------------------------
@@ -85,6 +101,10 @@ export default function SupportChatPage() {
   const [initError, setInitError] = useState("");
   const [sendError, setSendError] = useState("");
 
+  // websocket state
+  const [stompClient, setStompClient] = useState(null);
+  const [wsConnected, setWsConnected] = useState(false);
+
   // ----- auth / user bootstrap ---------------------------------------
 
   useEffect(() => {
@@ -97,6 +117,7 @@ export default function SupportChatPage() {
         const { data } = await meRequest();
         setUser(data);
       } catch {
+        // 403 here is fine → treat as guest
         setUser(null);
       }
     })();
@@ -112,47 +133,108 @@ export default function SupportChatPage() {
     navigate("/home");
   };
 
-useEffect(() => {
-  let cancelled = false;
+  // ----- conversation bootstrap (REST) --------------------------------
 
-  async function bootstrap() {
-    setInitError("");
-    try {
-      // ✅ use real backend endpoint
-      const convRes = await startConversation(null); // guest or logged-in
+  useEffect(() => {
+    let cancelled = false;
 
-      if (cancelled) return;
-
-      const conv = convRes?.data || {};
-      const cid = conv.id || conv.conversationId;
-      if (!cid) {
-        setInitError("Could not start a support chat. Please try again.");
-        return;
-      }
-      setConversationId(cid);
-
-      // ✅ load history from /chat/{id}/messages
+    async function bootstrap() {
+      setInitError("");
       try {
-        const histRes = await supportGetConversationMessages(cid);
-        if (!cancelled && Array.isArray(histRes?.data)) {
-          setMessages(normalizeMessages(histRes.data));
+        const convRes = await startConversation(null); // guest or logged-in
+        if (cancelled) return;
+
+        const conv = convRes?.data || {};
+        const cid = conv.id || conv.conversationId;
+        if (!cid) {
+          setInitError("Could not start a support chat. Please try again.");
+          return;
+        }
+        setConversationId(cid);
+
+        // load existing message history
+        try {
+          const histRes = await supportGetConversationMessages(cid);
+          if (!cancelled && Array.isArray(histRes?.data)) {
+            setMessages(normalizeMessages(histRes.data));
+          }
+        } catch (err) {
+          console.warn("Failed to load history:", err);
         }
       } catch (err) {
-        console.warn("Failed to load history:", err);
+        console.error("Failed to create conversation:", err);
+        setInitError("Could not start a support chat. Please try again.");
       }
-    } catch (err) {
-      console.error("Failed to create conversation:", err);
-      setInitError("Could not start a support chat. Please try again.");
     }
-  }
 
-  bootstrap();
-  return () => {
-    cancelled = true;
-  };
-}, []);
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // ----- send message (customer endpoints) ----------------------------
+  // ----- WebSocket / STOMP setup -------------------------------------
+
+  useEffect(() => {
+    if (!conversationId) return;
+
+    // build URL that hits Spring SockJS endpoint
+    const sockUrl = buildSockJsUrl();
+    console.log("[chat] connecting SockJS to:", sockUrl);
+
+    const socket = new SockJS(sockUrl);
+    const client = new StompClient({
+      webSocketFactory: () => socket,
+      reconnectDelay: 5000,
+      debug: () => {
+        // mute logs or enable if you need
+        // console.log("[stomp]", str);
+      },
+      onConnect: () => {
+        console.log("[chat] STOMP connected");
+        setWsConnected(true);
+
+        // subscribe to this conversation
+        client.subscribe(
+          `/topic/conversations/${conversationId}`,
+          (frame) => {
+            try {
+              const ev = JSON.parse(frame.body);
+              const normalized = normalizeMessages([ev])[0];
+              if (!normalized) return;
+              setMessages((prev) => [...prev, normalized]);
+            } catch (e) {
+              console.error("[chat] failed to parse incoming message", e);
+            }
+          }
+        );
+      },
+      onStompError: (frame) => {
+        console.error("[chat] STOMP error", frame);
+        setWsConnected(false);
+      },
+      onWebSocketError: (err) => {
+        console.error("[chat] WebSocket error", err);
+        setWsConnected(false);
+      },
+      onDisconnect: () => {
+        console.log("[chat] STOMP disconnected");
+        setWsConnected(false);
+      },
+    });
+
+    client.activate();
+    setStompClient(client);
+
+    return () => {
+      console.log("[chat] deactivating STOMP");
+      setWsConnected(false);
+      setStompClient(null);
+      client.deactivate();
+    };
+  }, [conversationId]);
+
+  // ----- send message (via STOMP) ------------------------------------
 
   const handleSend = async (e) => {
     e?.preventDefault();
@@ -160,14 +242,20 @@ useEffect(() => {
 
     const trimmed = input.trim();
     if (!trimmed && !fileToUpload) return;
+
     if (!conversationId) {
       setSendError("Chat is still initialising. Please wait a moment.");
       return;
     }
 
+    if (!stompClient || !wsConnected) {
+      setSendError("Chat connection is not ready yet. Please wait a moment.");
+      return;
+    }
+
     let attachmentMeta = null;
 
-    // 1) upload attachment first (if any) via customer endpoint
+    // 1) upload attachment first (if any)
     if (fileToUpload) {
       try {
         setUploading(true);
@@ -184,7 +272,6 @@ useEffect(() => {
             fileToUpload.name,
         };
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.error("Failed to upload attachment:", err);
         setSendError("Failed to upload attachment. Please try again.");
         setUploading(false);
@@ -194,39 +281,31 @@ useEffect(() => {
       }
     }
 
-    // 2) send message to backend (customer endpoint)
+    // 2) send message via WebSocket → /app/chat.send
     try {
-      const body = {
-        text: trimmed || (attachmentMeta ? "(attachment)" : ""),
-        ...(attachmentMeta || {}),
+      const textToSend = trimmed || (attachmentMeta ? "(attachment)" : "");
+
+      const payload = {
+        conversationId,
+        text: textToSend,
+        attachmentUrl: attachmentMeta?.attachmentUrl || null,
+        senderType: "CUSTOMER",
       };
 
-      await supportSendMessage(conversationId, body);
+      stompClient.publish({
+        destination: "/app/chat.send",
+        body: JSON.stringify(payload),
+      });
 
-      // 3) optimistic UI update
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `local-${Date.now()}`,
-          from: "customer",
-          text: body.text,
-          createdAt: new Date().toISOString(),
-          attachmentUrl: attachmentMeta?.attachmentUrl || null,
-          attachmentName: attachmentMeta?.attachmentName || null,
-        },
-      ]);
+      // ❌ no optimistic UI push here
+      // We wait for the STOMP event to come back and update `messages`.
 
       setInput("");
       setFileToUpload(null);
       setSendError("");
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error("Failed to send message:", err);
-      setSendError(
-        `Failed to send message${
-          err?.response?.status ? ` (status ${err.response.status})` : ""
-        }`
-      );
+      setSendError("Failed to send message.");
     }
   };
 
@@ -276,6 +355,7 @@ useEffect(() => {
               <span style={{ opacity: 0.8 }}>Attached file: </span>
               <a
                 href={resolveAttachmentUrl(m.attachmentUrl)}
+                download={m.attachmentName || true}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -466,7 +546,7 @@ useEffect(() => {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>
-                  {user?.email || "Guest"}
+                  {user?.name || "Guest"}
                 </div>
                 <div style={{ fontSize: 12, color: "#6b7280" }}>
                   We’ll assign a support agent shortly.
@@ -480,6 +560,7 @@ useEffect(() => {
                 padding: "16px 20px",
                 background: "#ffffff",
                 overflowY: "auto",
+                maxHeight: "360px", // 🔹 makes the chat area scrollable instead of growing forever
               }}
             >
               {initError && (

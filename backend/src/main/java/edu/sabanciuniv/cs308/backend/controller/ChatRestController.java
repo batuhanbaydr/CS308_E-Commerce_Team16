@@ -14,7 +14,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.HttpSession;
+
+import java.io.IOException;
 import java.net.MalformedURLException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -121,9 +124,8 @@ public class ChatRestController {
         return ResponseEntity.ok(Map.of("attachmentUrl", url));
     }
 
-    // 7) Uploaded file serve
     @GetMapping("/files/{filename:.+}")
-    public ResponseEntity<Resource> serve(@PathVariable String filename) throws MalformedURLException {
+    public ResponseEntity<Resource> serve(@PathVariable String filename) throws IOException {
         Path path = chatAttachmentService.resolve(filename);
         Resource resource = new UrlResource(path.toUri());
 
@@ -131,8 +133,18 @@ public class ChatRestController {
             return ResponseEntity.notFound().build();
         }
 
+        // detect MIME type from file
+        String contentType = Files.probeContentType(path);
+        if (contentType == null) {
+            contentType = "application/octet-stream";
+        }
+
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(
+                    HttpHeaders.CONTENT_DISPOSITION,
+                    "inline; filename=\"" + resource.getFilename() + "\""
+                )
                 .body(resource);
     }
 }

@@ -19,14 +19,20 @@ import {
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
-// ✅ reuse the same frame & styles as Product Manager
 import TopBar from "../product-manager/Topbar";
 import SupportSidebar from "./Sidebar";
 import "../product-manager/productManager.css";
 
-/**
- * Simple utility to format dates nicely
- */
+// ---------- small helpers ----------
+
+// WebSocket endpoint (for STOMP)
+const WS_BASE_URL =
+  import.meta.env.VITE_BACKEND_WS_URL || "http://localhost:8080/ws";
+
+// Base URL for serving uploaded files
+const FILE_BASE_URL =
+  import.meta.env.VITE_BACKEND_FILE_BASE_URL || "http://localhost:8080";
+
 function formatDateTime(value) {
   if (!value) return "";
   const d = value instanceof Date ? value : new Date(value);
@@ -34,9 +40,22 @@ function formatDateTime(value) {
   return d.toLocaleString();
 }
 
-/**
- * Small pill for status
- */
+// Make attachment URL safe + point to backend, not the SPA
+function resolveAttachmentUrl(url) {
+  if (!url) return "#";
+
+  // already absolute
+  if (/^https?:\/\//i.test(url)) return url;
+
+  // backend returns things like "/api/chat/files/abc123.png"
+  if (url.startsWith("/")) {
+    return `${FILE_BASE_URL}${url}`;
+  }
+
+  // fallback: relative path -> prefix with backend base
+  return `${FILE_BASE_URL}/${url.replace(/^\/+/, "")}`;
+}
+
 function StatusPill({ status }) {
   const label = status || "UNKNOWN";
   const colorMap = {
@@ -66,10 +85,6 @@ function StatusPill({ status }) {
   );
 }
 
-/**
- * Main layout for /backoffice/support-manager/*
- * Uses the same frame as ProductManagerLayout (pm-layout / pm-body / pm-sidebar / pm-content).
- */
 export default function SupportManagerLayout() {
   const { user } = useAuth();
 
@@ -84,7 +99,6 @@ export default function SupportManagerLayout() {
         <SupportSidebar />
 
         <main className="pm-content">
-          {/* Single tab: Live Chat */}
           <SupportLiveChatPanel agentEmail={agentEmail} />
         </main>
       </div>
@@ -92,10 +106,6 @@ export default function SupportManagerLayout() {
   );
 }
 
-/**
- * Live chat panel: left = queue, right = messages + context
- * Styled as a .pm-tab so it matches the PM look inside the content area.
- */
 function SupportLiveChatPanel({ agentEmail }) {
   const [queue, setQueue] = useState([]);
   const [queueLoading, setQueueLoading] = useState(true);
@@ -120,22 +130,19 @@ function SupportLiveChatPanel({ agentEmail }) {
   const messageIdsRef = useRef(new Set());
   const messagesEndRef = useRef(null);
 
-  // Auto scroll to bottom on new messages
+  // auto scroll
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
 
-  // Connect STOMP once
+  // WebSocket / STOMP connect once
   useEffect(() => {
     const client = new Client({
-      // Backend: registry.addEndpoint("/ws").withSockJS();
-      webSocketFactory: () => new SockJS("http://localhost:8080/ws"),
+      webSocketFactory: () => new SockJS(WS_BASE_URL),
       reconnectDelay: 5000,
-      debug: () => {
-        // silence logs in UI
-      },
+      debug: () => {},
     });
 
     client.onConnect = () => {
@@ -168,7 +175,6 @@ function SupportLiveChatPanel({ agentEmail }) {
     });
   }, []);
 
-  // Load active conversations into queue
   const loadQueue = useCallback(async () => {
     setQueueLoading(true);
     setQueueError(null);
@@ -187,14 +193,12 @@ function SupportLiveChatPanel({ agentEmail }) {
     loadQueue();
   }, [loadQueue]);
 
-  // When conversation changes, load message history + context and (re)subscribe
+  // When selected conversation changes, load history + context and subscribe
   useEffect(() => {
-    // Clear messages + context
     messageIdsRef.current = new Set();
     setMessages([]);
     setContext(null);
 
-    // Unsubscribe from previous
     if (subscriptionRef.current) {
       subscriptionRef.current.unsubscribe();
       subscriptionRef.current = null;
@@ -239,7 +243,6 @@ function SupportLiveChatPanel({ agentEmail }) {
 
     fetchData();
 
-    // Subscribe to live updates if STOMP is ready
     if (stompClient && stompConnected) {
       const sub = stompClient.subscribe(
         `/topic/conversations/${selectedId}`,
@@ -256,7 +259,7 @@ function SupportLiveChatPanel({ agentEmail }) {
     }
   }, [selectedId, stompClient, stompConnected, appendEvent]);
 
-  // If STOMP connects later (reconnect), resubscribe to current convo
+  // resubscribe on reconnect
   useEffect(() => {
     if (!selectedId || !stompClient || !stompConnected) return;
     if (subscriptionRef.current) {
@@ -294,12 +297,15 @@ function SupportLiveChatPanel({ agentEmail }) {
       alert("WebSocket not connected yet.");
       return;
     }
+
     const trimmed = messageText.trim();
     if (!trimmed && !pendingFile) return;
 
     setSending(true);
     try {
       let attachmentUrl = null;
+
+      // 1) upload file if present
       if (pendingFile) {
         const { data } = await supportUploadChatAttachment(
           selectedId,
@@ -308,6 +314,7 @@ function SupportLiveChatPanel({ agentEmail }) {
         attachmentUrl = data?.attachmentUrl || null;
       }
 
+      // 2) send via WebSocket
       const payload = {
         conversationId: selectedId,
         text: trimmed,
@@ -318,6 +325,25 @@ function SupportLiveChatPanel({ agentEmail }) {
       stompClient.publish({
         destination: "/app/chat.send",
         body: JSON.stringify(payload),
+      });
+
+      // 3) optimistic local event
+      const optimisticEvent = {
+        messageId: `local-${Date.now()}`,
+        conversationId: selectedId,
+        senderType: "AGENT",
+        senderPrincipal: agentEmail || "agent",
+        text: trimmed,
+        attachmentUrl,
+        timestamp: Date.now(),
+      };
+
+      messageIdsRef.current.add(optimisticEvent.messageId);
+
+      setMessages((prev) => {
+        const next = [...prev, optimisticEvent];
+        next.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        return next;
       });
 
       setMessageText("");
@@ -337,7 +363,6 @@ function SupportLiveChatPanel({ agentEmail }) {
     }
   };
 
-  // Derived: currently selected conversation object
   const selectedConversation = useMemo(
     () => queue.find((c) => c.id === selectedId),
     [queue, selectedId]
@@ -363,7 +388,6 @@ function SupportLiveChatPanel({ agentEmail }) {
         height: "100%",
       }}
     >
-      {/* Header using pm-tab styles so it matches PM look */}
       <div className="pm-tab-header">
         <h2 className="pm-tab-title">Live Chat</h2>
 
@@ -393,7 +417,6 @@ function SupportLiveChatPanel({ agentEmail }) {
         </div>
       </div>
 
-      {/* Main content: queue + chat */}
       <section
         style={{
           flex: 1,
@@ -616,7 +639,6 @@ function SupportLiveChatPanel({ agentEmail }) {
             minWidth: 0,
           }}
         >
-          {/* Top bar of chat */}
           <div
             style={{
               padding: "10px 14px",
@@ -690,7 +712,6 @@ function SupportLiveChatPanel({ agentEmail }) {
                   borderRight: "1px solid #e5e7eb",
                 }}
               >
-                {/* Message history */}
                 <div
                   style={{
                     flex: 1,
@@ -744,8 +765,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                             padding: "6px 9px",
                             backgroundColor: bg,
                             color,
-                            boxShadow:
-                              "0 1px 2px rgba(15,23,42,0.12)",
+                            boxShadow: "0 1px 2px rgba(15,23,42,0.12)",
                           }}
                         >
                           <div
@@ -774,7 +794,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                           )}
                           {m.attachmentUrl && (
                             <a
-                              href={m.attachmentUrl}
+                              href={resolveAttachmentUrl(m.attachmentUrl)}
                               target="_blank"
                               rel="noreferrer"
                               style={{
@@ -803,7 +823,6 @@ function SupportLiveChatPanel({ agentEmail }) {
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Compose box */}
                 <div
                   style={{
                     borderTop: "1px solid #e5e7eb",
@@ -887,7 +906,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                 </div>
               </div>
 
-              {/* Customer context */}
+              {/* Context */}
               <div
                 style={{
                   flex: 1.2,
@@ -948,29 +967,8 @@ function SupportLiveChatPanel({ agentEmail }) {
 
                   {!contextLoading && context && (
                     <>
-                      {/* Logged in? */}
-                      <div
-                        style={{
-                          marginBottom: 10,
-                          padding: "8px 9px",
-                          borderRadius: 8,
-                          backgroundColor: context.loggedIn
-                            ? "#ecfdf5"
-                            : "#fefce8",
-                          border: `1px solid ${
-                            context.loggedIn ? "#346546ff" : "#ffe57fff"
-                          }`,
-                          fontSize: 12,
-                        }}
-                      >
-                        <strong>
-                          {context.loggedIn
-                            ? "Logged-in customer"
-                            : "Guest session"}
-                        </strong>
-                      </div>
+                      
 
-                      {/* User profile */}
                       {context.user && (
                         <div
                           style={{
@@ -1017,7 +1015,6 @@ function SupportLiveChatPanel({ agentEmail }) {
                         </div>
                       )}
 
-                      {/* Stub sections for cart/orders/wishlist; wire up later */}
                       <div
                         style={{
                           marginBottom: 10,
