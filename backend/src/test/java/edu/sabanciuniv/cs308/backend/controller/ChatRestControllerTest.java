@@ -2,6 +2,7 @@ package edu.sabanciuniv.cs308.backend.controller;
 
 import edu.sabanciuniv.cs308.backend.entity.ConversationEntity;
 import edu.sabanciuniv.cs308.backend.enums.ConversationStatus;
+import edu.sabanciuniv.cs308.backend.repository.UserRepository;
 import edu.sabanciuniv.cs308.backend.service.ChatAttachmentService;
 import edu.sabanciuniv.cs308.backend.service.ChatService;
 import edu.sabanciuniv.cs308.backend.service.CustomerContextService;
@@ -23,9 +24,10 @@ class ChatRestControllerTest {
         ChatService chatService = mock(ChatService.class);
         CustomerContextService customerContextService = mock(CustomerContextService.class);
         ChatAttachmentService attachmentService = mock(ChatAttachmentService.class);
+        UserRepository userRepository = mock(UserRepository.class); // ✅ add
 
         ChatRestController controller =
-                new ChatRestController(chatService, customerContextService, attachmentService);
+                new ChatRestController(chatService, customerContextService, attachmentService, userRepository); // ✅ updated ctor
 
         ResponseEntity<?> res = controller.claim("c1", null);
 
@@ -36,6 +38,7 @@ class ChatRestControllerTest {
         assertTrue(body.containsKey("message"));
 
         verifyNoInteractions(chatService);
+        verifyNoInteractions(userRepository); // ✅ optional
     }
 
     @Test
@@ -43,9 +46,10 @@ class ChatRestControllerTest {
         ChatService chatService = mock(ChatService.class);
         CustomerContextService customerContextService = mock(CustomerContextService.class);
         ChatAttachmentService attachmentService = mock(ChatAttachmentService.class);
+        UserRepository userRepository = mock(UserRepository.class); // ✅ add
 
         ChatRestController controller =
-                new ChatRestController(chatService, customerContextService, attachmentService);
+                new ChatRestController(chatService, customerContextService, attachmentService, userRepository); // ✅ updated ctor
 
         ConversationEntity updated = new ConversationEntity();
         updated.setId("c1");
@@ -69,5 +73,6 @@ class ChatRestControllerTest {
         assertEquals("agent@email.com", body.get("assignedAgentId"));
 
         verify(chatService).claimConversation("c1", "agent@email.com");
+        verifyNoInteractions(userRepository); // ✅ optional
     }
 }

@@ -24,4 +24,7 @@ public interface OrderRepository extends MongoRepository<OrderEntity, String> {
 
     // ✅ revenue/profit: count only meaningful statuses
     List<OrderEntity> findByStatusInAndCreatedAtBetween(List<String> statuses, Instant start, Instant end);
+
+    List<OrderEntity> findTop5ByUserIdAndStatusNotOrderByCreatedAtDesc(String userId, String status);
+
 }
