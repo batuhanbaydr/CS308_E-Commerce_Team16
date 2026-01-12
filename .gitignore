@@ -3,3 +3,14 @@
 backend/target/
 **/.DS_Store
 .idea/
+
+usercookies.txt
+salescookies.txt
+pmcookies.txt
+customercookies.txt
+cookies.txt
+backend/usercookies.txt
+backend/salescookies.txt
+backend/pmcookies.txt
+
+*.properties.save

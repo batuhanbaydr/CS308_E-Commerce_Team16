@@ -82,15 +82,19 @@ public class SecurityConfig {
 
                         // customer-only endpoints (keep these)
                         .requestMatchers(
-                                "/api/account/**",
-                                "/api/orders/**",
-                                "/api/returns/**",
-                                "/api/users/me/payment-methods/**"
+                            "/api/account/**",
+                            "/api/orders/**",
+                            "/api/returns/**",
+                            "/api/refunds/**",
+                            "/api/users/me/payment-methods/**"
                         ).hasRole("CUSTOMER")
 
                         // backoffice endpoints - separated by manager type
                         .requestMatchers("/api/admin/product/**").hasRole("PRODUCT_MANAGER")
                         .requestMatchers("/api/admin/sales/**").hasRole("SALES_MANAGER")
+                        // (sales manager refund admin endpoints)
+                        .requestMatchers("/api/admin/refunds/**").hasRole("SALES_MANAGER")
+
                         .requestMatchers("/api/admin/support/**").hasRole("SUPPORT_AGENT")
 
                         // (optional safety) anything else under /api/admin requires login at least
