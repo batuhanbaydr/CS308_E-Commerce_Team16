@@ -33,6 +33,7 @@ public class OrderController {
                                   @RequestParam(required = false, defaultValue = "false") boolean me,
                                   @RequestParam(defaultValue = "0") int page,
                                   @RequestParam(defaultValue = "10") int size) {
+
         if (auth == null || !auth.isAuthenticated()) {
             return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
         }
@@ -55,11 +56,14 @@ public class OrderController {
     }
 
     // GET /api/orders/{orderId}
+    // ✅ CUSTOMER ONLY: can view ONLY their own order
     @GetMapping("/{orderId}")
     public ResponseEntity<?> detail(Authentication auth, @PathVariable String orderId) {
+
         if (auth == null || !auth.isAuthenticated()) {
             return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
         }
+
         String email = auth.getName();
         UserEntity user = userRepository.findByEmailAddress(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -67,7 +71,8 @@ public class OrderController {
         OrderEntity order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found"));
 
-        if (!order.getUserId().equals(user.getId())) {
+        // enforce owner check
+        if (order.getUserId() == null || !order.getUserId().equals(user.getId())) {
             return ResponseEntity.status(403).body(Map.of("message", "Forbidden"));
         }
 

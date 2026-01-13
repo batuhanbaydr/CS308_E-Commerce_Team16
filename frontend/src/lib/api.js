@@ -101,10 +101,11 @@ export function changePassword(currentPassword, newPassword) {
 export function getOrders(page = 0, size = 10) {
   return api.get("/orders", { params: { me: true, page, size } });
 }
+export const getOrderDetail = (orderId) => api.get(`/orders/${orderId}`);
 
-export function getOrderDetail(orderId) {
-  return api.get(`/orders/${orderId}`);
-}
+export const pmGetOrderDetail = (orderId) =>
+  api.get(`/admin/product/orders/${orderId}`);
+
 
 // =====================
 // RETURNS
@@ -305,6 +306,14 @@ export function clearWishlist() {
 // =======================
 // PRODUCT MANAGER (ADMIN)
 // =======================
+export function getUserById(id) {
+  return api.get(`/users/${id}`);
+}
+export function resolveUsers(ids) {
+  const qs = ids.join(",");
+  return api.get("/users/resolve", { params: { ids: qs } });
+}
+
 
 export const pmListProducts = () => api.get("/admin/product/products");
 export const pmCreateProduct = (payload) =>

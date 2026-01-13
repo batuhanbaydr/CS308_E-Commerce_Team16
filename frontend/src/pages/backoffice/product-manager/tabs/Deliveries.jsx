@@ -1,5 +1,5 @@
 // src/pages/backoffice/product-manager/tabs/DeliveriesTab.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { pmListOrders, pmUpdateOrderStatus } from "../../../../lib/api";
 
 /* -------------------- helpers -------------------- */
@@ -66,13 +66,7 @@ function getCreatedAt(o) {
 }
 
 function getItems(o) {
-  const items =
-    o?.items ??
-    o?.orderItems ??
-    o?.lineItems ??
-    o?.lines ??
-    o?.details ??
-    [];
+  const items = o?.items ?? o?.orderItems ?? o?.lineItems ?? o?.lines ?? o?.details ?? [];
   return Array.isArray(items) ? items : [];
 }
 
@@ -170,9 +164,20 @@ export default function DeliveriesTab() {
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
 
-  const [draftStatus, setDraftStatus] = useState({}); // orderId -> string
+  const [draftStatus, setDraftStatus] = useState({});
   const [savingId, setSavingId] = useState("");
   const [actionErr, setActionErr] = useState("");
+
+  // scroll sync refs
+  const tableScrollRef = useRef(null);
+  const bottomScrollRef = useRef(null);
+
+  // show/hide bottom bar depending on overflow
+  const [showBottomBar, setShowBottomBar] = useState(false);
+  const [scrollWidthPx, setScrollWidthPx] = useState(0);
+
+  const TABLE_MIN_WIDTH = 1400;
+  const BOTTOM_BAR_HEIGHT = 18;
 
   async function load() {
     setLoading(true);
@@ -214,7 +219,6 @@ export default function DeliveriesTab() {
     if (!id) return setActionErr("Order id is missing.");
     if (!status) return setActionErr("Status is required.");
 
-    // optional guard: don’t allow non-delivery statuses from Deliveries screen
     if (!DELIVERY_STATUSES.includes(status)) {
       return setActionErr(
         `Invalid delivery status: ${status}. Allowed: ${DELIVERY_STATUSES.join(", ")}`
@@ -246,7 +250,7 @@ export default function DeliveriesTab() {
 
     for (const o of orders) {
       const status = getStatus(o);
-      if (status === "CART") continue; // deliveries are only placed orders
+      if (status === "CART") continue;
 
       const orderId = getOrderId(o) || "—";
       const customerId = getCustomerId(o);
@@ -316,10 +320,72 @@ export default function DeliveriesTab() {
     return rows;
   }, [orders]);
 
+  // measure overflow + sync scrollbar widths
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const overflow = el.scrollWidth > el.clientWidth + 1;
+      setShowBottomBar(overflow);
+      setScrollWidthPx(el.scrollWidth);
+
+      if (bottomScrollRef.current) {
+        bottomScrollRef.current.scrollLeft = el.scrollLeft;
+      }
+    };
+
+    update();
+
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [deliveryRows.length]);
+
+  // keep bottom bar & table in sync
+  useEffect(() => {
+    const tableEl = tableScrollRef.current;
+    const bottomEl = bottomScrollRef.current;
+    if (!tableEl || !bottomEl) return;
+
+    let syncing = false;
+
+    const onBottomScroll = () => {
+      if (syncing) return;
+      syncing = true;
+      tableEl.scrollLeft = bottomEl.scrollLeft;
+      syncing = false;
+    };
+
+    const onTableScroll = () => {
+      if (syncing) return;
+      syncing = true;
+      bottomEl.scrollLeft = tableEl.scrollLeft;
+      syncing = false;
+    };
+
+    bottomEl.addEventListener("scroll", onBottomScroll, { passive: true });
+    tableEl.addEventListener("scroll", onTableScroll, { passive: true });
+
+    bottomEl.scrollLeft = tableEl.scrollLeft;
+
+    return () => {
+      bottomEl.removeEventListener("scroll", onBottomScroll);
+      tableEl.removeEventListener("scroll", onTableScroll);
+    };
+  }, [showBottomBar, deliveryRows.length]);
+
   if (loading) return <div className="pm-tab">Loading deliveries…</div>;
   if (errMsg) return <div className="pm-tab">⚠️ {errMsg}</div>;
 
   return (
+    // IMPORTANT: This assumes your backoffice main content area is the scrolling container.
+    // Sticky bottom will stick to the bottom edge of that scrollable viewport (the "snippet you see").
     <div className="pm-tab">
       <div className="pm-tab-header">
         <h2 className="pm-tab-title">Deliveries</h2>
@@ -335,78 +401,103 @@ export default function DeliveriesTab() {
       {!deliveryRows.length ? (
         <div className="pm-empty">No deliveries found.</div>
       ) : (
-        <table className="pm-table">
-          <thead>
-            <tr>
-              <th align="left">Delivery ID</th>
-              <th align="left">Order ID</th>
-              <th align="left">Created</th>
-              <th align="left">Customer ID</th>
-              <th align="left">Product ID</th>
-              <th align="left">SKU</th>
-              <th align="left">Qty</th>
-              <th align="left">Grand Total</th>
-              <th align="left">Delivery Address</th>
-              <th align="left">Completed</th>
-              <th align="left">Delivery Status</th>
-              <th align="left">Actions</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {deliveryRows.map((r) => {
-              const o = r._orderRef;
-              const oid = getOrderId(o);
-              const current = String(getDraft(o) || "").toUpperCase();
-              const currentInList = DELIVERY_STATUSES.includes(current);
-
-              return (
-                <tr key={r.deliveryId}>
-                  <td className="pm-td-mono">{r.deliveryId}</td>
-                  <td className="pm-td-mono">{r.orderId}</td>
-                  <td>{r.createdAtText}</td>
-                  <td className="pm-td-mono">{String(r.customerId)}</td>
-                  <td className="pm-td-mono">{String(r.productId)}</td>
-                  <td className="pm-td-mono">{String(r.sku)}</td>
-                  <td>{r.quantity}</td>
-                  <td>{money(r.total)}</td>
-                  <td style={{ maxWidth: 360, whiteSpace: "normal" }}>{r.addressText}</td>
-                  <td>{r.completed ? "YES" : "NO"}</td>
-
-                  <td style={{ maxWidth: 220 }}>
-                    <select
-                      className="pm-input"
-                      value={currentInList ? current : DELIVERY_STATUSES[0]}
-                      onChange={(e) => setDraft(o, e.target.value)}
-                    >
-                      {!currentInList && current && (
-                        <option value={current} disabled>
-                          {current} (not a delivery status)
-                        </option>
-                      )}
-                      {DELIVERY_STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-
-                  <td>
-                    <button
-                      type="button"
-                      className="pm-btn pm-btn-primary"
-                      onClick={() => saveOrderStatus(o)}
-                      disabled={savingId === oid}
-                    >
-                      {savingId === oid ? "Saving…" : "Save"}
-                    </button>
-                  </td>
+        <div style={{ width: "100%" }}>
+          {/* Real table scroll container */}
+          <div ref={tableScrollRef} style={{ width: "100%", overflowX: "auto" }}>
+            <table className="pm-table" style={{ minWidth: TABLE_MIN_WIDTH }}>
+              <thead>
+                <tr>
+                  <th align="left">Delivery ID</th>
+                  <th align="left">Order ID</th>
+                  <th align="left">Created</th>
+                  <th align="left">Customer ID</th>
+                  <th align="left">Product ID</th>
+                  <th align="left">SKU</th>
+                  <th align="left">Qty</th>
+                  <th align="left">Grand Total</th>
+                  <th align="left">Delivery Address</th>
+                  <th align="left">Completed</th>
+                  <th align="left">Delivery Status</th>
+                  <th align="left">Actions</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              </thead>
+
+              <tbody>
+                {deliveryRows.map((r) => {
+                  const o = r._orderRef;
+                  const oid = getOrderId(o);
+                  const current = String(getDraft(o) || "").toUpperCase();
+                  const currentInList = DELIVERY_STATUSES.includes(current);
+
+                  return (
+                    <tr key={r.deliveryId}>
+                      <td className="pm-td-mono">{r.deliveryId}</td>
+                      <td className="pm-td-mono">{r.orderId}</td>
+                      <td>{r.createdAtText}</td>
+                      <td className="pm-td-mono">{String(r.customerId)}</td>
+                      <td className="pm-td-mono">{String(r.productId)}</td>
+                      <td className="pm-td-mono">{String(r.sku)}</td>
+                      <td>{r.quantity}</td>
+                      <td>{money(r.total)}</td>
+                      <td style={{ maxWidth: 360, whiteSpace: "normal" }}>{r.addressText}</td>
+                      <td>{r.completed ? "YES" : "NO"}</td>
+
+                      <td style={{ maxWidth: 220 }}>
+                        <select
+                          className="pm-input"
+                          value={currentInList ? current : DELIVERY_STATUSES[0]}
+                          onChange={(e) => setDraft(o, e.target.value)}
+                        >
+                          {!currentInList && current && (
+                            <option value={current} disabled>
+                              {current} (not a delivery status)
+                            </option>
+                          )}
+                          {DELIVERY_STATUSES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+
+                      <td>
+                        <button
+                          type="button"
+                          className="pm-btn pm-btn-primary"
+                          onClick={() => saveOrderStatus(o)}
+                          disabled={savingId === oid}
+                        >
+                          {savingId === oid ? "Saving…" : "Save"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/*  This bar sticks to the bottom of the visible scroll viewport (panel) */}
+          {showBottomBar && (
+            <div
+              style={{
+                position: "sticky",
+                bottom: 0,
+                zIndex: 50,
+                height: BOTTOM_BAR_HEIGHT,
+                overflowX: "auto",
+                overflowY: "hidden",
+                background: "rgba(255,255,255,0.98)",
+                borderTop: "1px solid rgba(0,0,0,0.12)",
+              }}
+              ref={bottomScrollRef}
+              aria-label="Horizontal table scrollbar"
+            >
+              <div style={{ width: Math.max(scrollWidthPx, TABLE_MIN_WIDTH), height: 1 }} />
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
