@@ -1,6 +1,6 @@
 // src/pages/backoffice/product-manager/tabs/OrdersTab.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { pmListOrders, pmUpdateOrderStatus } from "../../../../lib/api";
+import { pmListOrders, pmUpdateOrderStatus, resolveUsers } from "../../../../lib/api";
 
 function getId(o) {
   const raw = o?.id ?? o?._id ?? "";
@@ -57,7 +57,6 @@ function computeTotalFromItems(o) {
   for (const it of items) {
     const qty = pickNumber(it?.quantity, it?.qty, 1) ?? 1;
 
-    // sometimes line has subtotal already
     const lineSubtotal = pickNumber(it?.subtotal, it?.lineTotal, it?.total);
     if (lineSubtotal != null) {
       sum += lineSubtotal;
@@ -65,7 +64,6 @@ function computeTotalFromItems(o) {
       continue;
     }
 
-    // otherwise compute unitPrice * qty
     const unit = pickNumber(
       it?.unitPrice,
       it?.price,
@@ -86,7 +84,6 @@ function computeTotalFromItems(o) {
 }
 
 function getTotal(o) {
-  // 1) BEST: backend totals object (your screenshot shows totals.grandTotal)
   const fromTotalsObj = pickNumber(
     o?.totals?.grandTotal,
     o?.totals?.total,
@@ -95,7 +92,6 @@ function getTotal(o) {
   );
   if (fromTotalsObj != null) return fromTotalsObj;
 
-  // 2) direct totals on root (older schema)
   const direct = pickNumber(
     o?.totalPrice,
     o?.total,
@@ -108,7 +104,6 @@ function getTotal(o) {
   );
   if (direct != null) return direct;
 
-  // 3) last resort: compute from items (not invoice-accurate if tax/shipping exist)
   const computed = computeTotalFromItems(o);
   if (computed != null) return computed;
 
@@ -120,13 +115,18 @@ export default function OrdersTab() {
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
 
-  const [draftStatus, setDraftStatus] = useState({}); // orderId -> string
+  const [draftStatus, setDraftStatus] = useState({});
   const [savingId, setSavingId] = useState("");
   const [actionErr, setActionErr] = useState("");
+
+  // userId -> displayName (or "Deleted user")
+  const [userMap, setUserMap] = useState({});
+  const [userLoadErr, setUserLoadErr] = useState("");
 
   async function load() {
     setLoading(true);
     setErrMsg("");
+    setActionErr("");
     try {
       const res = await pmListOrders();
       const list = Array.isArray(res.data) ? res.data : [];
@@ -146,7 +146,60 @@ export default function OrdersTab() {
     load();
   }, []);
 
-  // Build dropdown options from data so we don’t guess enum values
+  // ✅ Bulk resolve once per load (no 404 spam)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveCustomerNames() {
+      setUserLoadErr("");
+
+      const ids = Array.from(
+        new Set(
+          orders
+            .map((o) => o?.customerId ?? o?.userId ?? o?.customer?.id ?? o?.user?.id)
+            .filter(Boolean)
+            .map(String)
+        )
+      );
+
+      const missing = ids.filter((id) => !userMap[id]);
+      if (!missing.length) return;
+
+      try {
+        const res = await resolveUsers(missing);
+        const map = res?.data && typeof res.data === "object" ? res.data : {};
+
+        if (cancelled) return;
+
+        // Mark unresolved ids as "Deleted user" to avoid retry loops
+        const merged = { ...map };
+        for (const id of missing) {
+          if (!merged[id]) merged[id] = "Deleted user";
+        }
+
+        setUserMap((prev) => ({ ...prev, ...merged }));
+      } catch (e) {
+        if (cancelled) return;
+
+        setUserLoadErr(
+          e?.response?.data?.message ||
+            `Could not resolve customer names (status ${e?.response?.status || "?"})`
+        );
+
+        //  also cache as Deleted user to stop spamming
+        const fallback = {};
+        for (const id of missing) fallback[id] = "Deleted user";
+        setUserMap((prev) => ({ ...prev, ...fallback }));
+      }
+    }
+
+    if (orders.length) resolveCustomerNames();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
+
   const statusOptions = useMemo(() => {
     const set = new Set();
     for (const o of orders) {
@@ -221,6 +274,8 @@ export default function OrdersTab() {
 
       {actionErr && <div className="pm-alert pm-alert-error">⚠️ {actionErr}</div>}
 
+      {userLoadErr && <div className="pm-alert pm-alert-warn">⚠️ {userLoadErr}</div>}
+
       {!orders.length ? (
         <div className="pm-empty">No orders found.</div>
       ) : (
@@ -240,20 +295,28 @@ export default function OrdersTab() {
             {orders.map((o) => {
               const id = getId(o);
               const createdAt = getCreatedAt(o);
-              const customer =
-                o?.customerId ?? o?.userId ?? o?.customer?.id ?? o?.user?.id ?? "—";
+
+              const customerId = String(
+                o?.customerId ??
+                  o?.userId ??
+                  o?.customer?.id ??
+                  o?.user?.id ??
+                  ""
+              ).trim();
+
+              const customerDisplay = customerId
+                ? userMap[customerId] ?? "Deleted user"
+                : "—";
 
               const status = String(o?.status ?? "").toUpperCase();
               const isCart = status === "CART";
-
-              // CART: show subtotal from items if totals not present (more honest than $0)
               const total = isCart ? computeTotalFromItems(o) : getTotal(o);
 
               return (
-                <tr key={id || Math.random()}>
+                <tr key={id || customerId || createdAt || Math.random()}>
                   <td className="pm-td-mono">{id || "—"}</td>
                   <td>{createdAt ? String(createdAt) : "—"}</td>
-                  <td className="pm-td-mono">{String(customer)}</td>
+                  <td className="pm-td-mono">{customerDisplay}</td>
                   <td>{money(total)}</td>
 
                   <td style={{ maxWidth: 220 }}>

@@ -306,6 +306,14 @@ export function clearWishlist() {
 // =======================
 // PRODUCT MANAGER (ADMIN)
 // =======================
+export function getUserById(id) {
+  return api.get(`/users/${id}`);
+}
+export function resolveUsers(ids) {
+  const qs = ids.join(",");
+  return api.get("/users/resolve", { params: { ids: qs } });
+}
+
 
 export const pmListProducts = () => api.get("/admin/product/products");
 export const pmCreateProduct = (payload) =>

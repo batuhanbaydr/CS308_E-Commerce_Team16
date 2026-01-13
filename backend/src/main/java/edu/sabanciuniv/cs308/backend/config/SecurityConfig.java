@@ -62,42 +62,42 @@ public class SecurityConfig {
                                 "/error"
                         ).permitAll()
 
-                        // me endpoint: any logged-in user (customer OR backoffice) can read role
+            
+
                         .requestMatchers("/api/users/me").authenticated()
 
-                        // ---- REVIEWS (split correctly) ----
-                        // everyone can view reviews for a product
+                        // allow PM/Admin to resolve user ids
+                        .requestMatchers("GET", "/api/users/resolve").hasAnyRole("PRODUCT_MANAGER", "ADMIN")
+                        .requestMatchers("GET", "/api/users/*").hasAnyRole("PRODUCT_MANAGER", "ADMIN")
+
+
+                        // ---- REVIEWS ----
                         .requestMatchers("GET", "/api/reviews/product/**").permitAll()
 
-                        // PM moderation endpoints
-                        .requestMatchers("/api/reviews/pending",
+                        .requestMatchers(
+                                "/api/reviews/pending",
                                 "/api/reviews/*/approve",
-                                "/api/reviews/*/reject")
-                        .hasRole("PRODUCT_MANAGER")
+                                "/api/reviews/*/reject"
+                        ).hasRole("PRODUCT_MANAGER")
 
-                        // CUSTOMER can create review
                         .requestMatchers("POST", "/api/reviews").hasRole("CUSTOMER")
-
-                        // -----------------------------------
 
                         // customer-only endpoints (keep these)
                         .requestMatchers(
-                            "/api/account/**",
-                            "/api/orders/**",
-                            "/api/returns/**",
-                            "/api/refunds/**",
-                            "/api/users/me/payment-methods/**"
+                                "/api/account/**",
+                                "/api/orders/**",
+                                "/api/returns/**",
+                                "/api/refunds/**",
+                                "/api/users/me/payment-methods/**"
                         ).hasRole("CUSTOMER")
 
-                        // backoffice endpoints - separated by manager type
+                        // backoffice endpoints
                         .requestMatchers("/api/admin/product/**").hasRole("PRODUCT_MANAGER")
                         .requestMatchers("/api/admin/sales/**").hasRole("SALES_MANAGER")
-                        // (sales manager refund admin endpoints)
                         .requestMatchers("/api/admin/refunds/**").hasRole("SALES_MANAGER")
-
                         .requestMatchers("/api/admin/support/**").hasRole("SUPPORT_AGENT")
 
-                        // (optional safety) anything else under /api/admin requires login at least
+                        // anything else under /api/admin requires login at least
                         .requestMatchers("/api/admin/**").authenticated()
 
                         // everything else
