@@ -254,12 +254,30 @@ export default function Search() {
         {!loading && !errorMsg && (
           <section className="search-results-grid">
             {results.map((p) => {
+              // Get current (discounted) price
               const priceNumber = Number(
                 p.basePrice ??
                   (p.variants && p.variants[0] && p.variants[0].price) ??
                   0
               );
+              
+              // Get original price
+              const originalPriceNumber = Number(
+                p.originalBasePrice ??
+                  (p.variants && p.variants[0] && p.variants[0].originalPrice) ??
+                  0
+              );
+
+              const hasDiscount = originalPriceNumber > 0 && originalPriceNumber > priceNumber;
+              
               const displayPrice = `$${priceNumber.toFixed(2)}`;
+              const displayOriginalPrice = originalPriceNumber > 0 ? `$${originalPriceNumber.toFixed(2)}` : null;
+              
+              const discountPercent = p.discountPercent || 
+                (hasDiscount && originalPriceNumber > 0
+                  ? Math.round(((originalPriceNumber - priceNumber) / originalPriceNumber) * 100)
+                  : null);
+              
               const primaryImage = p.mainImageUrl || (p.imageUrls || [])[0] || "";
 
               let totalStock = 0;
@@ -283,7 +301,41 @@ export default function Search() {
                   </div>
                   <div className="search-result-info">
                     <h3>{p.name}</h3>
-                    <p className="search-result-price">{displayPrice}</p>
+                    <div className="search-result-price" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      {hasDiscount && displayOriginalPrice && (
+                        <span
+                          style={{
+                            textDecoration: "line-through",
+                            color: "#999",
+                            fontSize: "0.875rem",
+                          }}
+                        >
+                          {displayOriginalPrice}
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          color: hasDiscount ? "#d32f2f" : "inherit",
+                          fontWeight: hasDiscount ? "bold" : "normal",
+                        }}
+                      >
+                        {displayPrice}
+                      </span>
+                      {hasDiscount && discountPercent && (
+                        <span
+                          style={{
+                            backgroundColor: "#d32f2f",
+                            color: "white",
+                            padding: "2px 6px",
+                            fontSize: "0.7rem",
+                            fontWeight: "bold",
+                            borderRadius: "3px",
+                          }}
+                        >
+                          -{discountPercent}%
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </article>
               );

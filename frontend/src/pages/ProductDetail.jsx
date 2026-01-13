@@ -110,12 +110,24 @@ const scrollReviews = (direction) => {
   const uiSku =
     product?.variants?.[0]?.sku || product?.sku || "";
 
+  // Get current (discounted) price
   const rawPrice =
     product?.variants?.[0]?.price != null
       ? product.variants[0].price
       : product?.basePrice;
 
   const uiPrice = rawPrice != null ? Number(rawPrice) : null;
+
+  // Get original price (for strikethrough display)
+  const rawOriginalPrice =
+    product?.variants?.[0]?.originalPrice != null
+      ? product.variants[0].originalPrice
+      : product?.originalBasePrice;
+
+  const uiOriginalPrice = rawOriginalPrice != null ? Number(rawOriginalPrice) : null;
+
+  // Check if there's a discount (original price exists and is different from current price)
+  const hasDiscount = uiOriginalPrice != null && uiPrice != null && uiOriginalPrice > uiPrice;
 
   const formattedPrice =
     uiPrice != null
@@ -125,6 +137,21 @@ const scrollReviews = (direction) => {
           minimumFractionDigits: 2,
         }).format(uiPrice)
       : "";
+
+  const formattedOriginalPrice =
+    uiOriginalPrice != null
+      ? new Intl.NumberFormat("tr-TR", {
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 2,
+        }).format(uiOriginalPrice)
+      : "";
+
+  // Calculate discount percent if available
+  const discountPercent = product?.discountPercent || 
+    (hasDiscount && uiOriginalPrice > 0 
+      ? Math.round(((uiOriginalPrice - uiPrice) / uiOriginalPrice) * 100)
+      : null);
     const selectedSizeStock =
         selectedSize && product && product._sizeStock
           ? product._sizeStock[selectedSize] ?? 0
@@ -446,7 +473,43 @@ const handleSubmitReview = async (e) => {
               <h1 className="product-title">{product.name}</h1>
               {uiSku && <p className="product-sku">SKU: {uiSku}</p>}
 
-              <p className="product-price">{formattedPrice}</p>
+              <div className="product-price-container" style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                {hasDiscount && formattedOriginalPrice && (
+                  <span
+                    style={{
+                      textDecoration: "line-through",
+                      color: "#999",
+                      fontSize: "1rem",
+                    }}
+                  >
+                    {formattedOriginalPrice}
+                  </span>
+                )}
+                <span
+                  className="product-price"
+                  style={{
+                    fontSize: hasDiscount ? "1.5rem" : "1.25rem",
+                    fontWeight: "bold",
+                    color: hasDiscount ? "#d32f2f" : "inherit",
+                  }}
+                >
+                  {formattedPrice}
+                </span>
+                {hasDiscount && discountPercent && (
+                  <span
+                    style={{
+                      backgroundColor: "#d32f2f",
+                      color: "white",
+                      padding: "2px 8px",
+                      fontSize: "0.75rem",
+                      fontWeight: "bold",
+                      borderRadius: "4px",
+                    }}
+                  >
+                    -{discountPercent}%
+                  </span>
+                )}
+              </div>
 
               {uiColor && (
                 <div className="product-option-group">
@@ -696,6 +759,7 @@ const handleSubmitReview = async (e) => {
             {related.length > 0 && (
               <div className="product-related-scroll">
                 {related.map((p) => {
+                  // Get current (discounted) price
                   const priceNumber = Number(
                     p.basePrice ??
                       (p.variants &&
@@ -703,7 +767,26 @@ const handleSubmitReview = async (e) => {
                         p.variants[0].price) ??
                       0
                   );
+                  
+                  // Get original price
+                  const originalPriceNumber = Number(
+                    p.originalBasePrice ??
+                      (p.variants &&
+                        p.variants[0] &&
+                        p.variants[0].originalPrice) ??
+                      0
+                  );
+
+                  const hasDiscount = originalPriceNumber > 0 && originalPriceNumber > priceNumber;
+                  
                   const displayPrice = `$${priceNumber.toFixed(2)}`;
+                  const displayOriginalPrice = originalPriceNumber > 0 ? `$${originalPriceNumber.toFixed(2)}` : null;
+                  
+                  const discountPercent = p.discountPercent || 
+                    (hasDiscount && originalPriceNumber > 0
+                      ? Math.round(((originalPriceNumber - priceNumber) / originalPriceNumber) * 100)
+                      : null);
+
                   const img =
                     p.mainImageUrl ||
                     (p.imageUrls && p.imageUrls[0]) ||
@@ -727,8 +810,40 @@ const handleSubmitReview = async (e) => {
                       )}
                       <div className="product-related-info">
                         <div className="product-related-name">{p.name}</div>
-                        <div className="product-related-price">
-                          {displayPrice}
+                        <div className="product-related-price" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          {hasDiscount && displayOriginalPrice && (
+                            <span
+                              style={{
+                                textDecoration: "line-through",
+                                color: "#999",
+                                fontSize: "0.875rem",
+                              }}
+                            >
+                              {displayOriginalPrice}
+                            </span>
+                          )}
+                          <span
+                            style={{
+                              color: hasDiscount ? "#d32f2f" : "inherit",
+                              fontWeight: hasDiscount ? "bold" : "normal",
+                            }}
+                          >
+                            {displayPrice}
+                          </span>
+                          {hasDiscount && discountPercent && (
+                            <span
+                              style={{
+                                backgroundColor: "#d32f2f",
+                                color: "white",
+                                padding: "2px 6px",
+                                fontSize: "0.7rem",
+                                fontWeight: "bold",
+                                borderRadius: "3px",
+                              }}
+                            >
+                              -{discountPercent}%
+                            </span>
+                          )}
                         </div>
                       </div>
                     </button>

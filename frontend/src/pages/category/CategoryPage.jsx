@@ -655,13 +655,30 @@ export default function CategoryPage() {
                 );
 
               const sizeStock = product._sizeStock || {};
+              
+              // Get current (discounted) price
               const priceNumber =
                 product._price ??
                 Number(
                   product.basePrice ??
                     (product.variants?.[0]?.price ?? 0)
                 );
+              
+              // Get original price
+              const originalPriceNumber = Number(
+                product.originalBasePrice ??
+                  (product.variants?.[0]?.originalPrice ?? 0)
+              );
+
+              const hasDiscount = originalPriceNumber > 0 && originalPriceNumber > priceNumber;
+              
               const displayPrice = `$${priceNumber.toFixed(2)}`;
+              const displayOriginalPrice = originalPriceNumber > 0 ? `$${originalPriceNumber.toFixed(2)}` : null;
+              
+              const discountPercent = product.discountPercent || 
+                (hasDiscount && originalPriceNumber > 0
+                  ? Math.round(((originalPriceNumber - priceNumber) / originalPriceNumber) * 100)
+                  : null);
 
               const totalStock = Object.values(sizeStock).reduce(
                 (sum, v) => sum + (typeof v === "number" ? v : Number(v || 0)),
@@ -744,7 +761,41 @@ export default function CategoryPage() {
                       <span>COLOR: {String(colorText).toUpperCase()}</span>
                     </p>
 
-                    <p className="product-price">{displayPrice}</p>
+                    <div className="product-price" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      {hasDiscount && displayOriginalPrice && (
+                        <span
+                          style={{
+                            textDecoration: "line-through",
+                            color: "#999",
+                            fontSize: "0.875rem",
+                          }}
+                        >
+                          {displayOriginalPrice}
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          color: hasDiscount ? "#d32f2f" : "inherit",
+                          fontWeight: hasDiscount ? "bold" : "normal",
+                        }}
+                      >
+                        {displayPrice}
+                      </span>
+                      {hasDiscount && discountPercent && (
+                        <span
+                          style={{
+                            backgroundColor: "#d32f2f",
+                            color: "white",
+                            padding: "2px 6px",
+                            fontSize: "0.7rem",
+                            fontWeight: "bold",
+                            borderRadius: "3px",
+                          }}
+                        >
+                          -{discountPercent}%
+                        </span>
+                      )}
+                    </div>
 
                     <div className="product-size-selector">
                       <p className="size-selector-label">SIZE</p>
