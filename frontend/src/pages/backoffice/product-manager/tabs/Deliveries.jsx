@@ -168,16 +168,16 @@ export default function DeliveriesTab() {
   const [savingId, setSavingId] = useState("");
   const [actionErr, setActionErr] = useState("");
 
-  // scroll sync refs
+  // refs for syncing horizontal scroll
   const tableScrollRef = useRef(null);
-  const bottomScrollRef = useRef(null);
+  const topScrollRef = useRef(null);
 
-  // show/hide bottom bar depending on overflow
-  const [showBottomBar, setShowBottomBar] = useState(false);
+  // show/hide + width
+  const [showTopBar, setShowTopBar] = useState(false);
   const [scrollWidthPx, setScrollWidthPx] = useState(0);
 
   const TABLE_MIN_WIDTH = 1400;
-  const BOTTOM_BAR_HEIGHT = 18;
+  const TOP_BAR_HEIGHT = 16;
 
   async function load() {
     setLoading(true);
@@ -257,8 +257,7 @@ export default function DeliveriesTab() {
       const createdAt = getCreatedAt(o);
       const createdAtText = createdAt ? new Date(createdAt).toLocaleString() : "—";
       const completed = status === "DELIVERED";
-      const addrObj = getDeliveryAddress(o);
-      const addrText = formatAddress(addrObj);
+      const addrText = formatAddress(getDeliveryAddress(o));
 
       const items = getItems(o);
       const grandTotal = getOrderGrandTotal(o);
@@ -320,18 +319,18 @@ export default function DeliveriesTab() {
     return rows;
   }, [orders]);
 
-  // measure overflow + sync scrollbar widths
+  // measure overflow + set top scrollbar width
   useEffect(() => {
     const el = tableScrollRef.current;
     if (!el) return;
 
     const update = () => {
       const overflow = el.scrollWidth > el.clientWidth + 1;
-      setShowBottomBar(overflow);
+      setShowTopBar(overflow);
       setScrollWidthPx(el.scrollWidth);
 
-      if (bottomScrollRef.current) {
-        bottomScrollRef.current.scrollLeft = el.scrollLeft;
+      if (topScrollRef.current) {
+        topScrollRef.current.scrollLeft = el.scrollLeft;
       }
     };
 
@@ -347,45 +346,43 @@ export default function DeliveriesTab() {
     };
   }, [deliveryRows.length]);
 
-  // keep bottom bar & table in sync
+  // sync scrollLeft between the table and the top bar
   useEffect(() => {
     const tableEl = tableScrollRef.current;
-    const bottomEl = bottomScrollRef.current;
-    if (!tableEl || !bottomEl) return;
+    const topEl = topScrollRef.current;
+    if (!tableEl || !topEl) return;
 
     let syncing = false;
 
-    const onBottomScroll = () => {
+    const onTopScroll = () => {
       if (syncing) return;
       syncing = true;
-      tableEl.scrollLeft = bottomEl.scrollLeft;
+      tableEl.scrollLeft = topEl.scrollLeft;
       syncing = false;
     };
 
     const onTableScroll = () => {
       if (syncing) return;
       syncing = true;
-      bottomEl.scrollLeft = tableEl.scrollLeft;
+      topEl.scrollLeft = tableEl.scrollLeft;
       syncing = false;
     };
 
-    bottomEl.addEventListener("scroll", onBottomScroll, { passive: true });
+    topEl.addEventListener("scroll", onTopScroll, { passive: true });
     tableEl.addEventListener("scroll", onTableScroll, { passive: true });
 
-    bottomEl.scrollLeft = tableEl.scrollLeft;
+    topEl.scrollLeft = tableEl.scrollLeft;
 
     return () => {
-      bottomEl.removeEventListener("scroll", onBottomScroll);
+      topEl.removeEventListener("scroll", onTopScroll);
       tableEl.removeEventListener("scroll", onTableScroll);
     };
-  }, [showBottomBar, deliveryRows.length]);
+  }, [showTopBar, deliveryRows.length]);
 
   if (loading) return <div className="pm-tab">Loading deliveries…</div>;
   if (errMsg) return <div className="pm-tab">⚠️ {errMsg}</div>;
 
   return (
-    // IMPORTANT: This assumes your backoffice main content area is the scrolling container.
-    // Sticky bottom will stick to the bottom edge of that scrollable viewport (the "snippet you see").
     <div className="pm-tab">
       <div className="pm-tab-header">
         <h2 className="pm-tab-title">Deliveries</h2>
@@ -402,6 +399,26 @@ export default function DeliveriesTab() {
         <div className="pm-empty">No deliveries found.</div>
       ) : (
         <div style={{ width: "100%" }}>
+          {/* ✅ Top scrollbar (sticky) */}
+          {showTopBar && (
+            <div
+              style={{
+                position: "sticky",
+                top: 0,
+                zIndex: 100,
+                height: TOP_BAR_HEIGHT,
+                overflowX: "auto",
+                overflowY: "hidden",
+                background: "rgba(255,255,255,0.98)",
+                borderBottom: "1px solid rgba(0,0,0,0.12)",
+              }}
+              ref={topScrollRef}
+              aria-label="Horizontal table scrollbar"
+            >
+              <div style={{ width: Math.max(scrollWidthPx, TABLE_MIN_WIDTH), height: 1 }} />
+            </div>
+          )}
+
           {/* Real table scroll container */}
           <div ref={tableScrollRef} style={{ width: "100%", overflowX: "auto" }}>
             <table className="pm-table" style={{ minWidth: TABLE_MIN_WIDTH }}>
@@ -477,26 +494,6 @@ export default function DeliveriesTab() {
               </tbody>
             </table>
           </div>
-
-          {/*  This bar sticks to the bottom of the visible scroll viewport (panel) */}
-          {showBottomBar && (
-            <div
-              style={{
-                position: "sticky",
-                bottom: 0,
-                zIndex: 50,
-                height: BOTTOM_BAR_HEIGHT,
-                overflowX: "auto",
-                overflowY: "hidden",
-                background: "rgba(255,255,255,0.98)",
-                borderTop: "1px solid rgba(0,0,0,0.12)",
-              }}
-              ref={bottomScrollRef}
-              aria-label="Horizontal table scrollbar"
-            >
-              <div style={{ width: Math.max(scrollWidthPx, TABLE_MIN_WIDTH), height: 1 }} />
-            </div>
-          )}
         </div>
       )}
     </div>
