@@ -19,7 +19,6 @@ import RequireAuth from "./auth/RequireAuth";
 // ✅ NEW dynamic category page
 import CategoryPage from "./pages/category/CategoryPage.jsx";
 
-import ProductDetailMock from "./pages/ProductDetailMock";
 import ProductDetail from "./pages/ProductDetail";
 import Search from "./pages/Search.jsx";
 import Checkout from "./pages/Checkout.jsx";
@@ -91,7 +90,7 @@ function AppShell() {
 
         <Route path="/shop-the-look" element={<div>TODO: Shop The Look</div>} />
         <Route path="/search" element={<Search />} />
-        <Route path="/product/mock" element={<ProductDetailMock />} />
+       
         <Route path="/product/:productId" element={<ProductDetail />} />
 
         {/* Private (customer) pages */}
