@@ -14,8 +14,6 @@ import {
   supportGetConversationMessages,
   supportGetConversationContext,
   supportUploadChatAttachment,
-  // 🔹 NEW: close conversation API
-  supportCloseConversation,
 } from "../../../lib/api";
 
 import { Client } from "@stomp/stompjs";
@@ -144,8 +142,7 @@ function StatusPill({ status }) {
 
 export default function SupportManagerLayout() {
   const { user } = useAuth();
-  const agentEmail =
-    user?.emailAddress || user?.email || user?.username || null;
+  const agentEmail = user?.emailAddress || user?.email || user?.username || null;
 
   return (
     <div className="pm-layout">
@@ -248,9 +245,7 @@ function SupportLiveChatPanel({ agentEmail }) {
       if (optimisticKeysRef.current.has(fp)) {
         optimisticKeysRef.current.delete(fp);
 
-        const withoutOptimistic = prev.filter(
-          (m) => fingerprintMsg(m) !== fp
-        );
+        const withoutOptimistic = prev.filter((m) => fingerprintMsg(m) !== fp);
 
         messageIdsRef.current.add(incomingId);
         const merged = [...withoutOptimistic, normalized];
@@ -316,9 +311,7 @@ function SupportLiveChatPanel({ agentEmail }) {
             senderPrincipal: m.senderPrincipal,
             text: m.text,
             attachmentUrl: m.attachmentUrl,
-            timestamp: m.timestamp
-              ? new Date(m.timestamp).getTime()
-              : Date.now(),
+            timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now(),
           };
         });
 
@@ -385,30 +378,6 @@ function SupportLiveChatPanel({ agentEmail }) {
     } catch (err) {
       console.error(err);
       alert("Failed to claim conversation");
-    }
-  };
-
-  // 🔹 NEW: close conversation handler
-  const handleClose = async (conversationId) => {
-    const ok = window.confirm(
-      "Are you sure you want to close this conversation?"
-    );
-    if (!ok) return;
-
-    try {
-      await supportCloseConversation(conversationId);
-
-      // if we are currently viewing this conversation, clear it
-      if (selectedId === conversationId) {
-        setSelectedId(null);
-        setMessages([]);
-        setContext(null);
-      }
-
-      await loadQueue();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to close conversation");
     }
   };
 
@@ -715,8 +684,6 @@ function SupportLiveChatPanel({ agentEmail }) {
                           ? conv.assignedAgentId
                           : "Unassigned"}
                       </div>
-
-                      {/* When not CLOSED and not claimed by me -> Claim button */}
                       {conv.status !== "CLOSED" && !isClaimedByMe && (
                         <button
                           type="button"
@@ -737,15 +704,8 @@ function SupportLiveChatPanel({ agentEmail }) {
                           Claim
                         </button>
                       )}
-
-                      {/* When it IS claimed by me -> toggle to CLOSED on click */}
-                      {isClaimedByMe && conv.status !== "CLOSED" && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleClose(conv.id);
-                          }}
+                      {isClaimedByMe && (
+                        <span
                           style={{
                             fontSize: 11,
                             padding: "3px 8px",
@@ -753,27 +713,9 @@ function SupportLiveChatPanel({ agentEmail }) {
                             border: "1px solid #3d8b5aff",
                             backgroundColor: "#dcfce7",
                             color: "#2d553cff",
-                            cursor: "pointer",
                           }}
-                          title="Click to close this conversation"
                         >
                           Assigned to you
-                        </button>
-                      )}
-
-                      {/* If it's somehow CLOSED but still in list, just show a non-clickable pill */}
-                      {conv.status === "CLOSED" && (
-                        <span
-                          style={{
-                            fontSize: 11,
-                            padding: "3px 8px",
-                            borderRadius: 999,
-                            border: "1px solid #6b7280",
-                            backgroundColor: "#e5e7eb",
-                            color: "#374151",
-                          }}
-                        >
-                          Closed
                         </span>
                       )}
                     </div>
@@ -883,8 +825,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                   )}
 
                   {messages.map((m) => {
-                    const isAgent =
-                      (m.senderType || "").toUpperCase() === "AGENT";
+                    const isAgent = (m.senderType || "").toUpperCase() === "AGENT";
                     const align = isAgent ? "flex-end" : "flex-start";
                     const bg = isAgent ? "#3d211c" : "white";
                     const color = isAgent ? "white" : "#111827";
@@ -997,9 +938,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                       justifyContent: "space-between",
                     }}
                   >
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <label
                         style={{
                           fontSize: 12,
@@ -1122,14 +1061,12 @@ function SupportLiveChatPanel({ agentEmail }) {
                             </div>
                             {context.user.phoneNumber && (
                               <div>
-                                <strong>Phone:</strong>{" "}
-                                {context.user.phoneNumber}
+                                <strong>Phone:</strong> {context.user.phoneNumber}
                               </div>
                             )}
                             {context.user.homeAddress && (
                               <div>
-                                <strong>Address:</strong>{" "}
-                                {context.user.homeAddress}
+                                <strong>Address:</strong> {context.user.homeAddress}
                               </div>
                             )}
                             {context.user.role && (
@@ -1175,12 +1112,10 @@ function SupportLiveChatPanel({ agentEmail }) {
                               }}
                             >
                               <div>
-                                <strong>OrderId (cart):</strong>{" "}
-                                {cart.orderId || "-"}
+                                <strong>OrderId (cart):</strong> {cart.orderId || "-"}
                               </div>
                               <div>
-                                <strong>Subtotal:</strong>{" "}
-                                {formatMoney(cart.subtotal)}
+                                <strong>Subtotal:</strong> {formatMoney(cart.subtotal)}
                               </div>
                               <div>
                                 <strong>Items:</strong> {cartItems.length}
@@ -1226,9 +1161,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                                     >
                                       {it.mainImageUrl ? (
                                         <img
-                                          src={resolveAttachmentUrl(
-                                            it.mainImageUrl
-                                          )}
+                                          src={resolveAttachmentUrl(it.mainImageUrl)}
                                           alt={it.name || it.productId}
                                           style={{
                                             width: "100%",
@@ -1236,8 +1169,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                                             objectFit: "cover",
                                           }}
                                           onError={(e) => {
-                                            e.currentTarget.style.display =
-                                              "none";
+                                            e.currentTarget.style.display = "none";
                                           }}
                                         />
                                       ) : null}
@@ -1283,9 +1215,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                                           <>
                                             {" "}
                                             • Unit:{" "}
-                                            <strong>
-                                              {formatMoney(it.unitPrice)}
-                                            </strong>
+                                            <strong>{formatMoney(it.unitPrice)}</strong>
                                           </>
                                         ) : null}
                                         {it.lineTotal !== undefined &&
@@ -1293,9 +1223,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                                           <>
                                             {" "}
                                             • Line:{" "}
-                                            <strong>
-                                              {formatMoney(it.lineTotal)}
-                                            </strong>
+                                            <strong>{formatMoney(it.lineTotal)}</strong>
                                           </>
                                         ) : null}
                                       </div>
@@ -1304,9 +1232,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                                 ))}
 
                                 {cartItems.length > 5 && (
-                                  <div
-                                    style={{ fontSize: 11, color: "#6b7280" }}
-                                  >
+                                  <div style={{ fontSize: 11, color: "#6b7280" }}>
                                     +{cartItems.length - 5} more item(s)…
                                   </div>
                                 )}
@@ -1504,14 +1430,10 @@ function SupportLiveChatPanel({ agentEmail }) {
                                         flex: "0 0 auto",
                                       }}
                                     >
-                                      {p.mainImageUrl ||
-                                      p.imageUrl ||
-                                      p.thumbnailUrl ? (
+                                      {p.mainImageUrl || p.imageUrl || p.thumbnailUrl ? (
                                         <img
                                           src={resolveAttachmentUrl(
-                                            p.mainImageUrl ||
-                                              p.imageUrl ||
-                                              p.thumbnailUrl
+                                            p.mainImageUrl || p.imageUrl || p.thumbnailUrl
                                           )}
                                           alt={p.name || p.title || "product"}
                                           style={{
@@ -1520,8 +1442,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                                             objectFit: "cover",
                                           }}
                                           onError={(e) => {
-                                            e.currentTarget.style.display =
-                                              "none";
+                                            e.currentTarget.style.display = "none";
                                           }}
                                         />
                                       ) : null}
@@ -1539,10 +1460,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                                         }}
                                         title={p.name || p.title || p.id}
                                       >
-                                        {p.name ||
-                                          p.title ||
-                                          p.id ||
-                                          "Product"}
+                                        {p.name || p.title || p.id || "Product"}
                                       </div>
                                       <div
                                         style={{
@@ -1551,20 +1469,15 @@ function SupportLiveChatPanel({ agentEmail }) {
                                           marginTop: 2,
                                         }}
                                       >
-                                        ID:{" "}
-                                        {p.id || p._id || p.productId || "-"}
+                                        ID: {p.id || p._id || p.productId || "-"}
                                       </div>
                                     </div>
                                   </div>
                                 ))}
 
                                 {wishlistProducts.length > 5 && (
-                                  <div
-                                    style={{ fontSize: 11, color: "#6b7280" }}
-                                  >
-                                    +
-                                    {wishlistProducts.length - 5} more wishlist
-                                    item(s)…
+                                  <div style={{ fontSize: 11, color: "#6b7280" }}>
+                                    +{wishlistProducts.length - 5} more wishlist item(s)…
                                   </div>
                                 )}
                               </div>
