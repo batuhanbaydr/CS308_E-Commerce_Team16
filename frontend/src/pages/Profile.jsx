@@ -16,20 +16,20 @@ import {
 } from "../lib/api";
 
 const hasAdminAccess = (user) =>
-    user?.roles?.includes("SALES_MANAGER") ||
-    user?.roles?.includes("PRODUCT_MANAGER") ||
-    user?.roles?.includes("SUPPORT_AGENT") ||
-    user?.role === "SALES_MANAGER" ||
-    user?.role === "PRODUCT_MANAGER" ||
-    user?.role === "SUPPORT_AGENT";
+  user?.roles?.includes("SALES_MANAGER") ||
+  user?.roles?.includes("PRODUCT_MANAGER") ||
+  user?.roles?.includes("SUPPORT_AGENT") ||
+  user?.role === "SALES_MANAGER" ||
+  user?.role === "PRODUCT_MANAGER" ||
+  user?.role === "SUPPORT_AGENT";
 
 const getAdminRoute = (user) => {
   if (user?.roles?.includes("SALES_MANAGER") || user?.role === "SALES_MANAGER") {
     return "/backoffice/sales-manager";
   }
   if (
-      user?.roles?.includes("PRODUCT_MANAGER") ||
-      user?.role === "PRODUCT_MANAGER"
+    user?.roles?.includes("PRODUCT_MANAGER") ||
+    user?.role === "PRODUCT_MANAGER"
   ) {
     return "/backoffice/product-manager";
   }
@@ -54,7 +54,6 @@ const formatDate = (dateString) => {
   }
 };
 
-
 const formatCurrency = (amount) => {
   if (amount === null || amount === undefined || amount === "") return "$0.00";
 
@@ -74,6 +73,7 @@ export default function Profile() {
 
   // User and account states
   const [user, setUser] = useState(null);
+  const [taxId, setTaxId] = useState(""); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -126,6 +126,14 @@ export default function Profile() {
           email: userData.emailAddress,
         });
 
+        
+        const mockTaxId = userId
+          ? `TAX-${String(userId).slice(0, 3).toUpperCase()}-${String(userId)
+              .slice(-3)
+              .toUpperCase()}`
+          : "TAX-000-000";
+        setTaxId(mockTaxId);
+
         // Fetch account details (with error handling)
         try {
           const accountRes = await getAccountDetails();
@@ -161,15 +169,15 @@ export default function Profile() {
           console.log("Parsed orders data:", ordersData);
 
           setOrders(
-              ordersData.map((order) => ({
-                id: order.id || order._id || "UNKNOWN",
-                date: formatDate(order.createdAt || order.createdDate || order.date),
-                status: order.status || "UNKNOWN",
-                total: formatCurrency(
-                    order.grandTotal || order.totals?.grandTotal || order.total || 0
-                ),
-                items: order.items || order.orderItems || [],
-              }))
+            ordersData.map((order) => ({
+              id: order.id || order._id || "UNKNOWN",
+              date: formatDate(order.createdAt || order.createdDate || order.date),
+              status: order.status || "UNKNOWN",
+              total: formatCurrency(
+                order.grandTotal || order.totals?.grandTotal || order.total || 0
+              ),
+              items: order.items || order.orderItems || [],
+            }))
           );
 
           console.log("Final orders state:", ordersData.length, "orders");
@@ -188,13 +196,13 @@ export default function Profile() {
           const returnsRes = await getReturns(0, 100);
           const returnsData = returnsRes.data?.content || [];
           setReturns(
-              returnsData.map((ret) => ({
-                id: ret.id,
-                orderId: ret.orderId,
-                date: formatDate(ret.createdAt),
-                status: ret.status || "REQUESTED",
-                reason: ret.reason || "",
-              }))
+            returnsData.map((ret) => ({
+              id: ret.id,
+              orderId: ret.orderId,
+              date: formatDate(ret.createdAt),
+              status: ret.status || "REQUESTED",
+              reason: ret.reason || "",
+            }))
           );
         } catch (err) {
           console.error("Error fetching returns:", err);
@@ -217,8 +225,8 @@ export default function Profile() {
         if (userId) {
           try {
             localStorage.setItem(
-                `addresses_${userId}`,
-                JSON.stringify(addressesFromBackend)
+              `addresses_${userId}`,
+              JSON.stringify(addressesFromBackend)
             );
           } catch (err) {
             console.error("Error saving addresses to localStorage:", err);
@@ -231,7 +239,9 @@ export default function Profile() {
           setTimeout(() => navigate("/login"), 2000);
         } else {
           setError(null);
-          console.warn("Some data could not be loaded, but showing profile page anyway.");
+          console.warn(
+            "Some data could not be loaded, but showing profile page anyway."
+          );
         }
       } finally {
         setLoading(false);
@@ -266,15 +276,15 @@ export default function Profile() {
 
       // Update UI locally
       setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status: "CANCELLED" } : o))
+        prev.map((o) => (o.id === orderId ? { ...o, status: "CANCELLED" } : o))
       );
 
       alert("Order cancelled successfully!");
     } catch (err) {
       console.error("cancelOrder error:", err);
       const msg =
-          err?.response?.data?.message ||
-          "Failed to cancel order. Please try again.";
+        err?.response?.data?.message ||
+        "Failed to cancel order. Please try again.";
       alert(msg);
     } finally {
       setCancellingIds((p) => {
@@ -298,7 +308,9 @@ export default function Profile() {
       alert("Account updated successfully!");
     } catch (err) {
       console.error("Error updating account:", err);
-      alert(err.response?.data?.message || "Failed to update account. Please try again.");
+      alert(
+        err.response?.data?.message || "Failed to update account. Please try again."
+      );
     }
   };
 
@@ -313,7 +325,10 @@ export default function Profile() {
       return;
     }
     try {
-      await changePassword(passwordChange.currentPassword, passwordChange.newPassword);
+      await changePassword(
+        passwordChange.currentPassword,
+        passwordChange.newPassword
+      );
       alert("Password changed successfully!");
       setPasswordChange({
         currentPassword: "",
@@ -322,7 +337,10 @@ export default function Profile() {
       });
     } catch (err) {
       console.error("Error changing password:", err);
-      alert(err.response?.data?.message || "Failed to change password. Please try again.");
+      alert(
+        err.response?.data?.message ||
+          "Failed to change password. Please try again."
+      );
     }
   };
 
@@ -356,8 +374,8 @@ export default function Profile() {
       if (userData.id) {
         try {
           localStorage.setItem(
-              `addresses_${userData.id}`,
-              JSON.stringify(updatedAddresses)
+            `addresses_${userData.id}`,
+            JSON.stringify(updatedAddresses)
           );
         } catch (err) {
           console.error("Error saving addresses to localStorage:", err);
@@ -365,7 +383,9 @@ export default function Profile() {
       }
     } catch (err) {
       console.error("Error syncing addresses with backend:", err);
-      alert(err.response?.data?.message || "Failed to save address. Please try again.");
+      alert(
+        err.response?.data?.message || "Failed to save address. Please try again."
+      );
     }
   };
 
@@ -421,7 +441,7 @@ export default function Profile() {
 
     if (editingAddressId) {
       updated = addresses.map((a) =>
-          a.id === editingAddressId ? { ...a, ...trimmed } : a
+        a.id === editingAddressId ? { ...a, ...trimmed } : a
       );
     } else {
       const newAddr = {
@@ -433,7 +453,9 @@ export default function Profile() {
 
     await syncAddressesWithBackend(updated);
 
-    alert(editingAddressId ? "Address updated successfully!" : "Address saved successfully!");
+    alert(
+      editingAddressId ? "Address updated successfully!" : "Address saved successfully!"
+    );
 
     setNewAddress({
       label: "",
@@ -452,551 +474,633 @@ export default function Profile() {
       return;
     }
     try {
-      await createReturn(newReturn.orderId.trim(), [], newReturn.reason.trim());
+      await createReturn(
+        newReturn.orderId.trim(),
+        [],
+        newReturn.reason.trim()
+      );
       alert("Return request submitted successfully!");
 
       const returnsRes = await getReturns(0, 100);
       const returnsData = returnsRes.data.content || [];
       setReturns(
-          returnsData.map((ret) => ({
-            id: ret.id,
-            orderId: ret.orderId,
-            date: formatDate(ret.createdAt),
-            status: ret.status || "REQUESTED",
-            reason: ret.reason || "",
-          }))
+        returnsData.map((ret) => ({
+          id: ret.id,
+          orderId: ret.orderId,
+          date: formatDate(ret.createdAt),
+          status: ret.status || "REQUESTED",
+          reason: ret.reason || "",
+        }))
       );
 
       setNewReturn({ orderId: "", reason: "" });
     } catch (err) {
       console.error("Error creating return:", err);
       const errorMessage =
-          err.response?.data?.message ||
-          err.message ||
-          "Failed to submit return request. Please try again.";
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to submit return request. Please try again.";
       alert(errorMessage);
     }
   };
 
   if (loading) {
     return (
-        <div className="home-page">
-          <div style={{ padding: "2rem", textAlign: "center" }}>Loading...</div>
-        </div>
+      <div className="home-page">
+        <div style={{ padding: "2rem", textAlign: "center" }}>Loading...</div>
+      </div>
     );
   }
 
   if (error) {
     return (
-        <div className="home-page">
-          <div style={{ padding: "2rem", textAlign: "center", color: "red" }}>
-            {error}
-          </div>
+      <div className="home-page">
+        <div style={{ padding: "2rem", textAlign: "center", color: "red" }}>
+          {error}
         </div>
+      </div>
     );
   }
 
+  // pick first address as "home" for demo explanation
+  const primaryAddress = addresses[0];
+
   return (
-      <div className="category-page">
-        {/* ✅ dynamic shared topbar */}
-        <CategoryTopbar />
+    <div className="category-page">
+      {/* ✅ dynamic shared topbar */}
+      <CategoryTopbar />
 
-        {/* profile content */}
-        <main className="profile-wrapper">
-          <section className="profile-hero">
-            <h1 className="profile-heading">Hi, {user ? user.name : "there"}!</h1>
-            <p className="profile-subheading">
-              Manage your orders, account information, and saved preferences all in one place.
-            </p>
-          </section>
+      {/* profile content */}
+      <main className="profile-wrapper">
+        <section className="profile-hero">
+          <h1 className="profile-heading">Hi, {user ? user.name : "there"}!</h1>
+          <p className="profile-subheading">
+            Manage your orders, account information, and saved preferences all in
+            one place.
+          </p>
 
-          {/* Orders */}
-          <section className="profile-card">
-            <header className="profile-card-header">
-              <h2>Orders</h2>
-              <p>Orders with details</p>
-            </header>
-
-            <div className="profile-card-body">
-              {orders.length === 0 ? (
-                  <p style={{ color: "#666" }}>No orders found.</p>
-              ) : (
-                  <ul className="profile-list">
-                    {orders.map((order) => {
-                      const isProcessing = (order.status || "").toUpperCase() === "PROCESSING";
-                      const isCancelling = !!cancellingIds[order.id];
-
-                      return (
-                          <li
-                              key={order.id}
-                              className="profile-list-item"
-                              style={{ cursor: "pointer" }}
-                              onClick={() => navigate(`/invoice/${order.id}`)}
-                          >
-                            <div
-                                className="profile-list-item-header"
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  gap: "0.75rem",
-                                  alignItems: "center",
-                                }}
-                            >
-                              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                                <span className="profile-pill">{order.status}</span>
-                                <strong>Order #{order.id}</strong>
-                              </div>
-
-                              {/* ✅ Cancel button only when PROCESSING */}
-                              {isProcessing && (
-                                  <button
-                                      type="button"
-                                      className="profile-link-button secondary"
-                                      onClick={(e) => handleCancelOrder(e, order.id)}
-                                      disabled={isCancelling}
-                                      style={{
-                                        border: "1px solid #e5e5e5",
-                                        borderRadius: 6,
-                                        background: "#fff",
-                                        padding: "0.35rem 0.75rem",
-                                        cursor: isCancelling ? "not-allowed" : "pointer",
-                                        opacity: isCancelling ? 0.7 : 1,
-                                        whiteSpace: "nowrap",
-                                      }}
-                                      title="Cancel (only while processing)"
-                                  >
-                                    {isCancelling ? "Cancelling..." : "Cancel"}
-                                  </button>
-                              )}
-                            </div>
-
-                            <div className="profile-list-item-meta">
-                              <span>{order.date}</span>
-                              <span>{order.total}</span>
-                            </div>
-
-                            {order.items && order.items.length > 0 && (
-                                <p className="profile-list-item-description">
-                                  {Array.isArray(order.items)
-                                      ? order.items
-                                          .map((item) =>
-                                              typeof item === "string"
-                                                  ? item
-                                                  : item.name ||
-                                                  item.productName ||
-                                                  `Item (${item.quantity || 1}x)`
-                                          )
-                                          .join(", ")
-                                      : String(order.items)}
-                                </p>
-                            )}
-                          </li>
-                      );
-                    })}
-                  </ul>
+          {/* ⭐ Identity summary block for demo (ID, Tax ID, Email, Home Address) */}
+          {user && (
+            <div
+              style={{
+                marginTop: "1rem",
+                padding: "0.75rem 1rem",
+                borderRadius: "8px",
+                background: "#f8f5f4",
+                fontSize: "0.9rem",
+                lineHeight: 1.5,
+              }}
+            >
+              <div>
+                <strong>Customer ID:</strong> {user.id}
+              </div>
+              <div>
+                <strong>Tax ID:</strong> {taxId}
+              </div>
+              <div>
+                <strong>Email:</strong> {user.email}
+              </div>
+              {primaryAddress && (
+                <div>
+                  <strong>Home address:</strong>{" "}
+                  {primaryAddress.line1}
+                  {primaryAddress.city && `, ${primaryAddress.city}`}
+                  {primaryAddress.district && `, ${primaryAddress.district}`}
+                  {primaryAddress.zipCode && `, ${primaryAddress.zipCode}`}
+                </div>
               )}
             </div>
-          </section>
+          )}
+        </section>
 
-          {/* Account details */}
-          <section className="profile-card">
-            <header className="profile-card-header">
-              <h2>Account Details</h2>
-            </header>
-            <div className="profile-card-body">
-              <form className="profile-form" onSubmit={handleAccountSubmit}>
-                <label className="profile-field">
-                  <span>Email</span>
-                  <input
-                      type="email"
-                      name="email"
-                      value={accountDetails.email}
-                      onChange={handleAccountChange}
-                      required
-                  />
-                </label>
-                <label className="profile-field">
-                  <span>Phone Number</span>
-                  <input
-                      type="tel"
-                      name="phoneNumber"
-                      value={accountDetails.phoneNumber}
-                      onChange={handleAccountChange}
-                      required
-                  />
-                </label>
-                <button type="submit" className="profile-button">
-                  Save Changes
-                </button>
-              </form>
-            </div>
-          </section>
+        {/* Orders */}
+        <section className="profile-card">
+          <header className="profile-card-header">
+            <h2>Orders</h2>
+            <p>Orders with details</p>
+          </header>
 
-          {/* Change Password */}
-          <section className="profile-card">
-            <header className="profile-card-header">
-              <h2>Change Password</h2>
-            </header>
-            <div className="profile-card-body">
-              <form className="profile-form" onSubmit={handlePasswordChange}>
-                <label className="profile-field">
-                  <span>Current Password</span>
-                  <input
-                      type="password"
-                      value={passwordChange.currentPassword}
-                      onChange={(e) =>
-                          setPasswordChange((prev) => ({
-                            ...prev,
-                            currentPassword: e.target.value,
-                          }))
-                      }
-                      required
-                  />
-                </label>
-                <label className="profile-field">
-                  <span>New Password</span>
-                  <input
-                      type="password"
-                      value={passwordChange.newPassword}
-                      onChange={(e) =>
-                          setPasswordChange((prev) => ({
-                            ...prev,
-                            newPassword: e.target.value,
-                          }))
-                      }
-                      required
-                  />
-                </label>
-                <label className="profile-field">
-                  <span>Confirm New Password</span>
-                  <input
-                      type="password"
-                      value={passwordChange.confirmPassword}
-                      onChange={(e) =>
-                          setPasswordChange((prev) => ({
-                            ...prev,
-                            confirmPassword: e.target.value,
-                          }))
-                      }
-                      required
-                  />
-                </label>
-                <button type="submit" className="profile-button">
-                  Change Password
-                </button>
-              </form>
-            </div>
-          </section>
+          <div className="profile-card-body">
+            {orders.length === 0 ? (
+              <p style={{ color: "#666" }}>No orders found.</p>
+            ) : (
+              <ul className="profile-list">
+                {orders.map((order) => {
+                  const isProcessing =
+                    (order.status || "").toUpperCase() === "PROCESSING";
+                  const isCancelling = !!cancellingIds[order.id];
 
-          {/* Addresses */}
-          <section className="profile-card profile-card-grid">
-            <div>
-              <header className="profile-card-header">
-                <h2>Addresses</h2>
-              </header>
-              <div className="profile-card-body">
-                <ul className="profile-list">
-                  {addresses.map((address) => (
-                      <li key={address.id} className="profile-list-item">
-                        <div className="profile-list-item-header">
-                          <strong>{address.label}</strong>
-                        </div>
-                        <p className="profile-list-item-description">
-                          {address.line1}
-                          <br />
-                          {(address.zipCode || address.city) && (
-                              <>
-                                {address.zipCode && `${address.zipCode} `}
-                                {address.city}
-                              </>
-                          )}
-                          {address.district && (
-                              <>
-                                <br />
-                                {address.district}
-                              </>
-                          )}
-                        </p>
-                        <div className="profile-list-item-actions">
-                          <button
-                              className="profile-link-button"
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleEditAddress(address);
-                              }}
-                          >
-                            Edit Address
-                          </button>
-                          <button
-                              type="button"
-                              className="profile-icon-button"
-                              aria-label="Delete address"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleDeleteAddress(address.id);
-                              }}
-                          >
-                            <svg
-                                width="18"
-                                height="18"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                            >
-                              <path
-                                  d="M5 7h14M9 7v10m6-10v10M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"
-                                  stroke="currentColor"
-                                  strokeWidth="1.6"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                              />
-                              <path
-                                  d="M8 7h8l-.7 11a1 1 0 0 1-1 .9h-4.6a1 1 0 0 1-1-.9L8 7Z"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.4"
-                                  strokeLinejoin="round"
-                              />
-                            </svg>
-                          </button>
-                        </div>
-                      </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            {/* add new address / edit address */}
-            <div>
-              <header className="profile-card-header">
-                <h3>{editingAddressId ? "Edit Address" : "Add New Address"}</h3>
-                <p>
-                  {editingAddressId ? "Update the selected address" : "Store another delivery location"}
-                </p>
-              </header>
-              <div className="profile-card-body">
-                <form className="profile-form" onSubmit={handleNewAddressSubmit}>
-                  <label className="profile-field">
-                    <span>Label</span>
-                    <input
-                        type="text"
-                        value={newAddress.label}
-                        onChange={(e) =>
-                            setNewAddress((p) => ({ ...p, label: e.target.value }))
-                        }
-                        placeholder="Home, Work..."
-                        required
-                    />
-                  </label>
-
-                  <label className="profile-field">
-                    <span>Address Line 1</span>
-                    <input
-                        type="text"
-                        value={newAddress.line1}
-                        onChange={(e) =>
-                            setNewAddress((p) => ({ ...p, line1: e.target.value }))
-                        }
-                        placeholder="Street and number"
-                        required
-                    />
-                  </label>
-
-                  <div className="profile-field" style={{ display: "flex", gap: "0.75rem" }}>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ display: "block", marginBottom: 4 }}>City</span>
-                      <input
-                          type="text"
-                          value={newAddress.city}
-                          onChange={(e) =>
-                              setNewAddress((p) => ({ ...p, city: e.target.value }))
-                          }
-                          placeholder="City"
-                          required
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ display: "block", marginBottom: 4 }}>District</span>
-                      <input
-                          type="text"
-                          value={newAddress.district}
-                          onChange={(e) =>
-                              setNewAddress((p) => ({ ...p, district: e.target.value }))
-                          }
-                          placeholder="District"
-                      />
-                    </div>
-                    <div style={{ flexBasis: "140px" }}>
-                      <span style={{ display: "block", marginBottom: 4 }}>ZIP Code</span>
-                      <input
-                          type="text"
-                          value={newAddress.zipCode}
-                          onChange={(e) =>
-                              setNewAddress((p) => ({ ...p, zipCode: e.target.value }))
-                          }
-                          placeholder="ZIP"
-                          required
-                      />
-                    </div>
-                  </div>
-
-                  <div
-                      className="profile-form-actions"
-                      style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}
-                  >
-                    <button
-                        type="submit"
-                        className="profile-button"
-                        style={{
-                          padding: "0.5rem 1.25rem",
-                          fontSize: "0.875rem",
-                          flex: editingAddressId ? "1" : "none",
-                        }}
+                  return (
+                    <li
+                      key={order.id}
+                      className="profile-list-item"
+                      style={{ cursor: "pointer" }}
+                      onClick={() => navigate(`/invoice/${order.id}`)}
                     >
-                      {editingAddressId ? "Update Address" : "Save Address"}
-                    </button>
+                      <div
+                        className="profile-list-item-header"
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: "0.75rem",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.75rem",
+                          }}
+                        >
+                          <span className="profile-pill">{order.status}</span>
+                          <strong>Order #{order.id}</strong>
+                        </div>
 
-                    {editingAddressId && (
-                        <button
+                        {/* ✅ Cancel button only when PROCESSING */}
+                        {isProcessing && (
+                          <button
                             type="button"
                             className="profile-link-button secondary"
-                            onClick={handleCancelEditAddress}
+                            onClick={(e) => handleCancelOrder(e, order.id)}
+                            disabled={isCancelling}
                             style={{
-                              padding: "0.5rem 1rem",
-                              fontSize: "0.875rem",
                               border: "1px solid #e5e5e5",
-                              borderRadius: "4px",
-                              backgroundColor: "#fff",
-                              color: "#301813",
-                              cursor: "pointer",
+                              borderRadius: 6,
+                              background: "#fff",
+                              padding: "0.35rem 0.75rem",
+                              cursor: isCancelling ? "not-allowed" : "pointer",
+                              opacity: isCancelling ? 0.7 : 1,
                               whiteSpace: "nowrap",
                             }}
-                        >
-                          Cancel
-                        </button>
-                    )}
-                  </div>
-                </form>
-              </div>
-            </div>
-          </section>
+                            title="Cancel (only while processing)"
+                          >
+                            {isCancelling ? "Cancelling..." : "Cancel"}
+                          </button>
+                        )}
+                      </div>
 
-          {/* Returns */}
-          <section className="profile-card profile-card-grid">
-            <div>
-              <header className="profile-card-header">
-                <h2>Returns</h2>
-                <p>Track previous requests</p>
-              </header>
-              <div className="profile-card-body">
-                {returns.length === 0 ? (
-                    <p style={{ color: "#666" }}>No return requests found.</p>
-                ) : (
-                    <ul className="profile-list">
-                      {returns.map((item) => (
-                          <li key={item.id} className="profile-list-item">
-                            <div className="profile-list-item-header">
-                              <strong>{item.orderId}</strong>
-                              <span className="profile-pill muted">{item.status}</span>
-                            </div>
-                            <div className="profile-list-item-meta">
-                              <span>{item.id}</span>
-                              <span>{item.date}</span>
-                            </div>
-                            <p className="profile-list-item-description">
-                              Reason: {item.reason}
-                            </p>
-                          </li>
-                      ))}
-                    </ul>
-                )}
-              </div>
-            </div>
+                      <div className="profile-list-item-meta">
+                        <span>{order.date}</span>
+                        <span>{order.total}</span>
+                      </div>
 
-            {/* new return */}
-            <div>
-              <header className="profile-card-header">
-                <h3>New Return Request</h3>
-              </header>
-              <div className="profile-card-body">
-                <form className="profile-form" onSubmit={handleNewReturnSubmit}>
-                  <label className="profile-field">
-                    <span>Order Number</span>
-                    {orders.length > 0 ? (
-                        <select
-                            value={newReturn.orderId}
-                            onChange={(e) =>
-                                setNewReturn((p) => ({ ...p, orderId: e.target.value }))
-                            }
-                            required
-                            style={{
-                              width: "100%",
-                              padding: "0.5rem",
-                              fontSize: "1rem",
-                              border: "1px solid #ccc",
-                              borderRadius: "4px",
-                            }}
-                        >
-                          <option value="">Select an order...</option>
-                          {orders.map((order) => (
-                              <option key={order.id} value={order.id}>
-                                {order.id} - {order.date} - {order.total}
-                              </option>
-                          ))}
-                        </select>
-                    ) : (
-                        <input
-                            type="text"
-                            value={newReturn.orderId}
-                            onChange={(e) =>
-                                setNewReturn((p) => ({ ...p, orderId: e.target.value }))
-                            }
-                            placeholder="Enter order ID (e.g., ORD-XXXX)"
-                            required
-                        />
-                    )}
-                    {orders.length === 0 && (
-                        <p style={{ fontSize: "0.875rem", color: "#666", marginTop: "0.25rem" }}>
-                          No orders available. Please make an order first.
+                      {order.items && order.items.length > 0 && (
+                        <p className="profile-list-item-description">
+                          {Array.isArray(order.items)
+                            ? order.items
+                                .map((item) =>
+                                  typeof item === "string"
+                                    ? item
+                                    : item.name ||
+                                      item.productName ||
+                                      `Item (${item.quantity || 1}x)`
+                                )
+                                .join(", ")
+                            : String(order.items)}
                         </p>
-                    )}
-                  </label>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </section>
 
-                  <label className="profile-field">
-                    <span>Reason</span>
-                    <textarea
-                        rows={3}
-                        value={newReturn.reason}
-                        onChange={(e) =>
-                            setNewReturn((p) => ({ ...p, reason: e.target.value }))
-                        }
-                        placeholder="Describe the issue"
-                        required
-                    />
-                  </label>
+        {/* Account details */}
+        <section className="profile-card">
+          <header className="profile-card-header">
+            <h2>Account Details</h2>
+          </header>
+          <div className="profile-card-body">
+            <form className="profile-form" onSubmit={handleAccountSubmit}>
+              <label className="profile-field">
+                <span>Email</span>
+                <input
+                  type="email"
+                  name="email"
+                  value={accountDetails.email}
+                  onChange={handleAccountChange}
+                  required
+                />
+              </label>
+              <label className="profile-field">
+                <span>Phone Number</span>
+                <input
+                  type="tel"
+                  name="phoneNumber"
+                  value={accountDetails.phoneNumber}
+                  onChange={handleAccountChange}
+                  required
+                />
+              </label>
+              <button type="submit" className="profile-button">
+                Save Changes
+              </button>
+            </form>
+          </div>
+        </section>
 
-                  <button type="submit" className="profile-button" disabled={orders.length === 0}>
-                    Submit Request
-                  </button>
-                </form>
-              </div>
+        {/* Change Password */}
+        <section className="profile-card">
+          <header className="profile-card-header">
+            <h2>Change Password</h2>
+          </header>
+          <div className="profile-card-body">
+            <form className="profile-form" onSubmit={handlePasswordChange}>
+              <label className="profile-field">
+                <span>Current Password</span>
+                <input
+                  type="password"
+                  value={passwordChange.currentPassword}
+                  onChange={(e) =>
+                    setPasswordChange((prev) => ({
+                      ...prev,
+                      currentPassword: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+              <label className="profile-field">
+                <span>New Password</span>
+                <input
+                  type="password"
+                  value={passwordChange.newPassword}
+                  onChange={(e) =>
+                    setPasswordChange((prev) => ({
+                      ...prev,
+                      newPassword: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+              <label className="profile-field">
+                <span>Confirm New Password</span>
+                <input
+                  type="password"
+                  value={passwordChange.confirmPassword}
+                  onChange={(e) =>
+                    setPasswordChange((prev) => ({
+                      ...prev,
+                      confirmPassword: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+              <button type="submit" className="profile-button">
+                Change Password
+              </button>
+            </form>
+          </div>
+        </section>
+
+        {/* Addresses */}
+        <section className="profile-card profile-card-grid">
+          <div>
+            <header className="profile-card-header">
+              <h2>Addresses</h2>
+            </header>
+            <div className="profile-card-body">
+              <ul className="profile-list">
+                {addresses.map((address) => (
+                  <li key={address.id} className="profile-list-item">
+                    <div className="profile-list-item-header">
+                      <strong>{address.label}</strong>
+                    </div>
+                    <p className="profile-list-item-description">
+                      {address.line1}
+                      <br />
+                      {(address.zipCode || address.city) && (
+                        <>
+                          {address.zipCode && `${address.zipCode} `}
+                          {address.city}
+                        </>
+                      )}
+                      {address.district && (
+                        <>
+                          <br />
+                          {address.district}
+                        </>
+                      )}
+                    </p>
+                    <div className="profile-list-item-actions">
+                      <button
+                        className="profile-link-button"
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleEditAddress(address);
+                        }}
+                      >
+                        Edit Address
+                      </button>
+                      <button
+                        type="button"
+                        className="profile-icon-button"
+                        aria-label="Delete address"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDeleteAddress(address.id);
+                        }}
+                      >
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            d="M5 7h14M9 7v10m6-10v10M10 7V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M8 7h8l-.7 11a1 1 0 0 1-1 .9h-4.6a1 1 0 0 1-1-.9L8 7Z"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.4"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </section>
+          </div>
 
-          {/* bottom logout */}
-          <section className="profile-card profile-logout-card">
-            <button
-                className="profile-button secondary logout-button"
-                type="button"
-                onClick={handleLogout}
-            >
-              Log Out
-            </button>
-          </section>
-        </main>
-      </div>
+          {/* add new address / edit address */}
+          <div>
+            <header className="profile-card-header">
+              <h3>{editingAddressId ? "Edit Address" : "Add New Address"}</h3>
+              <p>
+                {editingAddressId
+                  ? "Update the selected address"
+                  : "Store another delivery location"}
+              </p>
+            </header>
+            <div className="profile-card-body">
+              <form className="profile-form" onSubmit={handleNewAddressSubmit}>
+                <label className="profile-field">
+                  <span>Label</span>
+                  <input
+                    type="text"
+                    value={newAddress.label}
+                    onChange={(e) =>
+                      setNewAddress((p) => ({ ...p, label: e.target.value }))
+                    }
+                    placeholder="Home, Work..."
+                    required
+                  />
+                </label>
+
+                <label className="profile-field">
+                  <span>Address Line 1</span>
+                  <input
+                    type="text"
+                    value={newAddress.line1}
+                    onChange={(e) =>
+                      setNewAddress((p) => ({ ...p, line1: e.target.value }))
+                    }
+                    placeholder="Street and number"
+                    required
+                  />
+                </label>
+
+                <div
+                  className="profile-field"
+                  style={{ display: "flex", gap: "0.75rem" }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <span style={{ display: "block", marginBottom: 4 }}>
+                      City
+                    </span>
+                    <input
+                      type="text"
+                      value={newAddress.city}
+                      onChange={(e) =>
+                        setNewAddress((p) => ({ ...p, city: e.target.value }))
+                      }
+                      placeholder="City"
+                      required
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ display: "block", marginBottom: 4 }}>
+                      District
+                    </span>
+                    <input
+                      type="text"
+                      value={newAddress.district}
+                      onChange={(e) =>
+                        setNewAddress((p) => ({
+                          ...p,
+                          district: e.target.value,
+                        }))
+                      }
+                      placeholder="District"
+                    />
+                  </div>
+                  <div style={{ flexBasis: "140px" }}>
+                    <span style={{ display: "block", marginBottom: 4 }}>
+                      ZIP Code
+                    </span>
+                    <input
+                      type="text"
+                      value={newAddress.zipCode}
+                      onChange={(e) =>
+                        setNewAddress((p) => ({
+                          ...p,
+                          zipCode: e.target.value,
+                        }))
+                      }
+                      placeholder="ZIP"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div
+                  className="profile-form-actions"
+                  style={{
+                    display: "flex",
+                    gap: "0.75rem",
+                    alignItems: "center",
+                  }}
+                >
+                  <button
+                    type="submit"
+                    className="profile-button"
+                    style={{
+                      padding: "0.5rem 1.25rem",
+                      fontSize: "0.875rem",
+                      flex: editingAddressId ? "1" : "none",
+                    }}
+                  >
+                    {editingAddressId ? "Update Address" : "Save Address"}
+                  </button>
+
+                  {editingAddressId && (
+                    <button
+                      type="button"
+                      className="profile-link-button secondary"
+                      onClick={handleCancelEditAddress}
+                      style={{
+                        padding: "0.5rem 1rem",
+                        fontSize: "0.875rem",
+                        border: "1px solid #e5e5e5",
+                        borderRadius: "4px",
+                        backgroundColor: "#fff",
+                        color: "#301813",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        {/* Returns */}
+        <section className="profile-card profile-card-grid">
+          <div>
+            <header className="profile-card-header">
+              <h2>Returns</h2>
+              <p>Track previous requests</p>
+            </header>
+            <div className="profile-card-body">
+              {returns.length === 0 ? (
+                <p style={{ color: "#666" }}>No return requests found.</p>
+              ) : (
+                <ul className="profile-list">
+                  {returns.map((item) => (
+                    <li key={item.id} className="profile-list-item">
+                      <div className="profile-list-item-header">
+                        <strong>{item.orderId}</strong>
+                        <span className="profile-pill muted">{item.status}</span>
+                      </div>
+                      <div className="profile-list-item-meta">
+                        <span>{item.id}</span>
+                        <span>{item.date}</span>
+                      </div>
+                      <p className="profile-list-item-description">
+                        Reason: {item.reason}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* new return */}
+          <div>
+            <header className="profile-card-header">
+              <h3>New Return Request</h3>
+            </header>
+            <div className="profile-card-body">
+              <form className="profile-form" onSubmit={handleNewReturnSubmit}>
+                <label className="profile-field">
+                  <span>Order Number</span>
+                  {orders.length > 0 ? (
+                    <select
+                      value={newReturn.orderId}
+                      onChange={(e) =>
+                        setNewReturn((p) => ({
+                          ...p,
+                          orderId: e.target.value,
+                        }))
+                      }
+                      required
+                      style={{
+                        width: "100%",
+                        padding: "0.5rem",
+                        fontSize: "1rem",
+                        border: "1px solid #f5e6e6",
+                        borderRadius: "4px",
+                      }}
+                    >
+                      <option value="">Select an order...</option>
+                      {orders.map((order) => (
+                        <option key={order.id} value={order.id}>
+                          {order.id} - {order.date} - {order.total}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={newReturn.orderId}
+                      onChange={(e) =>
+                        setNewReturn((p) => ({ ...p, orderId: e.target.value }))
+                      }
+                      placeholder="Enter order ID (e.g., ORD-XXXX)"
+                      required
+                    />
+                  )}
+                  {orders.length === 0 && (
+                    <p
+                      style={{
+                        fontSize: "0.875rem",
+                        color: "#666",
+                        marginTop: "0.25rem",
+                      }}
+                    >
+                      No orders available. Please make an order first.
+                    </p>
+                  )}
+                </label>
+
+                <label className="profile-field">
+                  <span>Reason</span>
+                  <textarea
+                    rows={3}
+                    value={newReturn.reason}
+                    onChange={(e) =>
+                      setNewReturn((p) => ({ ...p, reason: e.target.value }))
+                    }
+                    placeholder="Describe the issue"
+                    required
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  className="profile-button"
+                  disabled={orders.length === 0}
+                >
+                  Submit Request
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        {/* bottom logout */}
+        <section className="profile-card profile-logout-card">
+          <button
+            className="profile-button secondary logout-button"
+            type="button"
+            onClick={handleLogout}
+          >
+            Log Out
+          </button>
+        </section>
+      </main>
+    </div>
   );
 }
