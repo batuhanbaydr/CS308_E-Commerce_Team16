@@ -101,10 +101,11 @@ export function changePassword(currentPassword, newPassword) {
 export function getOrders(page = 0, size = 10) {
   return api.get("/orders", { params: { me: true, page, size } });
 }
+export const getOrderDetail = (orderId) => api.get(`/orders/${orderId}`);
 
-export function getOrderDetail(orderId) {
-  return api.get(`/orders/${orderId}`);
-}
+export const pmGetOrderDetail = (orderId) =>
+  api.get(`/admin/product/orders/${orderId}`);
+
 
 // =====================
 // RETURNS
