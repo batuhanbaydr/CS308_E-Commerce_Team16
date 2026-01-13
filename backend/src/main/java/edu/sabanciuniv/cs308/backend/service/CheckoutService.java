@@ -4,7 +4,6 @@ import edu.sabanciuniv.cs308.backend.dto.OrderDetailDTO;
 import edu.sabanciuniv.cs308.backend.entity.AddressSnapshot;
 import edu.sabanciuniv.cs308.backend.entity.Money;
 import edu.sabanciuniv.cs308.backend.entity.OrderEntity;
-import edu.sabanciuniv.cs308.backend.entity.OrderItem;
 import edu.sabanciuniv.cs308.backend.entity.ProductEntity;
 import edu.sabanciuniv.cs308.backend.entity.UserEntity;
 import edu.sabanciuniv.cs308.backend.enums.OrderStatus;
@@ -21,7 +20,6 @@ import java.time.Instant;
 @Service
 public class CheckoutService {
 
-    
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
@@ -30,7 +28,7 @@ public class CheckoutService {
     public CheckoutService(UserRepository userRepository,
                            OrderRepository orderRepository,
                            ProductRepository productRepository,
-                            EmailService emailService) {
+                           EmailService emailService) {
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
@@ -104,9 +102,11 @@ public class CheckoutService {
 
         // 9) CART → PROCESSING
         cart.setStatus(OrderStatus.PROCESSING.name());
-        if (cart.getCreatedAt() == null) {
-            cart.setCreatedAt(Instant.now());
-        }
+
+        // ✅ IMPORTANT FIX:
+        // createdAt refund için 30-gün kuralında "satın alma zamanı" gibi kullanılacak.
+        // Cart daha önce oluşturulmuş olabilir; bu yüzden her checkout'ta güncelliyoruz.
+        cart.setCreatedAt(Instant.now());
 
         OrderEntity saved = orderRepository.save(cart);
         OrderDetailDTO dto = OrderMapper.toDetail(saved);
@@ -185,7 +185,6 @@ public class CheckoutService {
             int quantity = item.getQuantity();
 
             if (currentStock < quantity) {
-                // Normalde buraya gelmemeliyiz, çünkü BasketService stok kontrolü yapıyor.
                 throw new RuntimeException("Insufficient stock during checkout");
             }
 

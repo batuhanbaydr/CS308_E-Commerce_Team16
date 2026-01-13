@@ -122,7 +122,20 @@ export function getReturns(page = 0, size = 10) {
 export function createReturn(orderId, orderItemIds, reason) {
   return api.post("/returns", { orderId, orderItemIds, reason });
 }
+// =====================
+// REFUNDS (Customer)
+// =====================
 
+// GET /api/refunds?me=true
+export function getRefundsMe() {
+  return api.get("/refunds", { params: { me: true } });
+}
+
+// POST /api/refunds
+export function createRefundRequest(orderId, items) {
+  // items: [{ productId, sku, quantity, reason }]
+  return api.post("/refunds", { orderId, items });
+}
 // =====================
 // PAYMENT METHODS
 // =====================

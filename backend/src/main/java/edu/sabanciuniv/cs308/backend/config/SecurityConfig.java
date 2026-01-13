@@ -62,7 +62,7 @@ public class SecurityConfig {
                                 "/error"
                         ).permitAll()
 
-            
+
 
                         .requestMatchers("/api/users/me").authenticated()
 
@@ -83,17 +83,19 @@ public class SecurityConfig {
                         .requestMatchers("POST", "/api/reviews").hasRole("CUSTOMER")
 
                         // customer-only endpoints (keep these)
+                        // customer-only endpoints (keep these)
                         .requestMatchers(
                                 "/api/account/**",
                                 "/api/orders/**",
                                 "/api/returns/**",
                                 "/api/refunds/**",
+                                "/api/checkout/**",
                                 "/api/users/me/payment-methods/**"
                         ).hasRole("CUSTOMER")
 
                         // backoffice endpoints
                         .requestMatchers("/api/admin/product/**")
-                            .hasAnyRole("PRODUCT_MANAGER", "SALES_MANAGER")
+                        .hasAnyRole("PRODUCT_MANAGER", "SALES_MANAGER")
                         .requestMatchers("/api/admin/sales/**").hasRole("SALES_MANAGER")
                         .requestMatchers("/api/admin/refunds/**").hasRole("SALES_MANAGER")
                         .requestMatchers("/api/admin/support/**").hasRole("SUPPORT_AGENT")
