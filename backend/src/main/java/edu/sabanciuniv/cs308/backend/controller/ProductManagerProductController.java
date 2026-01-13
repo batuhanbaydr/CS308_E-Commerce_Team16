@@ -12,7 +12,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/product/products")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('PRODUCT_MANAGER')")
+@PreAuthorize("hasAnyRole('PRODUCT_MANAGER', 'SALES_MANAGER')")
 public class ProductManagerProductController {
 
     private final AdminProductService adminProductService;

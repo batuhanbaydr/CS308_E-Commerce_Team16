@@ -1,3 +1,4 @@
+// src/pages/backoffice/sales-manager/SalesManagerLayout.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 import Sidebar from "./SideBar";
 import TopBar from "./TopBar";
@@ -6,6 +7,7 @@ import DiscountsTab from "./tabs/DiscountsTab";
 import InvoicesTab from "./tabs/InvoicesTab";
 import RevenueProfitTab from "./tabs/RevenueProfitTab";
 import RefundsTab from "./tabs/RefundsTab";
+import PriceOverrideTab from "./tabs/PriceOverrideTab";
 import "../product-manager/productManager.css";
 
 export default function SalesManagerLayout() {
@@ -18,8 +20,23 @@ export default function SalesManagerLayout() {
 
         <main className="pm-content">
           <Routes>
-            <Route index element={<Navigate to="/backoffice/sales-manager/discounts" replace />} />
+            {/* Default: still go to discounts */}
+            <Route
+              index
+              element={
+                <Navigate
+                  to="/backoffice/sales-manager/discounts"
+                  replace
+                />
+              }
+            />
+
             <Route path="discounts" element={<DiscountsTab />} />
+            {/* New manual price override route */}
+            <Route
+              path="price-overrides"
+              element={<PriceOverrideTab />}
+            />
             <Route path="invoices" element={<InvoicesTab />} />
             <Route path="revenue-profit" element={<RevenueProfitTab />} />
             <Route path="refunds" element={<RefundsTab />} />
@@ -29,4 +46,3 @@ export default function SalesManagerLayout() {
     </div>
   );
 }
-

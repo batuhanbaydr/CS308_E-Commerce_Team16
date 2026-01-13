@@ -92,7 +92,8 @@ public class SecurityConfig {
                         ).hasRole("CUSTOMER")
 
                         // backoffice endpoints
-                        .requestMatchers("/api/admin/product/**").hasRole("PRODUCT_MANAGER")
+                        .requestMatchers("/api/admin/product/**")
+                            .hasAnyRole("PRODUCT_MANAGER", "SALES_MANAGER")
                         .requestMatchers("/api/admin/sales/**").hasRole("SALES_MANAGER")
                         .requestMatchers("/api/admin/refunds/**").hasRole("SALES_MANAGER")
                         .requestMatchers("/api/admin/support/**").hasRole("SUPPORT_AGENT")
