@@ -4,5 +4,6 @@ public enum OrderStatus {
     CART,          // sepette, henüz sipariş oluşmadı
     PROCESSING,    // ödeme alınmış, hazırlanıyor
     IN_TRANSIT,    // kargoda
-    DELIVERED      // teslim edildi
+    DELIVERED,  // teslim edildi
+    CANCELLED
 }
