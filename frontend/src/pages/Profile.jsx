@@ -54,14 +54,19 @@ const formatDate = (dateString) => {
   }
 };
 
-// Helper function to format currency
+
 const formatCurrency = (amount) => {
-  if (!amount) return "₺0,00";
+  if (amount === null || amount === undefined || amount === "") return "$0.00";
+
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return `₺${num.toLocaleString("tr-TR", {
+  if (Number.isNaN(num)) return "$0.00";
+
+  return num.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
+  });
 };
 
 export default function Profile() {
