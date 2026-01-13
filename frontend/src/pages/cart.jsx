@@ -7,6 +7,7 @@ import {
   updateBasketItem,
   removeBasketItem,
 } from "../lib/api";
+import CategoryTopbar from "../components/CategoryTopbar.jsx";
 
 const hasAdminAccess = (user) =>
   user?.roles?.includes("SALES_MANAGER") ||

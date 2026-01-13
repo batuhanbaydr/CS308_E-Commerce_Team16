@@ -11,6 +11,7 @@ import {
 import searchIcon from "../assets/search.png";
 import bagIcon from "../assets/bag.png";
 import { useCartDrawer } from "../context/CartDrawerContext.jsx";
+import CategoryTopbar from "../components/CategoryTopbar.jsx";
 
 const hasAdminAccess = (user) =>
   user?.roles?.includes("SALES_MANAGER") ||

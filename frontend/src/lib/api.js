@@ -169,6 +169,14 @@ export function updatePaymentMethod(
 export function deletePaymentMethod(pmId) {
   return api.delete(`/users/me/payment-methods/${pmId}`);
 }
+// =====================
+// categories
+// =====================
+
+
+export function listCategoriesPublic() {
+  return api.get("/categories");
+}
 
 // =====================
 // PRODUCTS
