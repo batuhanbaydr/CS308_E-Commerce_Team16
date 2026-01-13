@@ -91,7 +91,7 @@ function AppShell() {
 
         <Route path="/shop-the-look" element={<div>TODO: Shop The Look</div>} />
         <Route path="/search" element={<Search />} />
-        
+
         <Route path="/product/:productId" element={<ProductDetail />} />
 
         {/* Private (customer) pages */}
