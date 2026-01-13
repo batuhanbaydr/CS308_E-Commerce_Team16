@@ -60,7 +60,36 @@ public class SalesAdminService {
 
         int percent = (int) Math.round(rate * 100);
 
-        List<ProductEntity> products = productRepository.findAllById(req.getProductIds());
+        // Filter out null/empty IDs
+        List<String> validProductIds = req.getProductIds().stream()
+                .filter(id -> id != null && !id.trim().isEmpty())
+                .collect(Collectors.toList());
+
+        if (validProductIds.isEmpty()) {
+            throw new IllegalArgumentException("No valid product IDs provided");
+        }
+
+        // Debug: Log received product IDs
+        org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                .info("Applying discount to {} products. Product IDs: {}", validProductIds.size(), validProductIds);
+
+        List<ProductEntity> products = productRepository.findAllById(validProductIds);
+        
+        // Debug: Log found products
+        org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                .info("Found {} products to apply discount", products.size());
+
+        // Check if all requested products were found
+        if (products.isEmpty()) {
+            throw new IllegalArgumentException("None of the requested products were found. Please check the product IDs.");
+        }
+
+        if (products.size() < validProductIds.size()) {
+            // Some products were not found - log warning but continue with found products
+            org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                    .warn("Only {}/{} requested products were found. Proceeding with found products only.",
+                            products.size(), validProductIds.size());
+        }
 
         for (ProductEntity p : products) {
 
@@ -99,25 +128,69 @@ public class SalesAdminService {
         int notifiedEmails = 0;
         boolean shouldNotify = req.getNotifyWishlist() == null || req.getNotifyWishlist();
         
+        org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                .info("Wishlist notification enabled: {}", shouldNotify);
+        
         if (shouldNotify) {
             Map<String, UserEntity> userCache = new HashMap<>();
 
             for (ProductEntity p : products) {
                 List<WishlistEntity> wishlists = wishlistRepository.findAllByProductIdsContaining(p.getId());
+                org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                        .info("Product {} is in {} wishlist(s)", p.getId(), wishlists.size());
+                
                 for (WishlistEntity w : wishlists) {
-                    String uid = w.getUserId();
-                    if (uid == null) continue;
+                    String userIdOrEmail = w.getUserId();
+                    if (userIdOrEmail == null || userIdOrEmail.isBlank()) {
+                        org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                                .warn("Wishlist {} has null or blank userId", w.getId());
+                        continue;
+                    }
 
-                    UserEntity u = userCache.computeIfAbsent(uid,
-                            k -> userRepository.findById(k).orElse(null));
+                    // IMPORTANT: WishlistEntity.userId stores EMAIL ADDRESS, not user ID
+                    // So we need to find user by email, not by ID
+                    UserEntity u = userCache.computeIfAbsent(userIdOrEmail, key -> {
+                        // Try to find by email first (since wishlist uses email as userId)
+                        UserEntity user = userRepository.findByEmailAddress(key).orElse(null);
+                        if (user != null) {
+                            org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                                    .info("Found user by email: {} -> {}", key, user.getId());
+                            return user;
+                        }
+                        // Fallback: try to find by ID (in case some wishlists use actual IDs)
+                        user = userRepository.findById(key).orElse(null);
+                        if (user != null) {
+                            org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                                    .info("Found user by ID: {} -> {}", key, user.getId());
+                        } else {
+                            org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                                    .warn("User not found for wishlist userId: {} (tried both email and ID)", key);
+                        }
+                        return user;
+                    });
 
                     if (u != null) {
-                        emailService.sendDiscountNotification(u, p, rate);
-                        notifiedEmails++;
+                        try {
+                            emailService.sendDiscountNotification(u, p, rate);
+                            notifiedEmails++;
+                            org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                                    .info("✅ Sent discount notification email to {} for product {}", 
+                                            u.getEmailAddress(), p.getName());
+                        } catch (Exception e) {
+                            org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                                    .warn("❌ Failed to send discount notification to {} for product {}: {}", 
+                                            u.getEmailAddress(), p.getName(), e.getMessage(), e);
+                        }
+                    } else {
+                        org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                                .warn("Cannot send notification: User not found for wishlist userId: {}", userIdOrEmail);
                     }
                 }
             }
         }
+        
+        org.slf4j.LoggerFactory.getLogger(SalesAdminService.class)
+                .info("Total discount notifications sent: {}", notifiedEmails);
 
         return new SalesAdminDTO.DiscountResult(products.size(), notifiedEmails);
     }

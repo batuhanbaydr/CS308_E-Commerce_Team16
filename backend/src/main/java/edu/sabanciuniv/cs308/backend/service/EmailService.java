@@ -220,10 +220,16 @@ public class EmailService {
     }
 
     public void sendDiscountNotification(UserEntity user, ProductEntity product, double discountRate) {
-        if (user == null || product == null) return;
+        if (user == null || product == null) {
+            log.warn("Cannot send discount notification: user or product is null");
+            return;
+        }
 
         String to = user.getEmailAddress();
-        if (to == null || to.isBlank()) return;
+        if (to == null || to.isBlank()) {
+            log.warn("Cannot send discount notification: user {} has no email address", user.getId());
+            return;
+        }
 
         try {
             MimeMessage message = mailSender.createMimeMessage();
@@ -247,8 +253,11 @@ public class EmailService {
 
             helper.setText(html, true);
             mailSender.send(message);
+            log.info("✅ Successfully sent discount notification email to {} for product {} ({}% off)", 
+                    to, product.getName(), percent);
         } catch (Exception e) {
-            log.warn("Failed to send discount notification to {}", user.getEmailAddress(), e);
+            log.error("❌ Failed to send discount notification to {} for product {}: {}", 
+                    to, product.getName(), e.getMessage(), e);
         }
     }
 

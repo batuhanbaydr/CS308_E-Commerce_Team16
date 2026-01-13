@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { listProducts, applyDiscount } from "../../../../lib/api";
 
+// Helper to safely get product ID (handles both id and _id fields)
+function getId(p) {
+  return p?.id ?? p?._id ?? "";
+}
+
 export default function DiscountsTab() {
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -44,6 +49,7 @@ export default function DiscountsTab() {
   }, []);
 
   // Build enriched product list for display (base + discounted price)
+  // IMPORTANT: Only show discounted price preview for SELECTED products
   const enrichedProducts = useMemo(() => {
     const d = Math.max(0, Math.min(Number(discountPercent) || 0, 90));
     const factor = 1 - d / 100;
@@ -54,15 +60,22 @@ export default function DiscountsTab() {
           (p.variants && p.variants[0] && p.variants[0].price) ??
           0
       );
-      const discounted = base > 0 ? base * factor : base;
+      const productId = getId(p);
+      const isSelected = selectedIds.has(productId);
+      
+      // Only calculate discounted price if product is selected
+      // Otherwise, show the current base price
+      const discounted = isSelected && base > 0 ? base * factor : base;
 
       return {
         ...p,
+        id: productId, // Ensure id field is set
         _basePrice: base,
         _discountedPrice: discounted,
+        _isSelected: isSelected, // Track selection state
       };
-    });
-  }, [products, discountPercent]);
+    }).filter((p) => p.id); // Filter out products without valid IDs
+  }, [products, discountPercent, selectedIds]);
 
   const filteredProducts = useMemo(() => {
     const q = (searchTerm || "").toLowerCase().trim();
@@ -86,10 +99,19 @@ export default function DiscountsTab() {
 
   // Selection + apply discount
   const toggleProduct = (id) => {
+    if (!id || id.trim() === "") {
+      console.warn("Attempted to toggle product with invalid ID:", id);
+      return;
+    }
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+        console.log("Deselected product:", id, "Total selected:", next.size);
+      } else {
+        next.add(id);
+        console.log("Selected product:", id, "Total selected:", next.size);
+      }
       return next;
     });
   };
@@ -99,7 +121,7 @@ export default function DiscountsTab() {
       setSelectedIds(new Set());
       return;
     }
-    setSelectedIds(new Set(filteredProducts.map((p) => p.id)));
+    setSelectedIds(new Set(filteredProducts.map((p) => getId(p)).filter(Boolean)));
   };
 
   const handleApplyDiscount = async () => {
@@ -110,18 +132,52 @@ export default function DiscountsTab() {
       setTimeout(() => setStatusMessage(null), 5000);
       return;
     }
-    if (selectedIds.size === 0) {
+    
+    // Get current selected IDs from state
+    const currentSelectedIds = Array.from(selectedIds).filter((id) => id && id.trim() !== "");
+    
+    if (currentSelectedIds.length === 0) {
       setStatusKind("error");
-      setStatusMessage("Select at least one product.");
+      setStatusMessage("⚠️ Please select at least one product by checking the boxes.");
       setTimeout(() => setStatusMessage(null), 5000);
       return;
     }
+    
+    // Double check: verify that selected IDs exist in filtered products
+    const validProductIds = filteredProducts
+      .map((p) => getId(p))
+      .filter((id) => id && id.trim() !== "");
+    
+    const validIds = currentSelectedIds.filter((id) => validProductIds.includes(id));
+    
+    if (validIds.length === 0) {
+      setStatusKind("error");
+      setStatusMessage("No valid products selected. Please select products from the list.");
+      setTimeout(() => setStatusMessage(null), 5000);
+      return;
+    }
+    
+    if (validIds.length !== currentSelectedIds.length) {
+      console.warn("Some selected IDs were invalid and filtered out:", {
+        original: currentSelectedIds,
+        valid: validIds
+      });
+    }
+    
+    // Debug: Log selected IDs
+    console.log("✅ Applying discount to selected products:");
+    console.log("  - Selected product IDs:", validIds);
+    console.log("  - Selected count:", validIds.length);
+    console.log("  - Total products in view:", filteredProducts.length);
+    console.log("  - Discount rate:", d + "%");
+    console.log("  - Notify wishlist:", notifyWishlist);
 
     try {
       setStatusMessage(null);
+      
       const { data } = await applyDiscount(
         d,
-        Array.from(selectedIds),
+        validIds, // ONLY send selected product IDs
         notifyWishlist
       );
 
@@ -304,14 +360,15 @@ export default function DiscountsTab() {
                 </tr>
               ) : (
                 filteredProducts.map((p) => {
-                  const checked = selectedIds.has(p.id);
+                  const productId = getId(p);
+                  const checked = selectedIds.has(productId);
                   return (
-                    <tr key={p.id}>
+                    <tr key={productId}>
                       <td>
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={() => toggleProduct(p.id)}
+                          onChange={() => toggleProduct(productId)}
                         />
                       </td>
                       <td>
@@ -328,20 +385,30 @@ export default function DiscountsTab() {
                       <td style={{ textAlign: "right" }}>
                         ${p._basePrice.toFixed(2)}
                       </td>
-                      {discountPercent > 0 && (
-                        <td style={{ textAlign: "right", color: "#3d211c", fontWeight: 600 }}>
-                          ${p._discountedPrice.toFixed(2)}
-                        </td>
-                      )}
-                      {discountPercent > 0 && (
-                        <td style={{ textAlign: "right" }}>
-                          {Math.max(
-                            0,
-                            Math.min(Number(discountPercent) || 0, 90)
-                          )}
-                          %
-                        </td>
-                      )}
+                      {/* Only show discounted price and discount % for SELECTED products */}
+                      {checked && discountPercent > 0 ? (
+                        <>
+                          <td style={{ textAlign: "right", color: "#3d211c", fontWeight: 600 }}>
+                            ${p._discountedPrice.toFixed(2)}
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            {Math.max(
+                              0,
+                              Math.min(Number(discountPercent) || 0, 90)
+                            )}
+                            %
+                          </td>
+                        </>
+                      ) : discountPercent > 0 ? (
+                        <>
+                          <td style={{ textAlign: "right", color: "#999", fontStyle: "italic" }}>
+                            Select to preview
+                          </td>
+                          <td style={{ textAlign: "right", color: "#999" }}>
+                            —
+                          </td>
+                        </>
+                      ) : null}
                     </tr>
                   );
                 })
