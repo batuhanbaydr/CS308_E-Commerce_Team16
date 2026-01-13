@@ -113,12 +113,12 @@ export default function App() {
               }
             />
 
-            {/* Sales Manager backoffice (placeholder for now) */}
+            {/* Sales Manager backoffice */}
             <Route
               path="/backoffice/sales-manager/*"
               element={
                 <RequireAuth allowedRoles={["SALES_MANAGER"]}>
-                  <Placeholder title="Sales Manager Backoffice" />
+                  <SalesManager />
                 </RequireAuth>
               }
             />
