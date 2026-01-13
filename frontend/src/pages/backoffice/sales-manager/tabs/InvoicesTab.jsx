@@ -95,6 +95,59 @@ export default function InvoicesTab() {
     }
   };
 
+  const handlePrintInvoice = async (invoiceId) => {
+    try {
+      const response = await downloadInvoicePdf(invoiceId);
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      
+      // Open PDF in new window and print
+      const printWindow = window.open(url, '_blank');
+      if (printWindow) {
+        printWindow.onload = () => {
+          printWindow.print();
+          // Clean up after printing
+          setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+          }, 1000);
+        };
+      } else {
+        // If popup blocked, fallback to download
+        alert("Popup blocked. Downloading PDF instead. Please open and print manually.");
+        handleDownloadInvoice(invoiceId);
+      }
+    } catch (err) {
+      console.error(`Error printing invoice ${invoiceId}:`, err);
+      alert(`Failed to print invoice ${invoiceId}. Please try again.`);
+    }
+  };
+
+  const handlePrintAllInvoices = async () => {
+    if (invoices.length === 0) {
+      alert("No invoices to print. Please fetch invoices first.");
+      return;
+    }
+
+    try {
+      // Print all invoices one by one with a delay
+      for (let i = 0; i < invoices.length; i++) {
+        const inv = invoices[i];
+        try {
+          await handlePrintInvoice(inv.id);
+          // Small delay between prints to avoid overwhelming the browser
+          if (i < invoices.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (err) {
+          console.error(`Error printing invoice ${inv.id}:`, err);
+        }
+      }
+    } catch (err) {
+      console.error("Error printing invoices", err);
+      alert("Some invoices could not be printed. Please try again.");
+    }
+  };
+
   const handleDownloadAllInvoices = async () => {
     if (invoices.length === 0) {
       alert("No invoices to download. Please fetch invoices first.");
@@ -175,13 +228,22 @@ export default function InvoicesTab() {
           </button>
 
           {invoices.length > 0 && (
-            <button
-              type="button"
-              className="pm-btn"
-              onClick={handleDownloadAllInvoices}
-            >
-              Download All as PDF
-            </button>
+            <>
+              <button
+                type="button"
+                className="pm-btn"
+                onClick={handleDownloadAllInvoices}
+              >
+                Download All as PDF
+              </button>
+              <button
+                type="button"
+                className="pm-btn"
+                onClick={handlePrintAllInvoices}
+              >
+                Print All
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -235,13 +297,22 @@ export default function InvoicesTab() {
                     </span>
                   </td>
                   <td style={{ textAlign: "center" }}>
-                    <button
-                      className="pm-btn"
-                      style={{ padding: "4px 12px", fontSize: 12 }}
-                      onClick={() => handleDownloadInvoice(inv.id)}
-                    >
-                      Download PDF
-                    </button>
+                    <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                      <button
+                        className="pm-btn"
+                        style={{ padding: "4px 12px", fontSize: 12 }}
+                        onClick={() => handleDownloadInvoice(inv.id)}
+                      >
+                        Download
+                      </button>
+                      <button
+                        className="pm-btn pm-btn-primary"
+                        style={{ padding: "4px 12px", fontSize: 12 }}
+                        onClick={() => handlePrintInvoice(inv.id)}
+                      >
+                        Print
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

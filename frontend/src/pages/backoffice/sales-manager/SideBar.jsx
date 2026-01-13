@@ -6,6 +6,7 @@ const items = [
   { label: "Discounts", to: `${base}/discounts` },
   { label: "Invoices", to: `${base}/invoices` },
   { label: "Revenue & Profit", to: `${base}/revenue-profit` },
+  { label: "Refunds", to: `${base}/refunds` },
 ];
 
 export default function Sidebar() {

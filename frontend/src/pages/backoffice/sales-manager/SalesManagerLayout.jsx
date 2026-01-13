@@ -5,6 +5,7 @@ import TopBar from "./TopBar";
 import DiscountsTab from "./tabs/DiscountsTab";
 import InvoicesTab from "./tabs/InvoicesTab";
 import RevenueProfitTab from "./tabs/RevenueProfitTab";
+import RefundsTab from "./tabs/RefundsTab";
 import "../product-manager/productManager.css";
 
 export default function SalesManagerLayout() {
@@ -21,6 +22,7 @@ export default function SalesManagerLayout() {
             <Route path="discounts" element={<DiscountsTab />} />
             <Route path="invoices" element={<InvoicesTab />} />
             <Route path="revenue-profit" element={<RevenueProfitTab />} />
+            <Route path="refunds" element={<RefundsTab />} />
           </Routes>
         </main>
       </div>

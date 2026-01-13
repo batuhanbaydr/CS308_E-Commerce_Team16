@@ -444,6 +444,39 @@ export function downloadInvoicePdf(orderId) {
   });
 }
 
+// ---------------- REFUND ADMIN ----------------
+
+/**
+ * List all refund requests (for Sales Manager)
+ * @param {string} status - Optional: "REQUESTED" | "APPROVED" | "DENIED" | "REFUNDED"
+ */
+export function listRefunds(status = null) {
+  const params = {};
+  if (status) params.status = status;
+  return api.get("/admin/refunds", { params });
+}
+
+/**
+ * Decide on a refund request (approve or deny)
+ * @param {string} refundId - Refund request ID
+ * @param {boolean} approve - true to approve, false to deny
+ * @param {string} managerNote - Optional note from manager
+ */
+export function decideRefund(refundId, approve, managerNote = "") {
+  return api.put(`/admin/refunds/${refundId}/decision`, {
+    approve,
+    managerNote,
+  });
+}
+
+/**
+ * Mark a refund as completed (product returned, refund processed)
+ * @param {string} refundId - Refund request ID
+ */
+export function markRefunded(refundId) {
+  return api.put(`/admin/refunds/${refundId}/refund`);
+}
+
 // =======================
 // SUPPORT / CHAT
 // =======================
