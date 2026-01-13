@@ -1,8 +1,7 @@
 // src/pages/ProductDetail.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import searchIcon from "../assets/search.png";
-import bagIcon from "../assets/bag.png";
+import CategoryTopbar from "../components/CategoryTopbar.jsx";
 import {
   fetchProduct,
   listProducts,
@@ -12,7 +11,7 @@ import {
   getReviewsForProduct,   
   createReview,    
 } from "../lib/api";
-import { useCartDrawer } from "../context/CartDrawerContext.jsx";
+
 
 const hasAdminAccess = (user) =>
   user?.roles?.includes("SALES_MANAGER") ||
@@ -27,7 +26,7 @@ const CART_STORAGE_KEY = "tidl_cart_id";
 export default function ProductDetail() {
   const navigate = useNavigate();
   const { productId } = useParams();
-  const { openCart } = useCartDrawer();
+
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const [user, setUser] = useState(null);
@@ -400,93 +399,9 @@ const handleSubmitReview = async (e) => {
 };
 
   return (
-  <div className="home-page">
-    <header className="category-topbar">
-      <button className="category-brand" onClick={() => navigate("/home")}>
-        TIDL
-      </button>
-      <nav className="category-nav">
-        <button
-          onClick={() => navigate("/category/sweatshirts")}
-          className="category-nav-item"
-        >
-          SWEATSHIRTS
-        </button>
-        <button
-          onClick={() => navigate("/category/shirts")}
-          className="category-nav-item"
-        >
-          SHIRTS
-        </button>
-        <button
-          onClick={() => navigate("/category/pants")}
-          className="category-nav-item"
-        >
-          PANTS
-        </button>
- 
-      </nav>
-
-      <div className="category-actions">
-        <img
-          src={searchIcon}
-          alt="Search"
-          className="category-icon"
-          onClick={() => navigate("/search")}
-        />
-        {user ? (
-          <span
-            className="login-topbar-link"
-            style={{ cursor: "default", marginRight: "0.5rem" }}
-          >
-            {`HEY! ${user.name}`}
-          </span>
-        ) : (
-          <span
-            className="home-signin"
-            onClick={() => navigate("/login")}
-            style={{ marginRight: "0.5rem", cursor: "pointer" }}
-          >
-            SIGN IN
-          </span>
-        )}
-
-        {user && (
-          <div
-            className="home-menu"
-            onClick={() => setShowProfileMenu((p) => !p)}
-            style={{ marginRight: "0.5rem" }}
-          >
-            <span />
-            <span />
-            <span />
-            {showProfileMenu && (
-              <div className="details-menu">
-                <button
-                  className="details-menu-item"
-                  onClick={go("/profile")}
-                >
-                  Details
-                </button>
-                <button
-                  className="details-menu-item"
-                  onClick={handleLogout}
-                >
-                  Log-out
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        <img
-          src={bagIcon}
-          alt="Cart"
-          className="category-icon"
-          onClick={openCart}
-        />
-      </div>
-    </header>
+    <div className="category-page">
+   
+    <CategoryTopbar />
 
     <main className="product-page">
       {loading && <div className="product-loading">Loading product…</div>}

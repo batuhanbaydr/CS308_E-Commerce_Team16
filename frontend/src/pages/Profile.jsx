@@ -1,9 +1,6 @@
-// src/pages/Profile.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import searchIcon from "../assets/search.png";
-import bagIcon from "../assets/bag.png";
-import { useCartDrawer } from "../context/CartDrawerContext.jsx";
+import CategoryTopbar from "../components/CategoryTopbar.jsx";
 import {
   logoutRequest,
   meRequest,
@@ -100,7 +97,7 @@ export default function Profile() {
     newPassword: "",
     confirmPassword: "",
   });
-  const { openCart } = useCartDrawer();
+
 
   // Fetch user data on mount
   useEffect(() => {
@@ -253,13 +250,14 @@ export default function Profile() {
 
   const handleLogout = async () => {
     try {
-      await logoutRequest();
+      await logoutRequest(); // invalidate session on backend
     } catch (err) {
-      console.log("logout error (ignored):", err);
+      console.warn("Logout failed (ignored):", err);
+    } finally {
+      navigate("/login", { replace: true });
     }
-    navigate("/login");
   };
-
+  
   // forms / list handlers
   const handleAccountChange = (event) => {
     const { name, value } = event.target;
@@ -501,99 +499,13 @@ export default function Profile() {
   }
 
   return (
+  
       <div className="category-page">
-        <header className="category-topbar">
-          <button className="category-brand" onClick={() => navigate("/home")}>
-            TIDL
-          </button>
-          <nav className="category-nav">
-            <button
-                onClick={() => navigate("/category/sweatshirts")}
-                className="category-nav-item"
-            >
-              SWEATSHIRTS
-            </button>
-            <button
-                onClick={() => navigate("/category/shirts")}
-                className="category-nav-item"
-            >
-              SHIRTS
-            </button>
-            <button
-                onClick={() => navigate("/category/pants")}
-                className="category-nav-item"
-            >
-              PANTS
-            </button>
+        {/* ✅ dynamic shared topbar */}
+        <CategoryTopbar />
+    
 
-          </nav>
-
-          <div className="category-actions">
-            <img
-                src={searchIcon}
-                alt="Search"
-                className="category-icon"
-                onClick={() => navigate("/search")}
-            />
-            {user ? (
-                <span
-                    className="login-topbar-link"
-                    style={{ cursor: "default", marginRight: "0.5rem" }}
-                >
-              {`HEY! ${user.name}`}
-            </span>
-            ) : (
-                <span
-                    className="home-signin"
-                    onClick={() => navigate("/login")}
-                    style={{ marginRight: "0.5rem", cursor: "pointer" }}
-                >
-              SIGN IN
-            </span>
-            )}
-
-            {user && (
-                <div
-                    className="home-menu"
-                    onClick={() => setShowProfileMenu((p) => !p)}
-                    style={{ marginRight: "0.5rem" }}
-                >
-                  <span />
-                  <span />
-                  <span />
-                  {showProfileMenu && (
-                      <div className="details-menu">
-                        <button
-                            className="details-menu-item"
-                            onClick={go("/profile")}
-                        >
-                          Details
-                        </button>
-                        <button
-                            className="details-menu-item"
-                            onClick={go("/wishlist")}
-                        >
-                          Wishlist
-                        </button>
-                        <button
-                            className="details-menu-item"
-                            onClick={handleLogout}
-                        >
-                          Log-out
-                        </button>
-                      </div>
-                  )}
-                </div>
-            )}
-
-            <img
-                src={bagIcon}
-                alt="Cart"
-                className="category-icon"
-                onClick={openCart}
-            />
-          </div>
-        </header>
+    
 
         {/* profile content */}
         <main className="profile-wrapper">
@@ -1079,7 +991,7 @@ export default function Profile() {
             <button
                 className="profile-button secondary logout-button"
                 type="button"
-                onClick={() => navigate("/login")}
+                onClick={handleLogout}
             >
               Log Out
             </button>
