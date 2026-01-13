@@ -104,8 +104,12 @@ export function getOrders(page = 0, size = 10) {
 export const getOrderDetail = (orderId) => api.get(`/orders/${orderId}`);
 
 export const pmGetOrderDetail = (orderId) =>
-  api.get(`/admin/product/orders/${orderId}`);
+    api.get(`/admin/product/orders/${orderId}`);
 
+// ✅ Cancel order (only allowed when status is PROCESSING)
+export function cancelOrder(orderId) {
+  return api.post(`/orders/${orderId}/cancel`);
+}
 
 // =====================
 // RETURNS
@@ -128,14 +132,14 @@ export function getPaymentMethods() {
 }
 
 export function addPaymentMethod(
-  brand,
-  last4,
-  expMonth,
-  expYear,
-  holderName,
-  nickname,
-  isDefault = false,
-  token = ""
+    brand,
+    last4,
+    expMonth,
+    expYear,
+    holderName,
+    nickname,
+    isDefault = false,
+    token = ""
 ) {
   return api.post("/users/me/payment-methods", {
     brand,
@@ -150,12 +154,12 @@ export function addPaymentMethod(
 }
 
 export function updatePaymentMethod(
-  pmId,
-  holderName,
-  expMonth,
-  expYear,
-  nickname,
-  isDefault
+    pmId,
+    holderName,
+    expMonth,
+    expYear,
+    nickname,
+    isDefault
 ) {
   return api.put(`/users/me/payment-methods/${pmId}`, {
     holderName,
@@ -235,7 +239,7 @@ export function attachCartToUser(cartId) {
 // =====================
 
 export const getReviewsForProduct = (productId) =>
-  api.get(`/reviews/product/${productId}`);
+    api.get(`/reviews/product/${productId}`);
 
 export const createReview = (payload) => api.post("/reviews", payload);
 
@@ -244,11 +248,11 @@ export const createReview = (payload) => api.post("/reviews", payload);
 // ===================================================
 
 export function checkout(
-  cartId,
-  shipping,
-  billing,
-  paymentDetails,
-  useSameAddress = true
+    cartId,
+    shipping,
+    billing,
+    paymentDetails,
+    useSameAddress = true
 ) {
   const cardNumber = paymentDetails.cardNumber?.replace(/\s/g, "") || "";
   const cardLast4 = cardNumber.slice(-4);
@@ -325,16 +329,16 @@ export function resolveUsers(ids) {
 
 export const pmListProducts = () => api.get("/admin/product/products");
 export const pmCreateProduct = (payload) =>
-  api.post("/admin/product/products", payload);
+    api.post("/admin/product/products", payload);
 export const pmUpdateProduct = (id, payload) =>
-  api.put(`/admin/product/products/${id}`, payload);
+    api.put(`/admin/product/products/${id}`, payload);
 export const pmDeleteProduct = (id) =>
-  api.delete(`/admin/product/products/${id}`);
+    api.delete(`/admin/product/products/${id}`);
 
 export const pmSetVariantStock = (id, sku, stock) =>
-  api.patch(`/admin/product/products/${id}/variants/${sku}/stock`, null, {
-    params: { stock },
-  });
+    api.patch(`/admin/product/products/${id}/variants/${sku}/stock`, null, {
+      params: { stock },
+    });
 
 export function pmListCategories() {
   return api.get("/admin/product/categories");
@@ -369,8 +373,8 @@ export function pmApproveReview(reviewId) {
 
 export function pmRejectReview(reviewId, moderationNote = null) {
   return api.post(
-    `/reviews/${reviewId}/reject`,
-    moderationNote ? { moderationNote } : null
+      `/reviews/${reviewId}/reject`,
+      moderationNote ? { moderationNote } : null
   );
 }
 
@@ -544,9 +548,9 @@ export function supportCustomerUploadAttachment(conversationId, file) {
   const form = new FormData();
   form.append("file", file);
   return api.post(
-    `/support/conversations/${conversationId}/attachments`,
-    form,
-    { headers: { "Content-Type": "multipart/form-data" } }
+      `/support/conversations/${conversationId}/attachments`,
+      form,
+      { headers: { "Content-Type": "multipart/form-data" } }
   );
 }
 
@@ -554,8 +558,8 @@ export function supportCustomerUploadAttachment(conversationId, file) {
 export function supportCustomerSendMessage(conversationId, body) {
   // body: { text?: string, attachmentUrl?: string, attachmentName?: string }
   return api.post(
-    `/support/customer/conversations/${conversationId}/messages`,
-    body
+      `/support/customer/conversations/${conversationId}/messages`,
+      body
   );
 }
 

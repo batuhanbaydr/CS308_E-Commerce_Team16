@@ -1,3 +1,4 @@
+// src/pages/Profile.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import CategoryTopbar from "../components/CategoryTopbar.jsx";
@@ -10,22 +11,26 @@ import {
   getOrders,
   getReturns,
   createReturn,
-  updateProfile
+  updateProfile,
+  cancelOrder, // ✅ NEW
 } from "../lib/api";
 
 const hasAdminAccess = (user) =>
-  user?.roles?.includes("SALES_MANAGER") ||
-  user?.roles?.includes("PRODUCT_MANAGER") ||
-  user?.roles?.includes("SUPPORT_AGENT") ||
-  user?.role === "SALES_MANAGER" ||
-  user?.role === "PRODUCT_MANAGER" ||
-  user?.role === "SUPPORT_AGENT";
+    user?.roles?.includes("SALES_MANAGER") ||
+    user?.roles?.includes("PRODUCT_MANAGER") ||
+    user?.roles?.includes("SUPPORT_AGENT") ||
+    user?.role === "SALES_MANAGER" ||
+    user?.role === "PRODUCT_MANAGER" ||
+    user?.role === "SUPPORT_AGENT";
 
 const getAdminRoute = (user) => {
   if (user?.roles?.includes("SALES_MANAGER") || user?.role === "SALES_MANAGER") {
     return "/backoffice/sales-manager";
   }
-  if (user?.roles?.includes("PRODUCT_MANAGER") || user?.role === "PRODUCT_MANAGER") {
+  if (
+      user?.roles?.includes("PRODUCT_MANAGER") ||
+      user?.role === "PRODUCT_MANAGER"
+  ) {
     return "/backoffice/product-manager";
   }
   if (user?.roles?.includes("SUPPORT_AGENT") || user?.role === "SUPPORT_AGENT") {
@@ -62,10 +67,6 @@ const formatCurrency = (amount) => {
 export default function Profile() {
   const navigate = useNavigate();
 
-  // topbar menu (the 3-line icon)
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const go = (path) => () => navigate(path);
-
   // User and account states
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -77,7 +78,11 @@ export default function Profile() {
     phoneNumber: "",
     password: "••••••••",
   });
+
   const [orders, setOrders] = useState([]);
+
+  // ✅ Cancel loading state per order
+  const [cancellingIds, setCancellingIds] = useState({});
 
   // ⭐ address state: label + line1 + city + district + zipCode
   const [addresses, setAddresses] = useState([]);
@@ -98,7 +103,6 @@ export default function Profile() {
     confirmPassword: "",
   });
 
-
   // Fetch user data on mount
   useEffect(() => {
     const fetchUserData = async () => {
@@ -110,6 +114,7 @@ export default function Profile() {
         const userRes = await meRequest();
         const userData = userRes.data;
         const userId = userData.id;
+
         setUser({
           id: userData.id,
           name: userData.name || "User",
@@ -117,10 +122,9 @@ export default function Profile() {
         });
 
         // Fetch account details (with error handling)
-        let accountData = {};
         try {
           const accountRes = await getAccountDetails();
-          accountData = accountRes.data || {};
+          const accountData = accountRes.data || {};
           setAccountDetails({
             email: accountData.emailAddress || userData.emailAddress || "",
             phoneNumber: accountData.phoneNumber || "",
@@ -128,7 +132,6 @@ export default function Profile() {
           });
         } catch (err) {
           console.error("Error fetching account details:", err);
-          // Use user data as fallback
           setAccountDetails({
             email: userData.emailAddress || "",
             phoneNumber: "",
@@ -139,9 +142,8 @@ export default function Profile() {
         // Fetch orders (with error handling)
         try {
           const ordersRes = await getOrders(0, 100);
-          console.log("Orders API response:", ordersRes.data); // Debug log
-          
-          // Handle different response formats: content array or direct array
+          console.log("Orders API response:", ordersRes.data);
+
           let ordersData = [];
           if (Array.isArray(ordersRes.data)) {
             ordersData = ordersRes.data;
@@ -150,25 +152,22 @@ export default function Profile() {
           } else if (ordersRes.data?.data && Array.isArray(ordersRes.data.data)) {
             ordersData = ordersRes.data.data;
           }
-          
-          console.log("Parsed orders data:", ordersData); // Debug log
-          
+
+          console.log("Parsed orders data:", ordersData);
+
           setOrders(
               ordersData.map((order) => ({
                 id: order.id || order._id || "UNKNOWN",
                 date: formatDate(order.createdAt || order.createdDate || order.date),
                 status: order.status || "UNKNOWN",
                 total: formatCurrency(
-                  order.grandTotal || 
-                  order.totals?.grandTotal || 
-                  order.total || 
-                  0
+                    order.grandTotal || order.totals?.grandTotal || order.total || 0
                 ),
                 items: order.items || order.orderItems || [],
               }))
           );
-          
-          console.log("Final orders state:", ordersData.length, "orders"); // Debug log
+
+          console.log("Final orders state:", ordersData.length, "orders");
         } catch (err) {
           console.error("Error fetching orders:", err);
           console.error("Error details:", {
@@ -177,12 +176,6 @@ export default function Profile() {
             data: err.response?.data,
           });
           setOrders([]);
-          // Show user-friendly error message
-          if (err.response?.status === 401 || err.response?.status === 403) {
-            console.warn("Authentication error while fetching orders");
-          } else {
-            console.warn("Failed to load orders. Please try refreshing the page.");
-          }
         }
 
         // Fetch returns (with error handling)
@@ -203,7 +196,7 @@ export default function Profile() {
           setReturns([]);
         }
 
-        // ⭐ Adresleri backend'ten gelen userData.addresses alanından oku
+        // ⭐ Addresses from backend userData.addresses
         const addressesFromBackend = (userData.addresses || []).map((addr) => ({
           id: addr.id,
           label: addr.label || "",
@@ -215,7 +208,7 @@ export default function Profile() {
 
         setAddresses(addressesFromBackend);
 
-        // checkout için cache
+        // checkout cache
         if (userId) {
           try {
             localStorage.setItem(
@@ -226,19 +219,14 @@ export default function Profile() {
             console.error("Error saving addresses to localStorage:", err);
           }
         }
-
       } catch (err) {
         console.error("Error fetching user data:", err);
-        // Only show error if it's a critical error (like user not found)
         if (err?.response?.status === 401 || err?.response?.status === 403) {
           setError("Please log in to view your profile.");
           setTimeout(() => navigate("/login"), 2000);
         } else {
-          // For other errors, still show the page but with a warning
           setError(null);
-          console.warn(
-              "Some data could not be loaded, but showing profile page anyway."
-          );
+          console.warn("Some data could not be loaded, but showing profile page anyway.");
         }
       } finally {
         setLoading(false);
@@ -257,7 +245,41 @@ export default function Profile() {
       navigate("/login", { replace: true });
     }
   };
-  
+
+  // ✅ Cancel handler
+  const handleCancelOrder = async (e, orderId) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const confirm = window.confirm("Are you sure you want to cancel this order?");
+    if (!confirm) return;
+
+    try {
+      setCancellingIds((p) => ({ ...p, [orderId]: true }));
+
+      await cancelOrder(orderId);
+
+      // Update UI locally
+      setOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? { ...o, status: "CANCELLED" } : o))
+      );
+
+      alert("Order cancelled successfully!");
+    } catch (err) {
+      console.error("cancelOrder error:", err);
+      const msg =
+          err?.response?.data?.message ||
+          "Failed to cancel order. Please try again.";
+      alert(msg);
+    } finally {
+      setCancellingIds((p) => {
+        const next = { ...p };
+        delete next[orderId];
+        return next;
+      });
+    }
+  };
+
   // forms / list handlers
   const handleAccountChange = (event) => {
     const { name, value } = event.target;
@@ -271,10 +293,7 @@ export default function Profile() {
       alert("Account updated successfully!");
     } catch (err) {
       console.error("Error updating account:", err);
-      alert(
-          err.response?.data?.message ||
-          "Failed to update account. Please try again."
-      );
+      alert(err.response?.data?.message || "Failed to update account. Please try again.");
     }
   };
 
@@ -289,10 +308,7 @@ export default function Profile() {
       return;
     }
     try {
-      await changePassword(
-          passwordChange.currentPassword,
-          passwordChange.newPassword
-      );
+      await changePassword(passwordChange.currentPassword, passwordChange.newPassword);
       alert("Password changed successfully!");
       setPasswordChange({
         currentPassword: "",
@@ -301,14 +317,11 @@ export default function Profile() {
       });
     } catch (err) {
       console.error("Error changing password:", err);
-      alert(
-          err.response?.data?.message ||
-          "Failed to change password. Please try again."
-      );
+      alert(err.response?.data?.message || "Failed to change password. Please try again.");
     }
   };
 
-  // ⭐ Backend ile adres listesini senkronize eden helper
+  // ⭐ Sync addresses
   const syncAddressesWithBackend = async (updatedAddresses) => {
     try {
       const meRes = await meRequest();
@@ -317,7 +330,7 @@ export default function Profile() {
       await updateProfile({
         name: userData.name,
         emailAddress: userData.emailAddress,
-        homeAddress: userData.homeAddress, // kullanmıyorsan backend ignore eder
+        homeAddress: userData.homeAddress,
         addresses: updatedAddresses.map((a) => ({
           id: a.id,
           label: a.label,
@@ -347,10 +360,7 @@ export default function Profile() {
       }
     } catch (err) {
       console.error("Error syncing addresses with backend:", err);
-      alert(
-          err.response?.data?.message ||
-          "Failed to save address. Please try again."
-      );
+      alert(err.response?.data?.message || "Failed to save address. Please try again.");
     }
   };
 
@@ -380,14 +390,12 @@ export default function Profile() {
     });
   };
 
-  // ⭐ Silme: sadece listeyi filtrele + backend'e gönder
   const handleDeleteAddress = async (id) => {
     const updated = addresses.filter((a) => a.id !== id);
     await syncAddressesWithBackend(updated);
     alert("Address deleted successfully!");
   };
 
-  // ⭐ Ekle / güncelle: backend tabanlı
   const handleNewAddressSubmit = async (event) => {
     event.preventDefault();
 
@@ -407,14 +415,12 @@ export default function Profile() {
     let updated;
 
     if (editingAddressId) {
-      // mevcut adresi güncelle
       updated = addresses.map((a) =>
           a.id === editingAddressId ? { ...a, ...trimmed } : a
       );
     } else {
-      // yeni adres
       const newAddr = {
-        id: Date.now().toString(), // basit unique id
+        id: Date.now().toString(),
         ...trimmed,
       };
       updated = [...addresses, newAddr];
@@ -422,9 +428,7 @@ export default function Profile() {
 
     await syncAddressesWithBackend(updated);
 
-    alert(
-        editingAddressId ? "Address updated successfully!" : "Address saved successfully!"
-    );
+    alert(editingAddressId ? "Address updated successfully!" : "Address saved successfully!");
 
     setNewAddress({
       label: "",
@@ -443,16 +447,9 @@ export default function Profile() {
       return;
     }
     try {
-      // For now, we'll send empty orderItemIds array - backend may require specific item IDs
-      const response = await createReturn(
-          newReturn.orderId.trim(),
-          [],
-          newReturn.reason.trim()
-      );
-      console.log("Return request response:", response);
+      await createReturn(newReturn.orderId.trim(), [], newReturn.reason.trim());
       alert("Return request submitted successfully!");
 
-      // Refresh returns list
       const returnsRes = await getReturns(0, 100);
       const returnsData = returnsRes.data.content || [];
       setReturns(
@@ -468,7 +465,6 @@ export default function Profile() {
       setNewReturn({ orderId: "", reason: "" });
     } catch (err) {
       console.error("Error creating return:", err);
-      console.error("Error response:", err.response);
       const errorMessage =
           err.response?.data?.message ||
           err.message ||
@@ -476,7 +472,6 @@ export default function Profile() {
       alert(errorMessage);
     }
   };
-
 
   if (loading) {
     return (
@@ -489,9 +484,7 @@ export default function Profile() {
   if (error) {
     return (
         <div className="home-page">
-          <div
-              style={{ padding: "2rem", textAlign: "center", color: "red" }}
-          >
+          <div style={{ padding: "2rem", textAlign: "center", color: "red" }}>
             {error}
           </div>
         </div>
@@ -499,23 +492,16 @@ export default function Profile() {
   }
 
   return (
-  
       <div className="category-page">
         {/* ✅ dynamic shared topbar */}
         <CategoryTopbar />
-    
-
-    
 
         {/* profile content */}
         <main className="profile-wrapper">
           <section className="profile-hero">
-            <h1 className="profile-heading">
-              Hi, {user ? user.name : "there"}!
-            </h1>
+            <h1 className="profile-heading">Hi, {user ? user.name : "there"}!</h1>
             <p className="profile-subheading">
-              Manage your orders, account information, and saved preferences all
-              in one place.
+              Manage your orders, account information, and saved preferences all in one place.
             </p>
           </section>
 
@@ -525,40 +511,83 @@ export default function Profile() {
               <h2>Orders</h2>
               <p>Orders with details</p>
             </header>
+
             <div className="profile-card-body">
               {orders.length === 0 ? (
                   <p style={{ color: "#666" }}>No orders found.</p>
               ) : (
                   <ul className="profile-list">
-                    {orders.map((order) => (
-                        <li 
-                          key={order.id} 
-                          className="profile-list-item"
-                          style={{ cursor: "pointer" }}
-                          onClick={() => navigate(`/invoice/${order.id}`)}
-                        >
-                          <div className="profile-list-item-header">
-                            <span className="profile-pill">{order.status}</span>
-                            <strong>Order #{order.id}</strong>
-                          </div>
-                          <div className="profile-list-item-meta">
-                            <span>{order.date}</span>
-                            <span>{order.total}</span>
-                          </div>
-                          {order.items && order.items.length > 0 && (
-                              <p className="profile-list-item-description">
-                                {Array.isArray(order.items) 
-                                  ? order.items.map(item => 
-                                      typeof item === 'string' 
-                                        ? item 
-                                        : item.name || item.productName || `Item (${item.quantity || 1}x)`
-                                    ).join(", ")
-                                  : String(order.items)
-                                }
-                              </p>
-                          )}
-                        </li>
-                    ))}
+                    {orders.map((order) => {
+                      const isProcessing = (order.status || "").toUpperCase() === "PROCESSING";
+                      const isCancelling = !!cancellingIds[order.id];
+
+                      return (
+                          <li
+                              key={order.id}
+                              className="profile-list-item"
+                              style={{ cursor: "pointer" }}
+                              onClick={() => navigate(`/invoice/${order.id}`)}
+                          >
+                            <div
+                                className="profile-list-item-header"
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  gap: "0.75rem",
+                                  alignItems: "center",
+                                }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                                <span className="profile-pill">{order.status}</span>
+                                <strong>Order #{order.id}</strong>
+                              </div>
+
+                              {/* ✅ Cancel button only when PROCESSING */}
+                              {isProcessing && (
+                                  <button
+                                      type="button"
+                                      className="profile-link-button secondary"
+                                      onClick={(e) => handleCancelOrder(e, order.id)}
+                                      disabled={isCancelling}
+                                      style={{
+                                        border: "1px solid #e5e5e5",
+                                        borderRadius: 6,
+                                        background: "#fff",
+                                        padding: "0.35rem 0.75rem",
+                                        cursor: isCancelling ? "not-allowed" : "pointer",
+                                        opacity: isCancelling ? 0.7 : 1,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                      title="Cancel (only while processing)"
+                                  >
+                                    {isCancelling ? "Cancelling..." : "Cancel"}
+                                  </button>
+                              )}
+                            </div>
+
+                            <div className="profile-list-item-meta">
+                              <span>{order.date}</span>
+                              <span>{order.total}</span>
+                            </div>
+
+                            {order.items && order.items.length > 0 && (
+                                <p className="profile-list-item-description">
+                                  {Array.isArray(order.items)
+                                      ? order.items
+                                          .map((item) =>
+                                              typeof item === "string"
+                                                  ? item
+                                                  : item.name ||
+                                                  item.productName ||
+                                                  `Item (${item.quantity || 1}x)`
+                                          )
+                                          .join(", ")
+                                      : String(order.items)}
+                                </p>
+                            )}
+                          </li>
+                      );
+                    })}
                   </ul>
               )}
             </div>
@@ -740,9 +769,7 @@ export default function Profile() {
               <header className="profile-card-header">
                 <h3>{editingAddressId ? "Edit Address" : "Add New Address"}</h3>
                 <p>
-                  {editingAddressId
-                      ? "Update the selected address"
-                      : "Store another delivery location"}
+                  {editingAddressId ? "Update the selected address" : "Store another delivery location"}
                 </p>
               </header>
               <div className="profile-card-body">
@@ -773,10 +800,7 @@ export default function Profile() {
                     />
                   </label>
 
-                  <div
-                      className="profile-field"
-                      style={{ display: "flex", gap: "0.75rem" }}
-                  >
+                  <div className="profile-field" style={{ display: "flex", gap: "0.75rem" }}>
                     <div style={{ flex: 1 }}>
                       <span style={{ display: "block", marginBottom: 4 }}>City</span>
                       <input
@@ -790,33 +814,23 @@ export default function Profile() {
                       />
                     </div>
                     <div style={{ flex: 1 }}>
-                    <span style={{ display: "block", marginBottom: 4 }}>
-                      District
-                    </span>
+                      <span style={{ display: "block", marginBottom: 4 }}>District</span>
                       <input
                           type="text"
                           value={newAddress.district}
                           onChange={(e) =>
-                              setNewAddress((p) => ({
-                                ...p,
-                                district: e.target.value,
-                              }))
+                              setNewAddress((p) => ({ ...p, district: e.target.value }))
                           }
                           placeholder="District"
                       />
                     </div>
                     <div style={{ flexBasis: "140px" }}>
-                    <span style={{ display: "block", marginBottom: 4 }}>
-                      ZIP Code
-                    </span>
+                      <span style={{ display: "block", marginBottom: 4 }}>ZIP Code</span>
                       <input
                           type="text"
                           value={newAddress.zipCode}
                           onChange={(e) =>
-                              setNewAddress((p) => ({
-                                ...p,
-                                zipCode: e.target.value,
-                              }))
+                              setNewAddress((p) => ({ ...p, zipCode: e.target.value }))
                           }
                           placeholder="ZIP"
                           required
@@ -826,11 +840,7 @@ export default function Profile() {
 
                   <div
                       className="profile-form-actions"
-                      style={{
-                        display: "flex",
-                        gap: "0.75rem",
-                        alignItems: "center",
-                      }}
+                      style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}
                   >
                     <button
                         type="submit"
@@ -843,6 +853,7 @@ export default function Profile() {
                     >
                       {editingAddressId ? "Update Address" : "Save Address"}
                     </button>
+
                     {editingAddressId && (
                         <button
                             type="button"
@@ -884,9 +895,7 @@ export default function Profile() {
                           <li key={item.id} className="profile-list-item">
                             <div className="profile-list-item-header">
                               <strong>{item.orderId}</strong>
-                              <span className="profile-pill muted">
-                          {item.status}
-                        </span>
+                              <span className="profile-pill muted">{item.status}</span>
                             </div>
                             <div className="profile-list-item-meta">
                               <span>{item.id}</span>
@@ -915,10 +924,7 @@ export default function Profile() {
                         <select
                             value={newReturn.orderId}
                             onChange={(e) =>
-                                setNewReturn((p) => ({
-                                  ...p,
-                                  orderId: e.target.value,
-                                }))
+                                setNewReturn((p) => ({ ...p, orderId: e.target.value }))
                             }
                             required
                             style={{
@@ -941,27 +947,19 @@ export default function Profile() {
                             type="text"
                             value={newReturn.orderId}
                             onChange={(e) =>
-                                setNewReturn((p) => ({
-                                  ...p,
-                                  orderId: e.target.value,
-                                }))
+                                setNewReturn((p) => ({ ...p, orderId: e.target.value }))
                             }
                             placeholder="Enter order ID (e.g., ORD-XXXX)"
                             required
                         />
                     )}
                     {orders.length === 0 && (
-                        <p
-                            style={{
-                              fontSize: "0.875rem",
-                              color: "#666",
-                              marginTop: "0.25rem",
-                            }}
-                        >
+                        <p style={{ fontSize: "0.875rem", color: "#666", marginTop: "0.25rem" }}>
                           No orders available. Please make an order first.
                         </p>
                     )}
                   </label>
+
                   <label className="profile-field">
                     <span>Reason</span>
                     <textarea
@@ -974,11 +972,8 @@ export default function Profile() {
                         required
                     />
                   </label>
-                  <button
-                      type="submit"
-                      className="profile-button"
-                      disabled={orders.length === 0}
-                  >
+
+                  <button type="submit" className="profile-button" disabled={orders.length === 0}>
                     Submit Request
                   </button>
                 </form>
