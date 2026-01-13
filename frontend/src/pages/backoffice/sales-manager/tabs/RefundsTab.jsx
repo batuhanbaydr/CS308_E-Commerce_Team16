@@ -1,15 +1,46 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { listRefunds, decideRefund, markRefunded } from "../../../../lib/api";
+
+function money(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return `$${n.toFixed(2)}`;
+}
+
+function dateLabel(v) {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString();
+}
+
+function shortId(id) {
+  const s = String(id || "");
+  if (!s) return "N/A";
+  if (s.length <= 10) return s;
+  return `${s.slice(0, 8)}…${s.slice(-4)}`;
+}
+
+function statusKey(s) {
+  const x = String(s || "UNKNOWN").toUpperCase();
+  if (x === "REQUESTED") return "requested";
+  if (x === "APPROVED") return "approved";
+  if (x === "DENIED") return "denied";
+  if (x === "REFUNDED") return "refunded";
+  return "unknown";
+}
 
 export default function RefundsTab() {
   const [refunds, setRefunds] = useState([]);
   const [loadingRefunds, setLoadingRefunds] = useState(false);
   const [refundError, setRefundError] = useState("");
-  const [refundStatusFilter, setRefundStatusFilter] = useState(""); // "" = all, "REQUESTED", "APPROVED", etc.
+  const [refundStatusFilter, setRefundStatusFilter] = useState(""); // "" = all
+
   const [selectedRefundId, setSelectedRefundId] = useState(null);
   const [decisionNote, setDecisionNote] = useState("");
   const [showDecisionModal, setShowDecisionModal] = useState(false);
   const [decisionAction, setDecisionAction] = useState(null); // "approve" | "deny" | "markRefunded"
+
   const [statusMessage, setStatusMessage] = useState(null);
   const [statusKind, setStatusKind] = useState("success"); // "success" | "error"
 
@@ -23,9 +54,7 @@ export default function RefundsTab() {
       setRefunds(response.data || []);
     } catch (err) {
       console.error("Error fetching refunds", err);
-      setRefundError(
-        err.response?.data?.message || "Could not load refund requests."
-      );
+      setRefundError(err.response?.data?.message || "Could not load refund requests.");
     } finally {
       setLoadingRefunds(false);
     }
@@ -65,14 +94,11 @@ export default function RefundsTab() {
       }
 
       handleCloseDecisionModal();
-      // Refresh refunds list
       await handleFetchRefunds();
     } catch (err) {
       console.error("Error processing refund decision", err);
       setStatusKind("error");
-      setStatusMessage(
-        err.response?.data?.message || "Failed to process refund decision."
-      );
+      setStatusMessage(err.response?.data?.message || "Failed to process refund decision.");
     }
   };
 
@@ -82,33 +108,34 @@ export default function RefundsTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refundStatusFilter]);
 
+  // Small header summary (optional but helpful)
+  const counts = useMemo(() => {
+    const c = { total: refunds.length, requested: 0, approved: 0, denied: 0, refunded: 0 };
+    refunds.forEach((r) => {
+      const k = statusKey(r.status);
+      if (k in c) c[k] += 1;
+    });
+    return c;
+  }, [refunds]);
+
   return (
     <div className="pm-tab-content">
       <div className="pm-tab-header">
         <h2>Refund Management</h2>
         <p>
-          Review and process customer refund requests. Approve or deny requests, and mark refunds as completed when products are returned.
+          Review and process customer refund requests. Approve/deny requests, then mark refunded when products are returned.
         </p>
       </div>
 
       <div className="pm-tab-body">
-        {/* Filter */}
-        <div className="pm-form">
-          <div className="pm-field">
+        {/* Toolbar */}
+        <div className="refunds-toolbar">
+          <div className="refunds-filter">
             <label htmlFor="refund-status-filter">Filter by Status</label>
             <select
               id="refund-status-filter"
               value={refundStatusFilter}
               onChange={(e) => setRefundStatusFilter(e.target.value)}
-              style={{
-                fontFamily: 'inherit',
-                padding: '8px 12px',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                fontSize: '14px',
-                width: '100%',
-                maxWidth: '300px'
-              }}
             >
               <option value="">All Statuses</option>
               <option value="REQUESTED">Requested</option>
@@ -118,332 +145,246 @@ export default function RefundsTab() {
             </select>
           </div>
 
-          <div className="pm-form-actions">
-            <button
-              type="button"
-              className="pm-button"
-              style={{ maxWidth: 180 }}
-              onClick={handleFetchRefunds}
-            >
-              Refresh List
+          <div className="refunds-toolbar-actions">
+            <button type="button" className="pm-btn pm-btn--outline" onClick={handleFetchRefunds}>
+              Refresh
             </button>
           </div>
         </div>
 
-        {loadingRefunds && <p>Loading refund requests…</p>}
-        {!loadingRefunds && refundError && (
-          <p style={{ color: "#b91c1c", fontSize: 13 }}>
-            {refundError}
-          </p>
-        )}
+        {/* Small summary row */}
+        <div className="refunds-summary">
+          <div className="refunds-summary-pill">
+            <span>Total</span>
+            <strong>{counts.total}</strong>
+          </div>
+          <div className="refunds-summary-pill">
+            <span>Requested</span>
+            <strong>{counts.requested}</strong>
+          </div>
+          <div className="refunds-summary-pill">
+            <span>Approved</span>
+            <strong>{counts.approved}</strong>
+          </div>
+          <div className="refunds-summary-pill">
+            <span>Denied</span>
+            <strong>{counts.denied}</strong>
+          </div>
+          <div className="refunds-summary-pill">
+            <span>Refunded</span>
+            <strong>{counts.refunded}</strong>
+          </div>
+        </div>
 
-        {/* Refund list */}
+        {loadingRefunds && <p>Loading refund requests…</p>}
+        {!loadingRefunds && refundError && <p className="refunds-error">{refundError}</p>}
+
+        {/* Cards */}
         {!loadingRefunds && !refundError && refunds.length > 0 && (
-          <ul className="pm-list">
-            {refunds.map((refund) => (
-              <li key={refund.id} className="pm-list-item">
-                <div className="pm-list-item-header">
-                  <div>
-                    <span>Refund #{refund.id?.slice(0, 8) || "N/A"}</span>
-                    <span
-                      style={{
-                        marginLeft: "12px",
-                        fontSize: 12,
-                        padding: "2px 8px",
-                        borderRadius: 4,
-                        background:
-                          refund.status === "REQUESTED"
-                            ? "#fef3c7"
-                            : refund.status === "APPROVED"
-                            ? "#dbeafe"
-                            : refund.status === "DENIED"
-                            ? "#fee2e2"
-                            : "#dcfce7",
-                        color:
-                          refund.status === "REQUESTED"
-                            ? "#92400e"
-                            : refund.status === "APPROVED"
-                            ? "#1e40af"
-                            : refund.status === "DENIED"
-                            ? "#991b1b"
-                            : "#166534",
-                        textTransform: "uppercase",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {refund.status || "UNKNOWN"}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-end",
-                      gap: 2,
-                    }}
-                  >
-                    {refund.refundAmount && (
-                      <span>
-                        <strong>
-                          ${Number(refund.refundAmount).toFixed(2)}
-                        </strong>
+          <div className="refunds-grid">
+            {refunds.map((refund) => {
+              const statusText = String(refund.status || "UNKNOWN").toUpperCase();
+              const chip = statusKey(refund.status);
+
+              return (
+                <article key={refund.id} className="refund-card">
+                  <div className="refund-card__header">
+                    <div className="refund-card__title">
+                      <div className="refund-card__id">
+                        Refund <span className="refund-mono">#{shortId(refund.id)}</span>
+                      </div>
+
+                      <span className={`refund-chip refund-chip--${chip}`}>
+                        {statusText}
                       </span>
-                    )}
-                    {refund.createdAt && (
-                      <span style={{ fontSize: 12, color: "#555" }}>
-                        {new Date(refund.createdAt).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="pm-list-item-meta">
-                  <span>Order ID: {refund.orderId || "—"}</span>
-                  {refund.userEmail && (
-                    <span>Customer: {refund.userEmail}</span>
-                  )}
-                </div>
-                {refund.items && refund.items.length > 0 && (
-                  <div style={{ marginTop: 8, fontSize: 13, color: "#666" }}>
-                    <strong>Items:</strong>
-                    <ul style={{ marginTop: 4, paddingLeft: 20 }}>
-                      {refund.items.map((item, idx) => (
-                        <li key={idx}>
-                          {item.productId} / {item.sku} - Qty: {item.quantity}
-                          {item.reason && ` (${item.reason})`}
-                          {item.unitPriceAtPurchase && (
-                            <span style={{ marginLeft: 8, color: "#555" }}>
-                              @ ${Number(item.unitPriceAtPurchase).toFixed(2)}
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {refund.customerNote && (
-                  <p className="pm-list-item-description">
-                    <strong>Customer Note:</strong> {refund.customerNote}
-                  </p>
-                )}
-                {refund.managerNote && (
-                  <p className="pm-list-item-description">
-                    <strong>Manager Note:</strong> {refund.managerNote}
-                  </p>
-                )}
-                {refund.refundSubtotal && (
-                  <div style={{ marginTop: 8, fontSize: 13, color: "#666" }}>
-                    <div>
-                      Subtotal: ${Number(refund.refundSubtotal).toFixed(2)}
                     </div>
-                    {refund.refundTax && (
-                      <div>Tax: ${Number(refund.refundTax).toFixed(2)}</div>
-                    )}
-                    {refund.refundAmount && (
-                      <div style={{ fontWeight: 600, marginTop: 4 }}>
-                        Total Refund: ${Number(refund.refundAmount).toFixed(2)}
+
+                    <div className="refund-card__money">
+                      <div className="refund-card__amount">{money(refund.refundAmount)}</div>
+                      <div className="refund-card__date">{dateLabel(refund.createdAt)}</div>
+                    </div>
+                  </div>
+
+                  <div className="refund-kv">
+                    <div className="refund-kv__item">
+                      <div className="refund-kv__k">Order ID</div>
+                      <div className="refund-kv__v refund-mono">{refund.orderId || "—"}</div>
+                    </div>
+
+                    <div className="refund-kv__item">
+                      <div className="refund-kv__k">Customer</div>
+                      <div className="refund-kv__v">{refund.userEmail || "—"}</div>
+                    </div>
+
+                    <div className="refund-kv__item">
+                      <div className="refund-kv__k">Subtotal</div>
+                      <div className="refund-kv__v">{money(refund.refundSubtotal)}</div>
+                    </div>
+
+                    <div className="refund-kv__item">
+                      <div className="refund-kv__k">Tax</div>
+                      <div className="refund-kv__v">{money(refund.refundTax)}</div>
+                    </div>
+                  </div>
+
+                  <details className="refund-details">
+                    <summary className="refund-details__summary">View details</summary>
+
+                    {refund.items && refund.items.length > 0 && (
+                      <div className="refund-section">
+                        <div className="refund-section__title">Items</div>
+                        <ul className="refund-items">
+                          {refund.items.map((item, idx) => (
+                            <li key={idx} className="refund-item">
+                              <div className="refund-item__top">
+                                <span className="refund-mono">{item.productId || "—"}</span>
+                                <span className="refund-dot">•</span>
+                                <span>{item.sku || "—"}</span>
+                              </div>
+                              <div className="refund-item__meta">
+                                <span>Qty: {item.quantity ?? "—"}</span>
+                                <span className="refund-dot">•</span>
+                                <span>Unit: {money(item.unitPriceAtPurchase)}</span>
+                                {item.reason ? (
+                                  <>
+                                    <span className="refund-dot">•</span>
+                                    <span>Reason: {item.reason}</span>
+                                  </>
+                                ) : null}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
+
+                    {refund.customerNote && (
+                      <div className="refund-section">
+                        <div className="refund-section__title">Customer note</div>
+                        <div className="refund-note">{refund.customerNote}</div>
+                      </div>
+                    )}
+
+                    {refund.managerNote && (
+                      <div className="refund-section">
+                        <div className="refund-section__title">Manager note</div>
+                        <div className="refund-note">{refund.managerNote}</div>
+                      </div>
+                    )}
+                  </details>
+
+                  <div className="refund-actions">
+                    {statusText === "REQUESTED" && (
+                      <>
+                        <button
+                          type="button"
+                          className="pm-btn pm-btn--approve"
+                          onClick={() => handleOpenDecisionModal(refund.id, "approve")}
+                        >
+                          Approve
+                        </button>
+
+                        <button
+                          type="button"
+                          className="pm-btn pm-btn--deny"
+                          onClick={() => handleOpenDecisionModal(refund.id, "deny")}
+                        >
+                          Deny
+                        </button>
+                      </>
+                    )}
+
+                    {statusText === "APPROVED" && (
+                      <button
+                        type="button"
+                        className="pm-btn pm-btn--primary"
+                        onClick={() => handleOpenDecisionModal(refund.id, "markRefunded")}
+                      >
+                        Mark as Refunded
+                      </button>
+                    )}
+
+                    {(statusText === "DENIED" || statusText === "REFUNDED") && (
+                      <span className="refund-muted">
+                        No actions available for <strong>{statusText}</strong>
+                      </span>
+                    )}
                   </div>
-                )}
-                {/* Action buttons */}
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    marginTop: 12,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  {refund.status === "REQUESTED" && (
-                    <>
-                      <button
-                        type="button"
-                        className="pm-button"
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: 12,
-                          maxWidth: 120,
-                          background: "#166534",
-                          color: "white",
-                        }}
-                        onClick={() =>
-                          handleOpenDecisionModal(refund.id, "approve")
-                        }
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        className="pm-button"
-                        style={{
-                          padding: "6px 12px",
-                          fontSize: 12,
-                          maxWidth: 120,
-                          background: "#b91c1c",
-                          color: "white",
-                        }}
-                        onClick={() =>
-                          handleOpenDecisionModal(refund.id, "deny")
-                        }
-                      >
-                        Deny
-                      </button>
-                    </>
-                  )}
-                  {refund.status === "APPROVED" && (
-                    <button
-                      type="button"
-                      className="pm-button"
-                      style={{
-                        padding: "6px 12px",
-                        fontSize: 12,
-                        maxWidth: 180,
-                        background: "#3d211c",
-                        color: "white",
-                      }}
-                      onClick={() =>
-                        handleOpenDecisionModal(refund.id, "markRefunded")
-                      }
-                    >
-                      Mark as Refunded
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+                </article>
+              );
+            })}
+          </div>
         )}
 
-        {!loadingRefunds &&
-          !refundError &&
-          refunds.length === 0 && (
-            <p style={{ fontSize: 13, color: "#555", marginTop: 12 }}>
-              No refund requests found.
-            </p>
-          )}
+        {!loadingRefunds && !refundError && refunds.length === 0 && (
+          <p style={{ fontSize: 13, color: "#555", marginTop: 12 }}>No refund requests found.</p>
+        )}
       </div>
 
-      {/* Decision Modal */}
+      {/* Modal */}
       {showDecisionModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-          onClick={handleCloseDecisionModal}
-        >
-          <div
-            style={{
-              background: "white",
-              padding: "24px",
-              borderRadius: 8,
-              maxWidth: 500,
-              width: "90%",
-              maxHeight: "80vh",
-              overflow: "auto",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: 16 }}>
-              {decisionAction === "approve"
-                ? "Approve Refund Request"
-                : decisionAction === "deny"
-                ? "Deny Refund Request"
-                : "Mark Refund as Completed"}
-            </h3>
-            <p style={{ fontSize: 14, color: "#666", marginBottom: 16 }}>
-              {decisionAction === "approve"
-                ? "This will approve the refund request. The customer will be notified when the product is returned."
-                : decisionAction === "deny"
-                ? "This will deny the refund request. The customer will be notified."
-                : "This will mark the refund as completed. Stock will be updated and the customer will be notified."}
-            </p>
+        <div className="refund-modal-overlay" onClick={handleCloseDecisionModal}>
+          <div className="refund-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="refund-modal__head">
+              <h3 className="refund-modal__title">
+                {decisionAction === "approve"
+                  ? "Approve Refund Request"
+                  : decisionAction === "deny"
+                  ? "Deny Refund Request"
+                  : "Mark Refund as Completed"}
+              </h3>
+
+              <p className="refund-modal__subtitle">
+                {decisionAction === "approve"
+                  ? "This will approve the refund request. The customer will be notified when the product is returned."
+                  : decisionAction === "deny"
+                  ? "This will deny the refund request. The customer will be notified."
+                  : "This will mark the refund as completed. Stock will be updated and the customer will be notified."}
+              </p>
+            </div>
+
             {decisionAction !== "markRefunded" && (
-              <div className="pm-field" style={{ marginBottom: 16 }}>
-                <label htmlFor="decision-note">Manager Note (Optional)</label>
+              <div className="refund-modal__body">
+                <label className="refund-modal__label" htmlFor="decision-note">
+                  Manager Note (Optional)
+                </label>
                 <textarea
                   id="decision-note"
                   value={decisionNote}
                   onChange={(e) => setDecisionNote(e.target.value)}
-                  rows={3}
-                  style={{
-                    fontFamily: 'inherit',
-                    padding: '8px 12px',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    width: '100%',
-                    resize: 'vertical'
-                  }}
+                  rows={4}
+                  className="refund-modal__textarea"
                   placeholder="Add a note for the customer or internal records..."
                 />
               </div>
             )}
-            <div
-              style={{
-                display: "flex",
-                gap: 12,
-                justifyContent: "flex-end",
-                marginTop: 20,
-              }}
-            >
-              <button
-                type="button"
-                className="pm-button"
-                style={{
-                  padding: "8px 16px",
-                  background: "#f5f5f5",
-                  color: "#333",
-                }}
-                onClick={handleCloseDecisionModal}
-              >
+
+            <div className="refund-modal__actions">
+              <button type="button" className="pm-btn pm-btn--outline" onClick={handleCloseDecisionModal}>
                 Cancel
               </button>
+
               <button
                 type="button"
-                className="pm-button"
-                style={{
-                  padding: "8px 16px",
-                  background:
-                    decisionAction === "deny"
-                      ? "#b91c1c"
-                      : decisionAction === "markRefunded"
-                      ? "#3d211c"
-                      : "#166534",
-                  color: "white",
-                }}
+                className={
+                  decisionAction === "deny"
+                    ? "pm-btn pm-btn--deny"
+                    : decisionAction === "markRefunded"
+                    ? "pm-btn pm-btn--primary"
+                    : "pm-btn pm-btn--approve"
+                }
                 onClick={handleSubmitDecision}
               >
-                {decisionAction === "approve"
-                  ? "Approve"
-                  : decisionAction === "deny"
-                  ? "Deny"
-                  : "Mark as Refunded"}
+                {decisionAction === "approve" ? "Approve" : decisionAction === "deny" ? "Deny" : "Mark as Refunded"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Status Message Toast */}
+      {/* Toast */}
       {statusMessage && (
-        <div
-          className="pm-toast"
-          style={
-            statusKind === "error"
-              ? { backgroundColor: "#b91c1c", color: "#fff" }
-              : {}
-          }
-          role="status"
-        >
+        <div className={`pm-toast ${statusKind === "error" ? "pm-toast--error" : ""}`} role="status">
           {statusMessage}
         </div>
       )}
