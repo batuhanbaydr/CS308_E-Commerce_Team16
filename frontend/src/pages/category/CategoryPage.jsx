@@ -1,35 +1,20 @@
-// src/pages/category/Sweatshirts.jsx
+// src/pages/category/CategoryPage.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   meRequest,
-  logoutRequest,
   listProducts,
   addToBasket,
   getWishlist,
   addWishlistItem,
   removeWishlistItem,
+  listCategoriesPublic,
 } from "../../lib/api";
-
-import searchIcon from "../../assets/search.png";
-import bagIcon from "../../assets/bag.png";
-import { useCartDrawer } from "../../context/CartDrawerContext.jsx";
-
-const hasAdminAccess = (user) =>
-  user?.roles?.includes("SALES_MANAGER") ||
-  user?.roles?.includes("PRODUCT_MANAGER") ||
-  user?.roles?.includes("SUPPORT_AGENT") ||
-  user?.role === "SALES_MANAGER" ||
-  user?.role === "PRODUCT_MANAGER" ||
-  user?.role === "SUPPORT_AGENT";
-
-// NOTE: removed static COLORS here – now built dynamically from variants
+import CategoryTopbar from "../../components/CategoryTopbar.jsx";
 
 const SIZES = ["XS", "S", "M", "L", "XL"];
+const CART_KEY = "tidl_cart_id";
 
-// === shared with Search.jsx =====================================
-
-// color tokens that should only match against variant colors
 const COLOR_KEYWORDS = new Set([
   "white",
   "cream",
@@ -38,17 +23,15 @@ const COLOR_KEYWORDS = new Set([
   "brown",
   "grey",
   "black",
-  "blue", // added to match Shirts behavior
+  "blue",
 ]);
 
-function normalize(x) {
-  return String(x || "").trim().toLowerCase();
+function normalize(str) {
+  return String(str || "").trim().toLowerCase();
 }
 
 function buildSearchText(product) {
   const parts = [];
-
-  // main fields
   parts.push(
     product.name,
     product.description,
@@ -57,7 +40,6 @@ function buildSearchText(product) {
     product.madeIn
   );
 
-  // variants: color, size, etc.
   (product.variants || []).forEach((v) => {
     if (v.color) parts.push(v.color);
     if (v.size) parts.push(v.size);
@@ -67,21 +49,29 @@ function buildSearchText(product) {
   return normalize(parts.join(" "));
 }
 
-// ================================================================
+function slugify(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
-export default function Sweatshirts() {
+export default function CategoryPage() {
   const navigate = useNavigate();
-  const CART_KEY = "tidl_cart_id";
-  const { openCart } = useCartDrawer();
+  const { slug } = useParams();
 
   const [user, setUser] = useState(null);
-  const [showMenu, setShowMenu] = useState(false);
+
+  // categories (used to resolve slug -> real category name)
+  const [categories, setCategories] = useState([]);
+  const [catLoading, setCatLoading] = useState(true);
 
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productError, setProductError] = useState("");
 
-  // wishlist ids are stored as STRINGS to avoid Set mismatch bugs
   const [wishlistIds, setWishlistIds] = useState(() => new Set());
 
   const [selectedSizes, setSelectedSizes] = useState(() => new Map());
@@ -94,38 +84,13 @@ export default function Sweatshirts() {
   const toastTimeoutRef = useRef(null);
 
   const [hoveredProductId, setHoveredProductId] = useState(null);
-
-  // 'priceAsc' | 'priceDesc' | 'popularity' | null
   const [sortOption, setSortOption] = useState(null);
 
   const [priceBounds, setPriceBounds] = useState({ min: 0, max: 100 });
   const [priceRange, setPriceRange] = useState({ min: 0, max: 100 });
 
-  // 🟡 dynamic color pills built from product variants (same idea as Shirts)
-  const colorOptions = useMemo(() => {
-    const seen = new Set();
-
-    (products || []).forEach((p) => {
-      (p.variants || []).forEach((v) => {
-        const raw = (v.color || "").trim();
-        if (!raw) return;
-        seen.add(raw);
-      });
-    });
-
-    return Array.from(seen)
-      .sort((a, b) => a.localeCompare(b))
-      .map((c) => ({
-        id: `color-${c.toLowerCase().replace(/\s+/g, "-")}`,
-        label: c.toUpperCase(), // DISPLAY: "LIGHT CAMEL"
-        value: c.toLowerCase(), // FILTER VALUE: "light camel"
-      }));
-  }, [products]);
-
-  // 🔍 sidebar search state (same logic as Search.jsx)
   const [searchTerm, setSearchTerm] = useState("");
 
-  // toast helpers
   const scheduleMessageClear = () => {
     if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
     toastTimeoutRef.current = window.setTimeout(() => {
@@ -134,7 +99,34 @@ export default function Sweatshirts() {
     }, 2400);
   };
 
-  // load current user
+  // ✅ load categories once (for slug -> name)
+  useEffect(() => {
+    (async () => {
+      setCatLoading(true);
+      try {
+        const res = await listCategoriesPublic();
+        const arr = Array.isArray(res?.data) ? res.data : [];
+        setCategories(arr);
+      } catch {
+        setCategories([]);
+      } finally {
+        setCatLoading(false);
+      }
+    })();
+  }, []);
+
+  // ✅ resolve current category by slug (backend "name")
+  const currentCategory = useMemo(() => {
+    const list = Array.isArray(categories) ? categories : [];
+    return list.find((c) => slugify(c?.name) === slug) || null;
+  }, [categories, slug]);
+
+  const currentCategoryName = currentCategory?.name || "";
+  const currentCategoryLabel = currentCategoryName
+    ? String(currentCategoryName).toUpperCase()
+    : String(slug || "").toUpperCase();
+
+  // ✅ load user (needed for wishlist + cart)
   useEffect(() => {
     (async () => {
       try {
@@ -146,16 +138,13 @@ export default function Sweatshirts() {
     })();
 
     return () => {
-      if (toastTimeoutRef.current) {
-        window.clearTimeout(toastTimeoutRef.current);
-      }
+      if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
     };
   }, []);
 
-  // load wishlist (backend) whenever user is present
+  // ✅ load wishlist when user changes
   useEffect(() => {
     if (!user) {
-      // if user logs out, clear local wishlist view
       setWishlistIds(new Set());
       return;
     }
@@ -171,12 +160,21 @@ export default function Sweatshirts() {
     })();
   }, [user]);
 
-  // load products from backend
+  // ✅ load products for the category
   useEffect(() => {
+    if (catLoading) return;
+
+    if (!currentCategoryName) {
+      setProducts([]);
+      setLoadingProducts(false);
+      setProductError("Category not found.");
+      return;
+    }
+
     setLoadingProducts(true);
     setProductError("");
 
-    listProducts("Sweatshirt")
+    listProducts(currentCategoryName)
       .then((res) => {
         const data = res.data || [];
         setProducts(data);
@@ -193,6 +191,9 @@ export default function Sweatshirts() {
           const max = Math.max(...prices);
           setPriceBounds({ min, max });
           setPriceRange({ min, max });
+        } else {
+          setPriceBounds({ min: 0, max: 100 });
+          setPriceRange({ min: 0, max: 100 });
         }
       })
       .catch((err) => {
@@ -200,23 +201,31 @@ export default function Sweatshirts() {
         setProductError("Could not load products.");
       })
       .finally(() => setLoadingProducts(false));
-  }, []);
+  }, [catLoading, currentCategoryName]);
 
-  const handleLogout = async () => {
-    try {
-      await logoutRequest();
-    } catch {}
-    setUser(null);
-    navigate("/home");
-  };
+  // dynamic color pills from variants
+  const colorOptions = useMemo(() => {
+    const seen = new Set();
+    (products || []).forEach((p) => {
+      (p.variants || []).forEach((v) => {
+        const raw = (v.color || "").trim();
+        if (!raw) return;
+        seen.add(raw);
+      });
+    });
 
-  const go = (path) => () => navigate(path);
+    return Array.from(seen)
+      .sort((a, b) => a.localeCompare(b))
+      .map((c) => ({
+        id: `color-${c.toLowerCase().replace(/\s+/g, "-")}`,
+        label: c.toUpperCase(),
+        value: c.toLowerCase(),
+      }));
+  }, [products]);
 
-  // ==== FILTER + SEARCH + SORT ====================================
   const filteredProducts = useMemo(() => {
     if (!products) return [];
 
-    // Attach helper fields for filter + sort + popularity + search
     const withMeta = products.map((p) => {
       const price = Number(
         p.basePrice ??
@@ -227,7 +236,6 @@ export default function Sweatshirts() {
       const color =
         (p.variants && p.variants[0] && p.variants[0].color) || "";
 
-      // build sizeStock: size -> total stock
       const sizeStock = {};
       const sizeToSku = {};
       (p.variants || []).forEach((v) => {
@@ -236,19 +244,12 @@ export default function Sweatshirts() {
         const stock =
           typeof v.stock === "number" ? v.stock : Number(v.stock || 0);
         sizeStock[sizeKey] = (sizeStock[sizeKey] || 0) + stock;
-
-        if (v.sku) {
-          sizeToSku[sizeKey] = v.sku;
-        }
+        if (v.sku) sizeToSku[sizeKey] = v.sku;
       });
 
       const allSizes = Object.keys(sizeStock);
       const sizesInStock = allSizes.filter((s) => sizeStock[s] > 0);
 
-      // popularity = number of purchases for this product
-      const popularity = Number(p.purchaseCount ?? p.totalPurchases ?? 0);
-
-      // star rating helpers from backend
       const avg =
         typeof p.averageRating === "number"
           ? p.averageRating
@@ -262,7 +263,6 @@ export default function Sweatshirts() {
       const safeAvg = Number.isFinite(avg) ? avg : 0;
       const safeCount = Number.isFinite(count) ? count : 0;
 
-      // search helpers
       const searchText = buildSearchText(p);
       const variantColors = (p.variants || [])
         .map((v) => normalize(v.color || ""))
@@ -276,7 +276,6 @@ export default function Sweatshirts() {
         _sizesInStock: sizesInStock,
         _sizeStock: sizeStock,
         _sizeToSku: sizeToSku,
-        _popularity: popularity,
         _rating: safeAvg,
         _ratingCount: safeCount,
         _searchText: searchText,
@@ -284,7 +283,7 @@ export default function Sweatshirts() {
       };
     });
 
-    // FILTERS (price/color/size)
+    // FILTERS
     let list = withMeta.filter((p) => {
       const priceOk = p._price >= priceRange.min && p._price <= priceRange.max;
 
@@ -293,16 +292,16 @@ export default function Sweatshirts() {
         colorFilters.has(String(p._color).toLowerCase());
 
       const sizeOk =
-        sizeFilters.size === 0 || p._sizesInStock.some((s) => sizeFilters.has(s));
+        sizeFilters.size === 0 ||
+        p._sizesInStock.some((s) => sizeFilters.has(s));
 
       return priceOk && colorOk && sizeOk;
     });
 
-    // 🔍 SEARCH using same token logic as Search.jsx
+    // SEARCH
     const q = normalize(searchTerm);
     if (q) {
       const tokens = q.split(/\s+/).filter(Boolean);
-
       list = list.filter((p) =>
         tokens.every((tok) => {
           if (COLOR_KEYWORDS.has(tok)) {
@@ -319,18 +318,13 @@ export default function Sweatshirts() {
     } else if (sortOption === "priceDesc") {
       list = [...list].sort((a, b) => b._price - a._price);
     } else if (sortOption === "popularity") {
-      // Popularity = highest avg rating first, then most ratings
       list = [...list].sort((a, b) => {
         const ar = a._rating ?? 0;
         const br = b._rating ?? 0;
-
         if (br !== ar) return br - ar;
-
         const ac = a._ratingCount ?? 0;
         const bc = b._ratingCount ?? 0;
-
         if (bc !== ac) return bc - ac;
-
         return 0;
       });
     }
@@ -338,7 +332,6 @@ export default function Sweatshirts() {
     return list;
   }, [products, priceRange, colorFilters, sizeFilters, sortOption, searchTerm]);
 
-  // wishlist toggle (backend)
   const toggleFavorite = async (productId) => {
     const pid = String(productId);
 
@@ -370,27 +363,12 @@ export default function Sweatshirts() {
       }
     } catch (err) {
       console.error("Wishlist toggle failed", err);
-
-      const status = err?.response?.status;
-      const serverMsg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        (typeof err?.response?.data === "string" ? err.response.data : "") ||
-        err?.message;
-
-      if (status === 401 || status === 403) {
-        setNotification("Session expired. Please sign in again.");
-      } else if (status === 404) {
-        setNotification("Wishlist endpoint not found (route mismatch).");
-      } else {
-        setNotification(serverMsg || "Could not update wishlist.");
-      }
+      setNotification("Could not update wishlist.");
     }
 
     scheduleMessageClear();
   };
 
-  // size + cart helpers
   const handleSizeSelect = (productId, size) => {
     setSelectedSizes((prev) => {
       const next = new Map(prev);
@@ -480,108 +458,18 @@ export default function Sweatshirts() {
     }
   };
 
-  // ===== RENDER ===================================================
   return (
     <div className="category-page">
-      <header className="category-topbar">
-        <button className="category-brand" onClick={() => navigate("/home")}>
-          TIDL
-        </button>
-        <nav className="category-nav">
-          <button
-            onClick={() => navigate("/category/sweatshirts")}
-            className="category-nav-item category-nav-item--active"
-          >
-            SWEATSHIRTS
-          </button>
-          <button
-            onClick={() => navigate("/category/shirts")}
-            className="category-nav-item"
-          >
-            SHIRTS
-          </button>
-          <button
-            onClick={() => navigate("/category/pants")}
-            className="category-nav-item"
-          >
-            PANTS
-          </button>
-
-        </nav>
-        <div className="category-actions">
-          {/* keep icon, but category-wide search stays on this page */}
-          <img
-            src={searchIcon}
-            alt="Search"
-            className="category-icon"
-            onClick={() => navigate("/search")}
-          />
-
-          {user ? (
-            <span
-              className="login-topbar-link"
-              style={{ cursor: "default", marginRight: "0.5rem" }}
-            >
-              {`HEY! ${user.name}`}
-            </span>
-          ) : (
-            <span
-              className="home-signin"
-              onClick={() => navigate("/login")}
-              style={{ marginRight: "0.5rem", cursor: "pointer" }}
-            >
-              SIGN IN
-            </span>
-          )}
-          {user && (
-            <div
-              className="home-menu"
-              onClick={() => setShowMenu((p) => !p)}
-              style={{ marginRight: "0.5rem" }}
-            >
-              <span />
-              <span />
-              <span />
-              {showMenu && (
-                <div className="details-menu">
-                  <button className="details-menu-item" onClick={go("/profile")}>
-                    Details
-                  </button>
-
-                  <button className="details-menu-item" onClick={go("/wishlist")}>
-                    Wishlist
-                  </button>
-
-                  {/* 🔐 Only for SALES_MANAGER / PRODUCT_MANAGER / SUPPORT_AGENT */}
-                  {hasAdminAccess(user) && (
-                    <button
-                      className="details-menu-item"
-                      onClick={go("/admin")}
-                    >
-                      Admin Panel
-                    </button>
-                  )}
-
-                  <button className="details-menu-item" onClick={handleLogout}>
-                    Log-out
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-          <img src={bagIcon} alt="Cart" className="category-icon" onClick={openCart} />
-        </div>
-      </header>
+      {/* ✅ Dynamic topbar */}
+      <CategoryTopbar />
 
       <main className="category-layout">
-        {/* SIDEBAR */}
         <aside className="category-sidebar">
-          {/* 🔍 NEW: search bar above CLEAR FILTERS */}
           <input
             id="category-sidebar-search"
             type="text"
             className="category-search-input"
-            placeholder="Search within this category"
+            placeholder={`Search in ${currentCategoryLabel}`}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -595,10 +483,12 @@ export default function Sweatshirts() {
               setSortOption(null);
               setSearchTerm("");
             }}
+            type="button"
           >
             CLEAR FILTERS
           </button>
 
+          {/* SORT */}
           <section className="category-filter">
             <h3 className="category-filter-title">SORT</h3>
 
@@ -609,6 +499,7 @@ export default function Sweatshirts() {
               onClick={() =>
                 setSortOption((prev) => (prev === "priceAsc" ? null : "priceAsc"))
               }
+              type="button"
             >
               Price: Low to High
             </button>
@@ -620,6 +511,7 @@ export default function Sweatshirts() {
               onClick={() =>
                 setSortOption((prev) => (prev === "priceDesc" ? null : "priceDesc"))
               }
+              type="button"
             >
               Price: High to Low
             </button>
@@ -631,15 +523,21 @@ export default function Sweatshirts() {
               onClick={() =>
                 setSortOption((prev) => (prev === "popularity" ? null : "popularity"))
               }
+              type="button"
             >
               Popularity
             </button>
 
-            <button className="category-filter-option" onClick={() => setSortOption(null)}>
+            <button
+              className="category-filter-option"
+              onClick={() => setSortOption(null)}
+              type="button"
+            >
               New Arrivals
             </button>
           </section>
 
+          {/* COLOR */}
           <section className="category-filter">
             <h3 className="category-filter-title">COLOR</h3>
             <div className="category-filter-pills">
@@ -658,6 +556,7 @@ export default function Sweatshirts() {
                       });
                     }}
                     aria-pressed={active}
+                    type="button"
                   >
                     {c.label}
                   </button>
@@ -666,6 +565,7 @@ export default function Sweatshirts() {
             </div>
           </section>
 
+          {/* SIZE */}
           <section className="category-filter">
             <h3 className="category-filter-title">SIZE</h3>
             <div className="category-filter-pills">
@@ -684,6 +584,7 @@ export default function Sweatshirts() {
                       });
                     }}
                     aria-pressed={active}
+                    type="button"
                   >
                     {s}
                   </button>
@@ -692,6 +593,7 @@ export default function Sweatshirts() {
             </div>
           </section>
 
+          {/* PRICE */}
           <section className="category-filter">
             <h3 className="category-filter-title">PRICE</h3>
             <div className="price-filter-container">
@@ -702,7 +604,10 @@ export default function Sweatshirts() {
                   max={priceBounds.max}
                   value={priceRange.min}
                   onChange={(e) => {
-                    const newMin = Math.min(Number(e.target.value), priceRange.max - 1);
+                    const newMin = Math.min(
+                      Number(e.target.value),
+                      priceRange.max - 1
+                    );
                     setPriceRange((p) => ({ ...p, min: newMin }));
                   }}
                   className="price-slider price-slider--min"
@@ -713,7 +618,10 @@ export default function Sweatshirts() {
                   max={priceBounds.max}
                   value={priceRange.max}
                   onChange={(e) => {
-                    const newMax = Math.max(Number(e.target.value), priceRange.min + 1);
+                    const newMax = Math.max(
+                      Number(e.target.value),
+                      priceRange.min + 1
+                    );
                     setPriceRange((p) => ({ ...p, max: newMax }));
                   }}
                   className="price-slider price-slider--max"
@@ -726,7 +634,6 @@ export default function Sweatshirts() {
           </section>
         </aside>
 
-        {/* PRODUCT GRID */}
         <section className="category-products">
           {loadingProducts && <p>Loading products…</p>}
           {!loadingProducts && productError && <p>{productError}</p>}
@@ -752,8 +659,7 @@ export default function Sweatshirts() {
                 product._price ??
                 Number(
                   product.basePrice ??
-                    (product.variants && product.variants[0] && product.variants[0].price) ??
-                    0
+                    (product.variants?.[0]?.price ?? 0)
                 );
               const displayPrice = `$${priceNumber.toFixed(2)}`;
 
@@ -763,7 +669,8 @@ export default function Sweatshirts() {
               );
               const productOutOfStock = totalStock <= 0;
 
-              const primaryImage = product.mainImageUrl || (product.imageUrls || [])[0] || "";
+              const primaryImage =
+                product.mainImageUrl || (product.imageUrls || [])[0] || "";
               const secondaryImage =
                 product.imageUrls && product.imageUrls.length > 1
                   ? product.imageUrls[1]
@@ -772,8 +679,7 @@ export default function Sweatshirts() {
               const isHovered = hoveredProductId === product.id;
               const displayImage = isHovered ? secondaryImage : primaryImage;
 
-              const colorText =
-                (product.variants && product.variants[0] && product.variants[0].color) || "-";
+              const colorText = product.variants?.[0]?.color || "-";
 
               const goDetail = () => navigate(`/product/${product.id}`);
 
@@ -793,13 +699,16 @@ export default function Sweatshirts() {
                     />
 
                     <button
-                      className={`favorite-button${isFavorite ? " favorite-button--active" : ""}`}
+                      className={`favorite-button${
+                        isFavorite ? " favorite-button--active" : ""
+                      }`}
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         toggleFavorite(pid);
                       }}
                       aria-label="Add to favorites"
+                      type="button"
                     >
                       {isFavorite ? "♥" : "♡"}
                     </button>
@@ -823,12 +732,18 @@ export default function Sweatshirts() {
                   </div>
 
                   <div className="product-info">
-                    <h3 className="product-name" onClick={goDetail} style={{ cursor: "pointer" }}>
+                    <h3
+                      className="product-name"
+                      onClick={goDetail}
+                      style={{ cursor: "pointer" }}
+                    >
                       {product.name}
                     </h3>
+
                     <p className="product-meta">
                       <span>COLOR: {String(colorText).toUpperCase()}</span>
                     </p>
+
                     <p className="product-price">{displayPrice}</p>
 
                     <div className="product-size-selector">
@@ -838,7 +753,8 @@ export default function Sweatshirts() {
                           const stockForSize = sizeStock[size] ?? 0;
                           const isOutOfStock = stockForSize <= 0;
 
-                          const isSelected = selectedSizes.get(product.id) === size;
+                          const isSelected =
+                            selectedSizes.get(product.id) === size;
                           const cartQuantity = getCartQuantity(product.id, size);
                           const isInCart = cartQuantity > 0;
 
@@ -847,13 +763,19 @@ export default function Sweatshirts() {
                               key={size}
                               className={
                                 "size-selector-button" +
-                                (isSelected ? " size-selector-button--selected" : "") +
+                                (isSelected
+                                  ? " size-selector-button--selected"
+                                  : "") +
                                 (isInCart ? " size-selector-button--in-cart" : "") +
                                 (isOutOfStock ? " size-selector-button--oos" : "")
                               }
-                              onClick={() => !isOutOfStock && handleSizeSelect(product.id, size)}
+                              onClick={() =>
+                                !isOutOfStock &&
+                                handleSizeSelect(product.id, size)
+                              }
                               aria-label={`Select size ${size}`}
                               disabled={isOutOfStock}
+                              type="button"
                             >
                               {size}
                             </button>
@@ -864,8 +786,11 @@ export default function Sweatshirts() {
 
                     <button
                       className="product-add-to-basket"
-                      onClick={() => !productOutOfStock && handleAddToCart(product)}
+                      onClick={() =>
+                        !productOutOfStock && handleAddToCart(product)
+                      }
                       disabled={productOutOfStock}
+                      type="button"
                       style={{
                         marginTop: "0.5rem",
                         width: "50%",
@@ -884,17 +809,6 @@ export default function Sweatshirts() {
                       }}
                     >
                       {productOutOfStock ? "Out of stock" : "Add to basket"}
-                      {!productOutOfStock && (
-                        <img
-                          src={bagIcon}
-                          alt="cart"
-                          style={{
-                            width: "14px",
-                            height: "14px",
-                            filter: "brightness(0) invert(1)",
-                          }}
-                        />
-                      )}
                     </button>
                   </div>
                 </article>

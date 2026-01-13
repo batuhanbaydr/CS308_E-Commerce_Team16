@@ -2,10 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { attachCartToUser } from "../lib/api";
-import searchIcon from "../assets/search.png";
-import bagIcon from "../assets/bag.png";
-import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import CategoryTopbar from "../components/CategoryTopbar.jsx";
 
 const CART_STORAGE_KEY = "tidl_cart_id";
 
@@ -17,34 +15,13 @@ const isProductManager = (u) => hasRole(u, "PRODUCT_MANAGER");
 const isSalesManager = (u) => hasRole(u, "SALES_MANAGER");
 const isSupportManager = (u) => hasRole(u, "SUPPORT_AGENT");
 
-const hasAdminAccess = (u) =>
-  isSalesManager(u) || isProductManager(u) || isSupportManager(u);
-
 // Decide where the user should land after login (and for "Admin Panel" button)
 const getDefaultRouteForUser = (u) => {
-  if (!u) {
-    console.warn("getDefaultRouteForUser: user is null/undefined");
-    return "/home";
-  }
-  
-  console.log("getDefaultRouteForUser - user:", u);
-  console.log("getDefaultRouteForUser - user.role:", u.role);
-  console.log("getDefaultRouteForUser - user.roles:", u.roles);
-  
-  if (isProductManager(u)) {
-    console.log("getDefaultRouteForUser: Product Manager detected");
-    return "/backoffice/product-manager";
-  }
-  if (isSalesManager(u)) {
-    console.log("getDefaultRouteForUser: Sales Manager detected");
-    return "/backoffice/sales-manager";
-  }
-  if (isSupportManager(u)) {
-    console.log("getDefaultRouteForUser: Support Agent detected");
-    return "/backoffice/support-manager";
-  }
-  console.log("getDefaultRouteForUser: Normal customer, going to /home");
-  return "/home"; // normal customer
+  if (!u) return "/home";
+  if (isProductManager(u)) return "/backoffice/product-manager";
+  if (isSalesManager(u)) return "/backoffice/sales-manager";
+  if (isSupportManager(u)) return "/backoffice/support-manager";
+  return "/home";
 };
 
 function safeDecodeNext(nextParam) {
@@ -61,11 +38,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  const { openCart } = useCartDrawer();
   const navigate = useNavigate();
-
-  const [showMenu, setShowMenu] = useState(false);
-
   const { user, login, logout } = useAuth();
 
   const [searchParams] = useSearchParams();
@@ -79,14 +52,8 @@ export default function Login() {
     // intentionally empty
   }, [user]);
 
-  const go = (path) => () => {
-    setShowMenu(false);
-    navigate(path);
-  };
-
   const handleLogout = async () => {
     await logout();
-    setShowMenu(false);
     navigate("/login", { replace: true });
   };
 
@@ -97,11 +64,6 @@ export default function Login() {
     try {
       // 1) login through AuthContext
       const meData = await login(emailAddress, password);
-      console.log("LOGIN meData =", meData);
-      console.log("LOGIN meData.roles =", meData?.roles);
-      console.log("LOGIN meData.role =", meData?.role);
-      console.log("LOGIN meData.userRole =", meData?.userRole);
-
 
       // 2) attach guest cart
       if (typeof window !== "undefined" && meData?.id) {
@@ -120,14 +82,8 @@ export default function Login() {
         }
       }
 
-      // 3) redirect:
-      // - if ?next= is provided, respect it (deep-link)
-      // - otherwise send managers to their backoffice landing page
+      // 3) redirect (respect ?next=)
       const destination = next || getDefaultRouteForUser(meData);
-      console.log("LOGIN destination:", destination);
-      console.log("LOGIN isSalesManager check:", isSalesManager(meData));
-      console.log("LOGIN meData.role:", meData?.role);
-      console.log("LOGIN meData.roles:", meData?.roles);
       navigate(destination, { replace: true });
     } catch (err) {
       const msg =
@@ -138,108 +94,8 @@ export default function Login() {
 
   return (
     <div className="category-page">
-      <header className="category-topbar">
-        <button className="category-brand" onClick={() => navigate("/home")}>
-          TIDL
-        </button>
-
-        <nav className="category-nav">
-          <button
-            onClick={() => navigate("/category/sweatshirts")}
-            className="category-nav-item"
-          >
-            SWEATSHIRTS
-          </button>
-          <button
-            onClick={() => navigate("/category/shirts")}
-            className="category-nav-item"
-          >
-            SHIRTS
-          </button>
-          <button
-            onClick={() => navigate("/category/pants")}
-            className="category-nav-item"
-          >
-            PANTS
-          </button>
-        </nav>
-
-        <div className="category-actions">
-          <img
-            src={searchIcon}
-            alt="Search"
-            className="category-icon"
-            onClick={() => navigate("/search")}
-          />
-
-          {user ? (
-            <span
-              className="login-topbar-link"
-              style={{ cursor: "default", marginRight: "0.5rem" }}
-            >
-              {`HEY! ${user.name}`}
-            </span>
-          ) : (
-            <span
-              className="home-signin"
-              onClick={() => navigate("/login")}
-              style={{ marginRight: "0.5rem", cursor: "pointer" }}
-            >
-              SIGN IN
-            </span>
-          )}
-
-          {user && (
-            <div
-              className="home-menu"
-              onClick={() => setShowMenu((p) => !p)}
-              style={{ marginRight: "0.5rem" }}
-            >
-              <span />
-              <span />
-              <span />
-
-              {showMenu && (
-                <div className="details-menu">
-                  <button className="details-menu-item" onClick={go("/profile")}>
-                    Details
-                  </button>
-
-                  <button
-                    className="details-menu-item"
-                    onClick={go("/wishlist")}
-                  >
-                    Wishlist
-                  </button>
-
-                  {hasAdminAccess(user) && (
-                    <button
-                      className="details-menu-item"
-                      onClick={() => {
-                        setShowMenu(false);
-                        navigate(getDefaultRouteForUser(user));
-                      }}
-                    >
-                      Admin Panel
-                    </button>
-                  )}
-
-                  <button className="details-menu-item" onClick={handleLogout}>
-                    Log-out
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          <img
-            src={bagIcon}
-            alt="Cart"
-            className="category-icon"
-            onClick={openCart}
-          />
-        </div>
-      </header>
+      {/* ✅ Dynamic topbar everywhere */}
+      <CategoryTopbar />
 
       <main className="login-wrapper">
         <div className="login-card">
@@ -271,15 +127,10 @@ export default function Login() {
           </form>
 
           <p className="login-footer-text">
-            Don’t have an account?{" "}
-            <Link to="/signup">Click here to create one.</Link>
+            Don’t have an account? <Link to="/signup">Click here to create one.</Link>
           </p>
 
-          {user && (
-            <p className="login-footer-text">
-              Logged in as <strong>{user.emailAddress}</strong>
-            </p>
-          )}
+
         </div>
       </main>
     </div>

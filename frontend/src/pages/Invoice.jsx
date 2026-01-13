@@ -2,9 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { meRequest, getOrderDetail, logoutRequest } from "../lib/api";
-import { useCartDrawer } from "../context/CartDrawerContext";
-import searchIcon from "../assets/search.png";
-import bagIcon from "../assets/bag.png";
+import CategoryTopbar from "../components/CategoryTopbar.jsx";
 
 const hasAdminAccess = (user) =>
   user?.roles?.includes("SALES_MANAGER") ||
@@ -17,7 +15,7 @@ const hasAdminAccess = (user) =>
 export default function Invoice() {
   const navigate = useNavigate();
   const { orderId } = useParams();
-  const { openCart } = useCartDrawer();
+
 
   const [user, setUser] = useState(null);
   const [order, setOrder] = useState(null);
@@ -108,99 +106,11 @@ export default function Invoice() {
   const billingAddress = order.billingAddress;
 
   return (
-    <div className="home-page">
-      <header className="category-topbar no-print">
-        <button className="category-brand" onClick={() => navigate("/home")}>
-          TIDL
-        </button>
-        <nav className="category-nav">
-          <button
-            onClick={() => navigate("/category/sweatshirts")}
-            className="category-nav-item"
-          >
-            SWEATSHIRTS
-          </button>
-          <button
-            onClick={() => navigate("/category/shirts")}
-            className="category-nav-item"
-          >
-            SHIRTS
-          </button>
-          <button
-            onClick={() => navigate("/category/pants")}
-            className="category-nav-item category-nav-item--active"
-          >
-            PANTS
-          </button>
-
-        </nav>
-        <div className="category-actions">
-          <img
-            src={searchIcon}
-            alt="Search"
-            className="category-icon"
-            onClick={() => navigate("/search")}
-          />
-          {user ? (
-            <span
-              className="login-topbar-link"
-              style={{ cursor: "default", marginRight: "0.5rem" }}
-            >
-              {`HEY! ${user.name}`}
-            </span>
-          ) : (
-            <span
-              className="home-signin"
-              onClick={() => navigate("/login")}
-              style={{ marginRight: "0.5rem", cursor: "pointer" }}
-            >
-              SIGN IN
-            </span>
-          )}
-          {user && (
-            <div
-              className="home-menu"
-              onClick={() => setShowMenu((p) => !p)}
-              style={{ marginRight: "0.5rem" }}
-            >
-              <span />
-              <span />
-              <span />
-              {showMenu && (
-                <div className="details-menu">
-                  <button className="details-menu-item" onClick={go("/profile")}>
-                    Details
-                  </button>
-
-                  <button className="details-menu-item" onClick={go("/wishlist")}>
-                    Wishlist
-                  </button>
-
-                  {/* 🔐 Only for SALES_MANAGER / PRODUCT_MANAGER / SUPPORT_AGENT */}
-                  {hasAdminAccess(user) && (
-                    <button
-                      className="details-menu-item"
-                      onClick={go("/admin")}
-                    >
-                      Admin Panel
-                    </button>
-                  )}
-
-                  <button className="details-menu-item" onClick={handleLogout}>
-                    Log-out
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-          <img
-            src={bagIcon}
-            alt="Cart"
-            className="category-icon"
-            onClick={openCart} 
-          />
-        </div>
-      </header>
+    <div className="category-page">
+   
+    <CategoryTopbar />
+          
+     
 
       <main style={{ maxWidth: "900px", margin: "0 auto", padding: "2rem" }}>
         {/* Invoice Header */}

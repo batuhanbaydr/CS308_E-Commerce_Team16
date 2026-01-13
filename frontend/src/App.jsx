@@ -14,9 +14,10 @@ import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
 import RequireAuth from "./auth/RequireAuth";
 
-import Sweatshirts from "./pages/category/sweatshirts";
-import Shirts from "./pages/category/shirts";
-import Pants from "./pages/category/pants";
+
+
+// ✅ NEW dynamic category page
+import CategoryPage from "./pages/category/CategoryPage.jsx";
 
 import ProductDetailMock from "./pages/ProductDetailMock";
 import ProductDetail from "./pages/ProductDetail";
@@ -77,10 +78,17 @@ function AppShell() {
         {/* Customer support chat (customer side) */}
         <Route path="/support/chat" element={<SupportChat />} />
 
-        {/* Browsing */}
-        <Route path="/category/sweatshirts" element={<Sweatshirts />} />
-        <Route path="/category/shirts" element={<Shirts />} />
-        <Route path="/category/pants" element={<Pants />} />
+        {/* ======================
+            Browsing (Categories)
+            ====================== */}
+
+        {/*  NEW dynamic categories */}
+        <Route path="/category/:slug" element={<CategoryPage />} />
+
+       
+
+    
+
         <Route path="/shop-the-look" element={<div>TODO: Shop The Look</div>} />
         <Route path="/search" element={<Search />} />
         <Route path="/product/mock" element={<ProductDetailMock />} />

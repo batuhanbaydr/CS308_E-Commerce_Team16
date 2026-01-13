@@ -10,10 +10,8 @@ import {
 } from "../lib/api";
 import SockJS from "sockjs-client";
 import { Client as StompClient } from "@stomp/stompjs";
-import searchIcon from "../assets/search.png";
-import bagIcon from "../assets/bag.png";
-import { useCartDrawer } from "../context/CartDrawerContext.jsx";
 
+import CategoryTopbar from "../components/CategoryTopbar.jsx";
 // ---- helpers ---------------------------------------------------------
 
 // Turn backend messages/events into a uniform shape for the UI
@@ -82,7 +80,7 @@ export default function SupportChatPage() {
   const [showMenu, setShowMenu] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { openCart } = useCartDrawer();
+
 
   // chat state
   const [conversationId, setConversationId] = useState(null);
@@ -377,101 +375,10 @@ export default function SupportChatPage() {
 
   return (
     <div className="category-page">
-      {/* Topbar copied from store pages */}
-      <header className="category-topbar">
-        <button className="category-brand" onClick={() => navigate("/home")}>
-          TIDL
-        </button>
-
-        <nav className="category-nav">
-          <button
-            onClick={() => navigate("/category/sweatshirts")}
-            className="category-nav-item"
-          >
-            SWEATSHIRTS
-          </button>
-          <button
-            onClick={() => navigate("/category/shirts")}
-            className="category-nav-item"
-          >
-            SHIRTS
-          </button>
-          <button
-            onClick={() => navigate("/category/pants")}
-            className="category-nav-item"
-          >
-            PANTS
-          </button>
-        </nav>
-
-        <div className="category-actions">
-          <img
-            src={searchIcon}
-            alt="Search"
-            className="category-icon"
-            onClick={() => navigate("/search")}
-          />
-
-          {user ? (
-            <>
-              <span
-                className="login-topbar-link"
-                style={{ cursor: "default", marginRight: "0.5rem" }}
-              >
-                {`HEY! ${user.name}`}
-              </span>
-              <div
-                className="home-menu"
-                onClick={() => setShowMenu((p) => !p)}
-                style={{ marginRight: "0.5rem" }}
-              >
-                <span />
-                <span />
-                <span />
-                {showMenu && (
-                  <div className="details-menu">
-                    <button
-                      className="details-menu-item"
-                      onClick={() => navigate("/profile")}
-                    >
-                      Details
-                    </button>
-
-                    <button
-                      className="details-menu-item"
-                      onClick={() => navigate("/wishlist")}
-                    >
-                      Wishlist
-                    </button>
-
-                    <button
-                      className="details-menu-item"
-                      onClick={handleLogout}
-                    >
-                      Log-out
-                    </button>
-                  </div>
-                )}
-              </div>
-            </>
-          ) : (
-            <span
-              className="home-signin"
-              onClick={() => navigate("/login")}
-              style={{ marginRight: "0.5rem", cursor: "pointer" }}
-            >
-              SIGN IN
-            </span>
-          )}
-
-          <img
-            src={bagIcon}
-            alt="Cart"
-            className="category-icon"
-            onClick={openCart}
-          />
-        </div>
-      </header>
+    {/* ✅ dynamic shared topbar */}
+    <CategoryTopbar />
+              
+    
 
       {/* Main support layout */}
       <main

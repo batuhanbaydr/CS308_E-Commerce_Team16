@@ -1,18 +1,8 @@
 // src/pages/Search.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { meRequest, logoutRequest, listProducts } from "../lib/api";
-import searchIcon from "../assets/search.png";
-import bagIcon from "../assets/bag.png";
-import { useCartDrawer } from "../context/CartDrawerContext.jsx";
-
-const hasAdminAccess = (user) =>
-  user?.roles?.includes("SALES_MANAGER") ||
-  user?.roles?.includes("PRODUCT_MANAGER") ||
-  user?.roles?.includes("SUPPORT_AGENT") ||
-  user?.role === "SALES_MANAGER" ||
-  user?.role === "PRODUCT_MANAGER" ||
-  user?.role === "SUPPORT_AGENT";
+import { listProducts } from "../lib/api";
+import CategoryTopbar from "../components/CategoryTopbar.jsx";
 
 function normalize(x) {
   return String(x || "").trim().toLowerCase();
@@ -21,7 +11,6 @@ function normalize(x) {
 function buildSearchText(product) {
   const parts = [];
 
-  // main fields
   parts.push(
     product.name,
     product.description,
@@ -30,55 +19,33 @@ function buildSearchText(product) {
     product.madeIn
   );
 
-  // variants: color, size, etc.
   (product.variants || []).forEach((v) => {
     if (v.color) parts.push(v.color);
     if (v.size) parts.push(v.size);
     if (v.sku) parts.push(v.sku);
   });
 
-  // join everything and normalize once
   return normalize(parts.join(" "));
 }
 
 export default function Search() {
   const navigate = useNavigate();
-  const { openCart } = useCartDrawer();
   const [searchParams] = useSearchParams();
-
-  const [user, setUser] = useState(null);
-  const [showMenu, setShowMenu] = useState(false);
 
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
   const paramQuery = searchParams.get("q") || "";
-
-  // this is the text in the "WHAT ARE YOU LOOKING FOR?" bar
   const [searchText, setSearchText] = useState(paramQuery);
 
   const [sortBy, setSortBy] = useState("relevance"); // relevance | popularity | priceAsc | priceDesc
   const [showFilterMenu, setShowFilterMenu] = useState(false);
 
-  // keep input in sync if URL param changes (e.g. coming from overlay)
+  // keep input in sync if URL param changes
   useEffect(() => {
     setSearchText(paramQuery);
   }, [paramQuery]);
-
-  // load current user
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await meRequest();
-        setUser(data);
-      } catch {
-        setUser(null);
-      }
-    })();
-  }, []);
-
-  const go = (path) => () => navigate(path);
 
   // load ALL products once
   useEffect(() => {
@@ -86,7 +53,7 @@ export default function Search() {
       setLoading(true);
       setErrorMsg("");
       try {
-        const res = await listProducts(); // should return ALL products
+        const res = await listProducts(); // returns ALL products
         setAllProducts(res.data || []);
       } catch (err) {
         console.error("search load error", err);
@@ -98,7 +65,7 @@ export default function Search() {
     load();
   }, []);
 
-  // 🔁 DYNAMIC COLOR KEYWORDS built from variants (bonus: fuzzy-friendly)
+  // 🔁 DYNAMIC COLOR KEYWORDS built from variants
   const COLOR_KEYWORDS = useMemo(() => {
     const set = new Set();
 
@@ -107,20 +74,14 @@ export default function Search() {
         const raw = String(v.color || "").trim().toLowerCase();
         if (!raw) return;
 
-        // full color string, e.g. "light camel"
         set.add(raw);
-
-        // bonus: also add individual words "light" and "camel"
-        raw.split(/\s+/).forEach((tok) => {
-          if (tok) set.add(tok);
-        });
+        raw.split(/\s+/).forEach((tok) => tok && set.add(tok));
       });
     });
 
     return set;
   }, [allProducts]);
 
-  // filter & sort products based on search text & sort option
   const results = useMemo(() => {
     const q = normalize(searchText);
     if (!q) return [];
@@ -129,28 +90,23 @@ export default function Search() {
 
     let list = allProducts
       .map((p) => {
-        const searchText = buildSearchText(p);
+        const fullText = buildSearchText(p);
 
         const variantColors = (p.variants || [])
           .map((v) => normalize(v.color || ""))
           .filter(Boolean);
 
         const matchesAllTokens = tokens.every((tok) => {
-          // if this token is a known color word, only match against colors
           if (COLOR_KEYWORDS.has(tok)) {
-            // BONUS: fuzzy color match — "camel" matches "light camel"
             return variantColors.some((c) => c.includes(tok));
           }
-
-          // otherwise: normal text search on all fields
-          return searchText.includes(tok);
+          return fullText.includes(tok);
         });
 
         return matchesAllTokens ? p : null;
       })
       .filter(Boolean);
 
-    // attach meta info for sorting
     list = list.map((p) => {
       const avg =
         typeof p.averageRating === "number"
@@ -164,7 +120,6 @@ export default function Search() {
 
       return {
         ...p,
-        _popularity: Number(p.purchaseCount ?? p.totalPurchases ?? 0),
         _price: Number(
           p.basePrice ??
             (p.variants && p.variants[0] && p.variants[0].price) ??
@@ -177,23 +132,9 @@ export default function Search() {
 
     if (sortBy === "popularity") {
       list.sort((a, b) => {
-        const ar = a._rating ?? 0;
-        const br = b._rating ?? 0;
-
-        // 1) highest average rating first
-        if (br !== ar) {
-          return br - ar; // descending
-        }
-
-        const ac = a._ratingCount ?? 0;
-        const bc = b._ratingCount ?? 0;
-
-        // 2) if same avg rating, more ratings first
-        if (bc !== ac) {
-          return bc - ac; // descending
-        }
-
-        // 3) fallback
+        if ((b._rating ?? 0) !== (a._rating ?? 0)) return (b._rating ?? 0) - (a._rating ?? 0);
+        if ((b._ratingCount ?? 0) !== (a._ratingCount ?? 0))
+          return (b._ratingCount ?? 0) - (a._ratingCount ?? 0);
         return 0;
       });
     } else if (sortBy === "priceAsc") {
@@ -205,22 +146,8 @@ export default function Search() {
     return list;
   }, [allProducts, searchText, sortBy, COLOR_KEYWORDS]);
 
-  const handleLogout = async () => {
-    try {
-      await logoutRequest();
-    } catch {}
-    setUser(null);
-    navigate("/home");
-  };
-
-  const handleHeaderSearchClick = () => {
-    // optional: go back to home so user can use overlay again
-    navigate("/home");
-  };
-
   const handleSearchBarSubmit = (e) => {
     e.preventDefault();
-    // keep URL in sync with current search text
     const trimmed = searchText.trim();
     navigate(`/search?q=${encodeURIComponent(trimmed)}`);
   };
@@ -240,107 +167,11 @@ export default function Search() {
 
   return (
     <div className="category-page">
-      {/* === SAME TOP BAR === */}
-      <header className="category-topbar">
-        <button className="category-brand" onClick={() => navigate("/home")}>
-          TIDL
-        </button>
-        <nav className="category-nav">
-          <button
-            onClick={() => navigate("/category/sweatshirts")}
-            className="category-nav-item"
-          >
-            SWEATSHIRTS
-          </button>
-          <button
-            onClick={() => navigate("/category/shirts")}
-            className="category-nav-item"
-          >
-            SHIRTS
-          </button>
-          <button
-            onClick={() => navigate("/category/pants")}
-            className="category-nav-item"
-          >
-            PANTS
-          </button>
+      {/* ✅ dynamic shared topbar */}
+      <CategoryTopbar />
 
-        </nav>
-        <div className="category-actions">
-          <img
-            src={searchIcon}
-            alt="Search"
-            className="category-icon"
-            onClick={handleHeaderSearchClick}
-          />
-          {user ? (
-            <span
-              className="login-topbar-link"
-              style={{ cursor: "default", marginRight: "0.5rem" }}
-            >
-              {`HEY! ${user.name}`}
-            </span>
-          ) : (
-            <span
-              className="home-signin"
-              onClick={() => navigate("/login")}
-              style={{ marginRight: "0.5rem", cursor: "pointer" }}
-            >
-              SIGN IN
-            </span>
-          )}
-          {user && (
-            <div
-              className="home-menu"
-              onClick={() => setShowMenu((p) => !p)}
-              style={{ marginRight: "0.5rem" }}
-            >
-              <span />
-              <span />
-              <span />
-              {showMenu && (
-                <div className="details-menu">
-                  <button className="details-menu-item" onClick={go("/profile")}>
-                    Details
-                  </button>
-
-                  <button className="details-menu-item" onClick={go("/wishlist")}>
-                    Wishlist
-                  </button>
-
-                  {/* 🔐 Only for SALES_MANAGER / PRODUCT_MANAGER / SUPPORT_AGENT */}
-                  {hasAdminAccess(user) && (
-                    <button
-                      className="details-menu-item"
-                      onClick={go("/admin")}
-                    >
-                      Admin Panel
-                    </button>
-                  )}
-
-                  <button className="details-menu-item" onClick={handleLogout}>
-                    Log-out
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-          <img
-            src={bagIcon}
-            alt="Cart"
-            className="category-icon"
-            onClick={openCart}
-          />
-        </div>
-      </header>
-
-      {/* === BODY === */}
       <main className="search-simple-wrapper">
-        {/* TOP SEARCH BAR = "WHAT ARE YOU LOOKING FOR?" */}
-        <form
-          className="search-simple-searchbar"
-          onSubmit={handleSearchBarSubmit}
-        >
+        <form className="search-simple-searchbar" onSubmit={handleSearchBarSubmit}>
           <input
             type="text"
             value={searchText}
@@ -349,10 +180,8 @@ export default function Search() {
           />
         </form>
 
-        {/* centered title */}
         <h2 className="search-simple-title">Search Results</h2>
 
-        {/* filter row */}
         <div className="search-simple-filter-row">
           <div className="search-simple-filter-left">
             <span className="search-simple-filter-label">Filter by:</span>
@@ -369,62 +198,56 @@ export default function Search() {
               {showFilterMenu && (
                 <div className="search-simple-filter-menu">
                   <button
-                  type="button"
-                  onClick={() => {
-                    setSortBy("relevance");
-                    setShowFilterMenu(false);
-                  }}
-                >
-                  Relevance
-                </button>
+                    type="button"
+                    onClick={() => {
+                      setSortBy("relevance");
+                      setShowFilterMenu(false);
+                    }}
+                  >
+                    Relevance
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSortBy("popularity");
-                    setShowFilterMenu(false);
-                  }}
-                >
-                  Popularity (by Top Rated)
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSortBy("popularity");
+                      setShowFilterMenu(false);
+                    }}
+                  >
+                    Popularity (by Top Rated)
+                  </button>
 
-                
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSortBy("priceAsc");
+                      setShowFilterMenu(false);
+                    }}
+                  >
+                    Price: Low to High
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSortBy("priceAsc");
-                    setShowFilterMenu(false);
-                  }}
-                >
-                  Price: Low to High
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSortBy("priceDesc");
-                    setShowFilterMenu(false);
-                  }}
-                >
-                  Price: High to Low
-                </button>
-              </div>
-            )}
-
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSortBy("priceDesc");
+                      setShowFilterMenu(false);
+                    }}
+                  >
+                    Price: High to Low
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
           <div className="search-simple-count">
             {searchText.trim()
-              ? `${results.length} result${
-                  results.length === 1 ? "" : "s"
-                } found for “${searchText.trim()}”`
+              ? `${results.length} result${results.length === 1 ? "" : "s"} found for “${searchText.trim()}”`
               : "Start typing to search all products"}
           </div>
         </div>
 
-        {/* results grid */}
         {loading && <p>Loading products…</p>}
         {!loading && errorMsg && <p>{errorMsg}</p>}
 
@@ -437,33 +260,25 @@ export default function Search() {
                   0
               );
               const displayPrice = `$${priceNumber.toFixed(2)}`;
-              const primaryImage =
-                p.mainImageUrl || (p.imageUrls || [])[0] || "";
+              const primaryImage = p.mainImageUrl || (p.imageUrls || [])[0] || "";
 
               let totalStock = 0;
               (p.variants || []).forEach((v) => {
-                const n =
-                  typeof v.stock === "number"
-                    ? v.stock
-                    : Number(v.stock || 0);
+                const n = typeof v.stock === "number" ? v.stock : Number(v.stock || 0);
                 totalStock += n;
               });
               const outOfStock = totalStock <= 0;
-
-              const goDetail = () => navigate(`/product/${p.id}`);
 
               return (
                 <article
                   key={p.id}
                   className="search-result-card"
-                  onClick={goDetail}
+                  onClick={() => navigate(`/product/${p.id}`)}
                 >
                   <div className="search-result-image-wrap">
                     {primaryImage && <img src={primaryImage} alt={p.name} />}
                     {outOfStock && (
-                      <span className="search-result-oos-badge">
-                        OUT OF STOCK
-                      </span>
+                      <span className="search-result-oos-badge">OUT OF STOCK</span>
                     )}
                   </div>
                   <div className="search-result-info">
