@@ -14,6 +14,8 @@ import {
   supportGetConversationMessages,
   supportGetConversationContext,
   supportUploadChatAttachment,
+  // 🔹 NEW: close conversation API
+  supportCloseConversation,
 } from "../../../lib/api";
 
 import { Client } from "@stomp/stompjs";
@@ -33,27 +35,82 @@ const WS_BASE_URL =
 const FILE_BASE_URL =
   import.meta.env.VITE_BACKEND_FILE_BASE_URL || "http://localhost:8080";
 
+function safeArray(v) {
+  return Array.isArray(v) ? v : [];
+}
+
 function formatDateTime(value) {
   if (!value) return "";
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString();
+
+  return new Intl.DateTimeFormat("tr-TR", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(d);
+}
+
+function toNumberMaybe(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  try {
+    const n = Number(String(v));
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatMoney(v) {
+  const n = toNumberMaybe(v);
+  if (n === null) return v !== undefined && v !== null ? String(v) : "";
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 // Make attachment URL safe + point to backend, not the SPA
 function resolveAttachmentUrl(url) {
   if (!url) return "#";
 
-  // already absolute
-  if (/^https?:\/\//i.test(url)) return url;
+  // already absolute or data url
+  if (/^https?:\/\//i.test(url) || url.startsWith("data:")) return url;
 
-  // backend returns things like "/api/chat/files/abc123.png"
-  if (url.startsWith("/")) {
-    return `${FILE_BASE_URL}${url}`;
+  // ✅ FRONTEND public assets: keep as-is (Vite serves from same origin)
+  if (
+    url.startsWith("/products/") ||
+    url.startsWith("/assets/") ||
+    url.startsWith("/images/")
+  ) {
+    return url;
   }
 
-  // fallback: relative path -> prefix with backend base
+  // attachments served by backend
+  if (url.startsWith("/")) return `${FILE_BASE_URL}${url}`;
   return `${FILE_BASE_URL}/${url.replace(/^\/+/, "")}`;
+}
+
+// ✅ Used to match optimistic message with server echo (no backend change needed)
+// IMPORTANT: senderPrincipal backend'de değişken gelebiliyor (email / user:xxx)
+// Bu yüzden fingerprint'e senderPrincipal dahil ETMİYORUZ.
+function fingerprintMsg({ conversationId, senderType, text, attachmentUrl }) {
+  const st = (senderType || "").toUpperCase();
+  return [
+    conversationId || "",
+    st,
+    (text || "").trim(),
+    attachmentUrl || "",
+  ].join("|");
 }
 
 function StatusPill({ status }) {
@@ -87,7 +144,6 @@ function StatusPill({ status }) {
 
 export default function SupportManagerLayout() {
   const { user } = useAuth();
-
   const agentEmail =
     user?.emailAddress || user?.email || user?.username || null;
 
@@ -128,6 +184,7 @@ function SupportLiveChatPanel({ agentEmail }) {
 
   const subscriptionRef = useRef(null);
   const messageIdsRef = useRef(new Set());
+  const optimisticKeysRef = useRef(new Set()); // ✅ for optimistic dedup
   const messagesEndRef = useRef(null);
 
   // auto scroll
@@ -145,12 +202,8 @@ function SupportLiveChatPanel({ agentEmail }) {
       debug: () => {},
     });
 
-    client.onConnect = () => {
-      setStompConnected(true);
-    };
-    client.onDisconnect = () => {
-      setStompConnected(false);
-    };
+    client.onConnect = () => setStompConnected(true);
+    client.onDisconnect = () => setStompConnected(false);
 
     client.activate();
     setStompClient(client);
@@ -165,11 +218,49 @@ function SupportLiveChatPanel({ agentEmail }) {
   }, []);
 
   const appendEvent = useCallback((event) => {
-    if (!event || !event.messageId) return;
+    if (!event) return;
+
+    const incomingId =
+      event.messageId ||
+      event.id ||
+      event._id ||
+      `ev-${event.timestamp || Date.now()}`;
+
     setMessages((prev) => {
-      if (messageIdsRef.current.has(event.messageId)) return prev;
-      const next = [...prev, event];
-      messageIdsRef.current.add(event.messageId);
+      // server id dedup
+      if (messageIdsRef.current.has(incomingId)) return prev;
+
+      const normalized = {
+        messageId: incomingId,
+        conversationId: event.conversationId,
+        senderType: (event.senderType || "").toUpperCase(), // ✅ normalize
+        senderPrincipal: event.senderPrincipal,
+        text: event.text,
+        attachmentUrl: event.attachmentUrl,
+        timestamp: event.timestamp
+          ? new Date(event.timestamp).getTime()
+          : Date.now(),
+      };
+
+      // ✅ If this message is the server echo of our optimistic message,
+      // remove optimistic one and keep server one.
+      const fp = fingerprintMsg(normalized);
+      if (optimisticKeysRef.current.has(fp)) {
+        optimisticKeysRef.current.delete(fp);
+
+        const withoutOptimistic = prev.filter(
+          (m) => fingerprintMsg(m) !== fp
+        );
+
+        messageIdsRef.current.add(incomingId);
+        const merged = [...withoutOptimistic, normalized];
+        merged.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        return merged;
+      }
+
+      // normal add
+      messageIdsRef.current.add(incomingId);
+      const next = [...prev, normalized];
       next.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
       return next;
     });
@@ -196,6 +287,7 @@ function SupportLiveChatPanel({ agentEmail }) {
   // When selected conversation changes, load history + context and subscribe
   useEffect(() => {
     messageIdsRef.current = new Set();
+    optimisticKeysRef.current = new Set(); // ✅ reset optimistic tracker
     setMessages([]);
     setContext(null);
 
@@ -215,15 +307,20 @@ function SupportLiveChatPanel({ agentEmail }) {
           supportGetConversationContext(selectedId),
         ]);
 
-        const baseMsgs = (msgsRes.data || []).map((m) => ({
-          messageId: m.id,
-          conversationId: m.conversationId,
-          senderType: m.senderType,
-          senderPrincipal: m.senderPrincipal,
-          text: m.text,
-          attachmentUrl: m.attachmentUrl,
-          timestamp: m.timestamp ? new Date(m.timestamp).getTime() : Date.now(),
-        }));
+        const baseMsgs = (msgsRes.data || []).map((m, idx) => {
+          const id = m.id || m.messageId || m._id || `hist-${idx}`;
+          return {
+            messageId: id,
+            conversationId: m.conversationId,
+            senderType: (m.senderType || "").toUpperCase(), // ✅ normalize
+            senderPrincipal: m.senderPrincipal,
+            text: m.text,
+            attachmentUrl: m.attachmentUrl,
+            timestamp: m.timestamp
+              ? new Date(m.timestamp).getTime()
+              : Date.now(),
+          };
+        });
 
         const idSet = new Set();
         baseMsgs.forEach((m) => idSet.add(m.messageId));
@@ -291,6 +388,30 @@ function SupportLiveChatPanel({ agentEmail }) {
     }
   };
 
+  // 🔹 NEW: close conversation handler
+  const handleClose = async (conversationId) => {
+    const ok = window.confirm(
+      "Are you sure you want to close this conversation?"
+    );
+    if (!ok) return;
+
+    try {
+      await supportCloseConversation(conversationId);
+
+      // if we are currently viewing this conversation, clear it
+      if (selectedId === conversationId) {
+        setSelectedId(null);
+        setMessages([]);
+        setContext(null);
+      }
+
+      await loadQueue();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to close conversation");
+    }
+  };
+
   const handleSend = async () => {
     if (!selectedId) return;
     if (!stompClient || !stompConnected) {
@@ -338,6 +459,9 @@ function SupportLiveChatPanel({ agentEmail }) {
         timestamp: Date.now(),
       };
 
+      // ✅ mark this optimistic message so server echo replaces it
+      optimisticKeysRef.current.add(fingerprintMsg(optimisticEvent));
+
       messageIdsRef.current.add(optimisticEvent.messageId);
 
       setMessages((prev) => {
@@ -377,6 +501,25 @@ function SupportLiveChatPanel({ agentEmail }) {
       ),
     [queue]
   );
+
+  // ---- context adapters (DTO aware) ----
+  const cart = context?.cart || null; // BasketDTO
+  const cartItems = safeArray(cart?.items); // BasketItemDTO[]
+  const orders = safeArray(context?.orders); // OrderSummaryDTO[]
+
+  // ✅ FIX: wishlist backend'den bazen array gelebiliyor (ctx.setWishlist(List.of(wishlist)))
+  const wishlistRaw = context?.wishlist ?? null;
+  const wishlistObj = Array.isArray(wishlistRaw)
+    ? wishlistRaw[0] ?? null
+    : wishlistRaw;
+
+  const wishlistProducts = safeArray(wishlistObj?.products);
+  const wishlistProductIds = safeArray(wishlistObj?.productIds);
+
+  const wishlistCount =
+    typeof wishlistObj?.count === "number"
+      ? wishlistObj.count
+      : wishlistProductIds.length || wishlistProducts.length;
 
   return (
     <div
@@ -448,35 +591,19 @@ function SupportLiveChatPanel({ agentEmail }) {
             }}
           >
             <div>
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: "#111827",
-                }}
-              >
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
                 Active conversations
               </div>
               <div style={{ fontSize: 11, color: "#6b7280" }}>
                 OPEN / CLAIMED sessions
               </div>
             </div>
-            <div
-              style={{
-                fontSize: 11,
-                color: "#4b5563",
-              }}
-            >
+            <div style={{ fontSize: 11, color: "#4b5563" }}>
               {queue.length} total
             </div>
           </div>
 
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-            }}
-          >
+          <div style={{ flex: 1, overflowY: "auto" }}>
             {queueLoading && (
               <div style={{ padding: 12, fontSize: 13, color: "#4b5563" }}>
                 Loading conversations…
@@ -584,8 +711,12 @@ function SupportLiveChatPanel({ agentEmail }) {
                         }}
                       >
                         Agent:{" "}
-                        {conv.assignedAgentId ? conv.assignedAgentId : "Unassigned"}
+                        {conv.assignedAgentId
+                          ? conv.assignedAgentId
+                          : "Unassigned"}
                       </div>
+
+                      {/* When not CLOSED and not claimed by me -> Claim button */}
                       {conv.status !== "CLOSED" && !isClaimedByMe && (
                         <button
                           type="button"
@@ -606,8 +737,15 @@ function SupportLiveChatPanel({ agentEmail }) {
                           Claim
                         </button>
                       )}
-                      {isClaimedByMe && (
-                        <span
+
+                      {/* When it IS claimed by me -> toggle to CLOSED on click */}
+                      {isClaimedByMe && conv.status !== "CLOSED" && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleClose(conv.id);
+                          }}
                           style={{
                             fontSize: 11,
                             padding: "3px 8px",
@@ -615,9 +753,27 @@ function SupportLiveChatPanel({ agentEmail }) {
                             border: "1px solid #3d8b5aff",
                             backgroundColor: "#dcfce7",
                             color: "#2d553cff",
+                            cursor: "pointer",
                           }}
+                          title="Click to close this conversation"
                         >
                           Assigned to you
+                        </button>
+                      )}
+
+                      {/* If it's somehow CLOSED but still in list, just show a non-clickable pill */}
+                      {conv.status === "CLOSED" && (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            padding: "3px 8px",
+                            borderRadius: 999,
+                            border: "1px solid #6b7280",
+                            backgroundColor: "#e5e7eb",
+                            color: "#374151",
+                          }}
+                        >
+                          Closed
                         </span>
                       )}
                     </div>
@@ -650,13 +806,7 @@ function SupportLiveChatPanel({ agentEmail }) {
             }}
           >
             <div>
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: "#111827",
-                }}
-              >
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
                 {selectedConversation
                   ? selectedConversation.userEmail ||
                     selectedConversation.userId ||
@@ -695,13 +845,7 @@ function SupportLiveChatPanel({ agentEmail }) {
           )}
 
           {selectedConversation && (
-            <div
-              style={{
-                flex: 1,
-                display: "flex",
-                overflow: "hidden",
-              }}
-            >
+            <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
               {/* Messages */}
               <div
                 style={{
@@ -733,18 +877,14 @@ function SupportLiveChatPanel({ agentEmail }) {
                   )}
 
                   {!messagesLoading && !messages.length && (
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#6b7280",
-                      }}
-                    >
+                    <div style={{ fontSize: 13, color: "#6b7280" }}>
                       No messages yet in this conversation.
                     </div>
                   )}
 
                   {messages.map((m) => {
-                    const isAgent = m.senderType === "AGENT";
+                    const isAgent =
+                      (m.senderType || "").toUpperCase() === "AGENT";
                     const align = isAgent ? "flex-end" : "flex-start";
                     const bg = isAgent ? "#3d211c" : "white";
                     const color = isAgent ? "white" : "#111827";
@@ -776,10 +916,9 @@ function SupportLiveChatPanel({ agentEmail }) {
                             }}
                           >
                             {m.senderType}{" "}
-                            {m.senderPrincipal
-                              ? `• ${m.senderPrincipal}`
-                              : ""}
+                            {m.senderPrincipal ? `• ${m.senderPrincipal}` : ""}
                           </div>
+
                           {m.text && (
                             <div
                               style={{
@@ -792,6 +931,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                               {m.text}
                             </div>
                           )}
+
                           {m.attachmentUrl && (
                             <a
                               href={resolveAttachmentUrl(m.attachmentUrl)}
@@ -806,6 +946,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                               View attachment
                             </a>
                           )}
+
                           <div
                             style={{
                               fontSize: 10,
@@ -894,6 +1035,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                         </div>
                       )}
                     </div>
+
                     <button
                       type="button"
                       disabled={sending || (!messageText.trim() && !pendingFile)}
@@ -923,11 +1065,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                   }}
                 >
                   <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: "#111827",
-                    }}
+                    style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}
                   >
                     Customer context
                   </div>
@@ -944,31 +1082,20 @@ function SupportLiveChatPanel({ agentEmail }) {
                   }}
                 >
                   {contextLoading && (
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#4b5563",
-                      }}
-                    >
+                    <div style={{ fontSize: 13, color: "#4b5563" }}>
                       Loading context…
                     </div>
                   )}
 
                   {!contextLoading && !context && (
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "#6b7280",
-                      }}
-                    >
+                    <div style={{ fontSize: 13, color: "#6b7280" }}>
                       No extra context available.
                     </div>
                   )}
 
                   {!contextLoading && context && (
                     <>
-                      
-
+                      {/* PROFILE */}
                       {context.user && (
                         <div
                           style={{
@@ -991,8 +1118,7 @@ function SupportLiveChatPanel({ agentEmail }) {
                               <strong>Name:</strong> {context.user.name}
                             </div>
                             <div>
-                              <strong>Email:</strong>{" "}
-                              {context.user.emailAddress}
+                              <strong>Email:</strong> {context.user.emailAddress}
                             </div>
                             {context.user.phoneNumber && (
                               <div>
@@ -1015,10 +1141,11 @@ function SupportLiveChatPanel({ agentEmail }) {
                         </div>
                       )}
 
+                      {/* CART (BasketDTO + BasketItemDTO) */}
                       <div
                         style={{
-                          marginBottom: 10,
-                          paddingBottom: 8,
+                          marginBottom: 12,
+                          paddingBottom: 10,
                           borderBottom: "1px dashed #e5e7eb",
                         }}
                       >
@@ -1031,17 +1158,169 @@ function SupportLiveChatPanel({ agentEmail }) {
                         >
                           Cart
                         </div>
-                        <div style={{ fontSize: 11, color: "#6b7280" }}>
-                          {context.cart
-                            ? "Cart data is available (not yet rendered)."
-                            : "No cart information wired yet."}
-                        </div>
+
+                        {!cart && (
+                          <div style={{ fontSize: 11, color: "#6b7280" }}>
+                            No cart information.
+                          </div>
+                        )}
+
+                        {cart && (
+                          <>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "#4b5563",
+                                marginBottom: 8,
+                              }}
+                            >
+                              <div>
+                                <strong>OrderId (cart):</strong>{" "}
+                                {cart.orderId || "-"}
+                              </div>
+                              <div>
+                                <strong>Subtotal:</strong>{" "}
+                                {formatMoney(cart.subtotal)}
+                              </div>
+                              <div>
+                                <strong>Items:</strong> {cartItems.length}
+                              </div>
+                            </div>
+
+                            {!cartItems.length && (
+                              <div style={{ fontSize: 11, color: "#6b7280" }}>
+                                Cart is empty.
+                              </div>
+                            )}
+
+                            {cartItems.length > 0 && (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 8,
+                                }}
+                              >
+                                {cartItems.slice(0, 5).map((it, idx) => (
+                                  <div
+                                    key={`${it.productId}-${it.sku || idx}`}
+                                    style={{
+                                      display: "flex",
+                                      gap: 10,
+                                      padding: "8px 8px",
+                                      border: "1px solid #e5e7eb",
+                                      borderRadius: 10,
+                                      background: "#fff",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: 44,
+                                        height: 44,
+                                        borderRadius: 8,
+                                        overflow: "hidden",
+                                        border: "1px solid #e5e7eb",
+                                        background: "#f3f4f6",
+                                        flex: "0 0 auto",
+                                      }}
+                                    >
+                                      {it.mainImageUrl ? (
+                                        <img
+                                          src={resolveAttachmentUrl(
+                                            it.mainImageUrl
+                                          )}
+                                          alt={it.name || it.productId}
+                                          style={{
+                                            width: "100%",
+                                            height: "100%",
+                                            objectFit: "cover",
+                                          }}
+                                          onError={(e) => {
+                                            e.currentTarget.style.display =
+                                              "none";
+                                          }}
+                                        />
+                                      ) : null}
+                                    </div>
+
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                      <div
+                                        style={{
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: "#111827",
+                                          whiteSpace: "nowrap",
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
+                                        }}
+                                        title={it.name || it.productId}
+                                      >
+                                        {it.name || it.productId}
+                                      </div>
+
+                                      <div
+                                        style={{
+                                          fontSize: 11,
+                                          color: "#6b7280",
+                                          marginTop: 2,
+                                        }}
+                                      >
+                                        {it.sku
+                                          ? `SKU: ${it.sku}`
+                                          : `Product: ${it.productId}`}
+                                      </div>
+
+                                      <div
+                                        style={{
+                                          fontSize: 11,
+                                          color: "#374151",
+                                          marginTop: 4,
+                                        }}
+                                      >
+                                        Qty: <strong>{it.quantity}</strong>
+                                        {it.unitPrice !== undefined &&
+                                        it.unitPrice !== null ? (
+                                          <>
+                                            {" "}
+                                            • Unit:{" "}
+                                            <strong>
+                                              {formatMoney(it.unitPrice)}
+                                            </strong>
+                                          </>
+                                        ) : null}
+                                        {it.lineTotal !== undefined &&
+                                        it.lineTotal !== null ? (
+                                          <>
+                                            {" "}
+                                            • Line:{" "}
+                                            <strong>
+                                              {formatMoney(it.lineTotal)}
+                                            </strong>
+                                          </>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+
+                                {cartItems.length > 5 && (
+                                  <div
+                                    style={{ fontSize: 11, color: "#6b7280" }}
+                                  >
+                                    +{cartItems.length - 5} more item(s)…
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
 
+                      {/* ORDERS (OrderSummaryDTO[]) */}
                       <div
                         style={{
-                          marginBottom: 10,
-                          paddingBottom: 8,
+                          marginBottom: 12,
+                          paddingBottom: 10,
                           borderBottom: "1px dashed #e5e7eb",
                         }}
                       >
@@ -1054,14 +1333,111 @@ function SupportLiveChatPanel({ agentEmail }) {
                         >
                           Recent orders
                         </div>
-                        <div style={{ fontSize: 11, color: "#6b7280" }}>
-                          {Array.isArray(context.orders) &&
-                          context.orders.length
-                            ? `${context.orders.length} order(s) – connect your real order DTOs here.`
-                            : "No order data wired yet."}
-                        </div>
+
+                        {!orders.length && (
+                          <div style={{ fontSize: 11, color: "#6b7280" }}>
+                            No order data.
+                          </div>
+                        )}
+
+                        {orders.length > 0 && (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 8,
+                            }}
+                          >
+                            {orders.slice(0, 5).map((o) => (
+                              <div
+                                key={o.id}
+                                style={{
+                                  padding: "8px 8px",
+                                  border: "1px solid #e5e7eb",
+                                  borderRadius: 10,
+                                  background: "#fff",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    gap: 10,
+                                  }}
+                                >
+                                  <div style={{ minWidth: 0 }}>
+                                    <div
+                                      style={{
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: "#111827",
+                                      }}
+                                    >
+                                      Order
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: "#111827",
+                                        marginTop: 2,
+                                        wordBreak: "break-all",
+                                        lineHeight: 1.2,
+                                      }}
+                                      title={o.id}
+                                    >
+                                      #{o.id}
+                                    </div>
+                                  </div>
+
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      padding: "3px 10px",
+                                      borderRadius: 999,
+                                      border: "1px solid #e5e7eb",
+                                      backgroundColor: "#ffffff",
+                                      color: "#374151",
+                                      flexShrink: 0,
+                                      whiteSpace: "nowrap",
+                                      marginTop: 2,
+                                    }}
+                                    title={o.status || "UNKNOWN"}
+                                  >
+                                    {o.status || "UNKNOWN"}
+                                  </span>
+                                </div>
+
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    color: "#4b5563",
+                                    marginTop: 4,
+                                  }}
+                                >
+                                  <div>
+                                    <strong>Created:</strong>{" "}
+                                    {formatDateTime(o.createdAt)}
+                                  </div>
+                                  <div>
+                                    <strong>Total:</strong>{" "}
+                                    {formatMoney(o.grandTotal)}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+
+                            {orders.length > 5 && (
+                              <div style={{ fontSize: 11, color: "#6b7280" }}>
+                                +{orders.length - 5} more order(s)…
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
+                      {/* WISHLIST (WishlistResponseDTO) */}
                       <div>
                         <div
                           style={{
@@ -1072,12 +1448,139 @@ function SupportLiveChatPanel({ agentEmail }) {
                         >
                           Wishlist
                         </div>
-                        <div style={{ fontSize: 11, color: "#6b7280" }}>
-                          {Array.isArray(context.wishlist) &&
-                          context.wishlist.length
-                            ? `${context.wishlist.length} wishlist item(s) – connect to your models.`
-                            : "No wishlist data wired yet."}
-                        </div>
+
+                        {!wishlistObj && (
+                          <div style={{ fontSize: 11, color: "#6b7280" }}>
+                            No wishlist data.
+                          </div>
+                        )}
+
+                        {wishlistObj && (
+                          <>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "#4b5563",
+                                marginBottom: 8,
+                              }}
+                            >
+                              <strong>Count:</strong> {wishlistCount}
+                            </div>
+
+                            {wishlistCount === 0 && (
+                              <div style={{ fontSize: 11, color: "#6b7280" }}>
+                                No wishlist items.
+                              </div>
+                            )}
+
+                            {wishlistCount > 0 && wishlistProducts.length > 0 ? (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 8,
+                                }}
+                              >
+                                {wishlistProducts.slice(0, 5).map((p, idx) => (
+                                  <div
+                                    key={p.id || p._id || p.productId || idx}
+                                    style={{
+                                      display: "flex",
+                                      gap: 10,
+                                      padding: "8px 8px",
+                                      border: "1px solid #e5e7eb",
+                                      borderRadius: 10,
+                                      background: "#fff",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: 44,
+                                        height: 44,
+                                        borderRadius: 8,
+                                        overflow: "hidden",
+                                        border: "1px solid #e5e7eb",
+                                        background: "#f3f4f6",
+                                        flex: "0 0 auto",
+                                      }}
+                                    >
+                                      {p.mainImageUrl ||
+                                      p.imageUrl ||
+                                      p.thumbnailUrl ? (
+                                        <img
+                                          src={resolveAttachmentUrl(
+                                            p.mainImageUrl ||
+                                              p.imageUrl ||
+                                              p.thumbnailUrl
+                                          )}
+                                          alt={p.name || p.title || "product"}
+                                          style={{
+                                            width: "100%",
+                                            height: "100%",
+                                            objectFit: "cover",
+                                          }}
+                                          onError={(e) => {
+                                            e.currentTarget.style.display =
+                                              "none";
+                                          }}
+                                        />
+                                      ) : null}
+                                    </div>
+
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                      <div
+                                        style={{
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          color: "#111827",
+                                          whiteSpace: "nowrap",
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
+                                        }}
+                                        title={p.name || p.title || p.id}
+                                      >
+                                        {p.name ||
+                                          p.title ||
+                                          p.id ||
+                                          "Product"}
+                                      </div>
+                                      <div
+                                        style={{
+                                          fontSize: 11,
+                                          color: "#6b7280",
+                                          marginTop: 2,
+                                        }}
+                                      >
+                                        ID:{" "}
+                                        {p.id || p._id || p.productId || "-"}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+
+                                {wishlistProducts.length > 5 && (
+                                  <div
+                                    style={{ fontSize: 11, color: "#6b7280" }}
+                                  >
+                                    +
+                                    {wishlistProducts.length - 5} more wishlist
+                                    item(s)…
+                                  </div>
+                                )}
+                              </div>
+                            ) : wishlistCount > 0 ? (
+                              <div style={{ fontSize: 11, color: "#6b7280" }}>
+                                {wishlistProductIds.length
+                                  ? `ProductIds: ${wishlistProductIds
+                                      .slice(0, 6)
+                                      .join(", ")}${
+                                      wishlistProductIds.length > 6 ? "…" : ""
+                                    }`
+                                  : "No wishlist items."}
+                              </div>
+                            ) : null}
+                          </>
+                        )}
                       </div>
                     </>
                   )}
