@@ -19,6 +19,8 @@ public class ProductEntity {
     private String description;
     private String category;
     private BigDecimal basePrice;
+    private BigDecimal originalBasePrice;
+    private Integer discountPercent;
 
     private String mainImageUrl;
     private List<String> imageUrls;
@@ -44,6 +46,7 @@ public class ProductEntity {
         private String size;
         private String color;
         private int stock;
-        private BigDecimal price;
+        private BigDecimal price;// indirimli fiyat
+        private BigDecimal originalPrice;
     }
 }

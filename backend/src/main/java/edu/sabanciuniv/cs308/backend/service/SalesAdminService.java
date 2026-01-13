@@ -58,21 +58,40 @@ public class SalesAdminService {
             throw new IllegalArgumentException("discountRate must be between (0,1), e.g., 0.15");
         }
 
+        int percent = (int) Math.round(rate * 100);
+
         List<ProductEntity> products = productRepository.findAllById(req.getProductIds());
 
-        // update product prices (base + variants)
         for (ProductEntity p : products) {
-            if (p.getBasePrice() != null) {
-                p.setBasePrice(applyRate(p.getBasePrice(), rate));
+
+            // 1) ORIGINAL BASE PRICE (set once)
+            if (p.getOriginalBasePrice() == null && p.getBasePrice() != null) {
+                p.setOriginalBasePrice(p.getBasePrice());
             }
+
+            // 2) Apply discounted base price
+            if (p.getBasePrice() != null) {
+                p.setBasePrice(applyRate(p.getOriginalBasePrice() != null ? p.getOriginalBasePrice() : p.getBasePrice(), rate));
+            }
+
+            // 3) Variant original + discounted
             if (p.getVariants() != null) {
                 for (ProductEntity.Variant v : p.getVariants()) {
-                    if (v.getPrice() != null) {
-                        v.setPrice(applyRate(v.getPrice(), rate));
+                    if (v.getPrice() == null) continue;
+
+                    if (v.getOriginalPrice() == null) {
+                        v.setOriginalPrice(v.getPrice());
                     }
+
+                    BigDecimal base = v.getOriginalPrice() != null ? v.getOriginalPrice() : v.getPrice();
+                    v.setPrice(applyRate(base, rate));
                 }
             }
+
+            // 4) Badge helper
+            p.setDiscountPercent(percent);
         }
+
         productRepository.saveAll(products);
 
         // notify users who have product in wishlist (if notifyWishlist is true or not specified)
