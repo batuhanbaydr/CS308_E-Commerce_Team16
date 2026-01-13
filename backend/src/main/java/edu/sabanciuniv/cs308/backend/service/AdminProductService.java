@@ -40,85 +40,76 @@ public class AdminProductService {
      * - Prevents wiping fields like name/category when frontend sends partial objects.
      * - Preserves existing variant stock unless the variant is new.
      */
-    public ProductEntity updateProduct(String id, ProductEntity newData) {
-        ProductEntity existing = productRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
+    // AdminProductService.java  (ONLY replace updateProduct method)
 
-        if (newData == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing product body");
-        }
+public ProductEntity updateProduct(String id, ProductEntity newData) {
+    ProductEntity existing = productRepository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
 
-        // Check if price is being reduced (discount applied)
-        BigDecimal oldPrice = existing.getBasePrice();
-        BigDecimal newPrice = newData.getBasePrice();
-        boolean isDiscount = false;
-        double discountRate = 0.0;
+    // --- Detect discount ONLY if basePrice is provided ---
+    BigDecimal oldPrice = existing.getBasePrice();
+    BigDecimal incomingPrice = newData.getBasePrice();
 
-        if (oldPrice != null && newPrice != null && newPrice.compareTo(oldPrice) < 0) {
-            isDiscount = true;
-            BigDecimal discountAmount = oldPrice.subtract(newPrice);
+    boolean isDiscount = false;
+    double discountRate = 0.0;
 
-            // avoid division by zero
-            if (oldPrice.compareTo(BigDecimal.ZERO) > 0) {
-                discountRate = discountAmount.divide(oldPrice, 4, RoundingMode.HALF_UP).doubleValue();
-            }
-        }
-
-        // ---------------- PATCH SAFE FIELD UPDATES ----------------
-        if (newData.getName() != null) existing.setName(newData.getName());
-        if (newData.getDescription() != null) existing.setDescription(newData.getDescription());
-        if (newData.getCategory() != null) existing.setCategory(newData.getCategory());
-        if (newData.getBasePrice() != null) existing.setBasePrice(newData.getBasePrice());
-        if (newData.getMainImageUrl() != null) existing.setMainImageUrl(newData.getMainImageUrl());
-        if (newData.getImageUrls() != null) existing.setImageUrls(newData.getImageUrls());
-
-        // variants update: stock'u EZME, only overwrite variant fields if they are present
-        if (newData.getVariants() != null) {
-            var oldList = existing.getVariants();
-            java.util.Map<String, ProductEntity.Variant> oldBySku = new java.util.HashMap<>();
-            if (oldList != null) {
-                for (ProductEntity.Variant v : oldList) {
-                    if (v != null && v.getSku() != null) oldBySku.put(v.getSku(), v);
-                }
-            }
-
-            java.util.List<ProductEntity.Variant> merged = new java.util.ArrayList<>();
-            for (ProductEntity.Variant incoming : newData.getVariants()) {
-                if (incoming == null) continue;
-
-                ProductEntity.Variant old =
-                        (incoming.getSku() != null) ? oldBySku.get(incoming.getSku()) : null;
-
-                ProductEntity.Variant v = new ProductEntity.Variant();
-                v.setSku(incoming.getSku());
-
-                // Only overwrite if incoming has value; otherwise keep old value
-                v.setSize(incoming.getSize() != null ? incoming.getSize() : (old != null ? old.getSize() : null));
-                v.setColor(incoming.getColor() != null ? incoming.getColor() : (old != null ? old.getColor() : null));
-                v.setPrice(incoming.getPrice() != null ? incoming.getPrice() : (old != null ? old.getPrice() : null));
-
-                // stock: preserve old if exists, else use incoming (>=0), else 0
-                if (old != null) {
-                    v.setStock(old.getStock());
-                } else {
-                    v.setStock(Math.max(0, incoming.getStock()));
-                }
-
-                merged.add(v);
-            }
-
-            existing.setVariants(merged);
-        }
-
-        ProductEntity saved = productRepository.save(existing);
-
-        // Notify wishlist users if price was reduced (discount applied)
-        if (isDiscount && discountRate > 0) {
-            notifyWishlistUsers(saved, discountRate);
-        }
-
-        return saved;
+    if (incomingPrice != null && oldPrice != null && incomingPrice.compareTo(oldPrice) < 0) {
+        isDiscount = true;
+        BigDecimal discountAmount = oldPrice.subtract(incomingPrice);
+        discountRate = discountAmount.divide(oldPrice, 4, RoundingMode.HALF_UP).doubleValue();
     }
+
+    // --- PATCH semantics: only overwrite fields that are non-null ---
+    if (newData.getName() != null) existing.setName(newData.getName());
+    if (newData.getDescription() != null) existing.setDescription(newData.getDescription());
+    if (newData.getCategory() != null) existing.setCategory(newData.getCategory());
+
+    if (newData.getBasePrice() != null) existing.setBasePrice(newData.getBasePrice());
+
+    if (newData.getMainImageUrl() != null) existing.setMainImageUrl(newData.getMainImageUrl());
+    if (newData.getImageUrls() != null) existing.setImageUrls(newData.getImageUrls());
+
+    // --- variants: only merge if variants provided ---
+    if (newData.getVariants() != null) {
+        var oldList = existing.getVariants();
+        java.util.Map<String, ProductEntity.Variant> oldBySku = new java.util.HashMap<>();
+        if (oldList != null) {
+            for (ProductEntity.Variant v : oldList) {
+                if (v != null && v.getSku() != null) oldBySku.put(v.getSku(), v);
+            }
+        }
+
+        java.util.List<ProductEntity.Variant> merged = new java.util.ArrayList<>();
+        for (ProductEntity.Variant incoming : newData.getVariants()) {
+            if (incoming == null) continue;
+
+            ProductEntity.Variant old = (incoming.getSku() != null) ? oldBySku.get(incoming.getSku()) : null;
+
+            ProductEntity.Variant v = new ProductEntity.Variant();
+            v.setSku(incoming.getSku());
+            if (incoming.getSize() != null) v.setSize(incoming.getSize());
+            if (incoming.getColor() != null) v.setColor(incoming.getColor());
+            if (incoming.getPrice() != null) v.setPrice(incoming.getPrice());
+
+            // stock: preserve old if exists, else use incoming (non-negative)
+            if (old != null) v.setStock(old.getStock());
+            else v.setStock(Math.max(0, incoming.getStock()));
+
+            merged.add(v);
+        }
+
+        existing.setVariants(merged);
+    }
+
+    ProductEntity saved = productRepository.save(existing);
+
+    // Notify wishlist users if price was reduced
+    if (isDiscount && discountRate > 0) {
+        notifyWishlistUsers(saved, discountRate);
+    }
+
+    return saved;
+}
 
     /**
      * Notify users who have this product in their wishlist about the discount.
